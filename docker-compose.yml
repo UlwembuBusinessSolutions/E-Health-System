@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ulwembu
+      POSTGRES_USER: ulwembu
+      # Matches application.yml's own local-dev default exactly
+      # (spring.datasource.password: ${DB_PASSWORD:ulwembu_dev_local}) — so
+      # the api service below, with nothing else set, just connects.
+      POSTGRES_PASSWORD: ulwembu_dev_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ulwembu -d ulwembu"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    ports:
+      - "8081:8081"
+    environment:
+      # The only override actually needed. application.yml's own default
+      # (localhost:5432) assumes the app runs on the host — inside this
+      # compose network, Postgres is reachable at its service name,
+      # "postgres", not localhost (that would resolve to the api
+      # container itself, where nothing is listening on 5432).
+      DB_URL: jdbc:postgresql://postgres:5432/ulwembu
+      # Everything else — JWT secrets, PLATFORM_BOOTSTRAP_*, SMTP, AWS —
+      # keeps application.yml's own baked-in local-dev defaults, same as
+      # running `mvn spring-boot:run` with no .env at all (Section 2 of
+      # backend-auth-guide.html). This service deliberately doesn't read
+      # api/.env — to override any of these for the containerized setup
+      # (real SMTP/AWS credentials, say), add them to the environment
+      # block above, or in a docker-compose.override.yml, which Compose
+      # merges in automatically if present.
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
