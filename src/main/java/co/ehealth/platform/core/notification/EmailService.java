@@ -45,24 +45,62 @@ public class EmailService {
     // that: the platform team has created the account. There's no separate
     // approval queue anywhere in this design to notify about instead.
     //
-    // Deliberately never includes the temporary password — email is a
-    // strictly weaker channel than "the operator who ran provisioning
-    // tells the new admin directly"; putting the password in both places
-    // undoes the reason the stronger channel exists.
-    public void sendAdminAccountCreatedEmail(String toEmail, String firstName, String organizationDisplayName) {
+    // Includes the temporary password and the organization slug directly —
+    // the account has to be usable from this email alone (LoginScreen needs
+    // all three: organization, email, password), and a login instruction
+    // that omits the one thing the recipient doesn't already have isn't a
+    // real instruction. This does mean anyone with access to the
+    // recipient's inbox can sign in until they change it; accepted
+    // trade-off for how this system is actually handed out today — revisit
+    // if that stops being true.
+    public void sendAdminAccountCreatedEmail(String toEmail, String firstName, String organizationDisplayName,
+                                              String organizationSlug, String temporaryPassword) {
         String subject = "Your admin account is ready — " + organizationDisplayName;
         String body = """
                 Hi %s,
 
                 An administrator account has been created for you on %s.
 
-                Sign in once you have your temporary password: %s/login
+                Sign in at %s/login with:
+                  Organization: %s
+                  Email: %s
+                  Temporary password: %s
 
-                Your temporary password was provided separately, not by email — contact \
-                whoever set up your account if you don't have it yet. You'll be asked to \
-                change it the first time you sign in.
-                """.formatted(firstName, organizationDisplayName, frontendBaseUrl);
+                You'll be asked to choose a new password the first time you sign in — this \
+                temporary one stops working once you do.
+                """.formatted(firstName, organizationDisplayName, frontendBaseUrl, organizationSlug, toEmail,
+                temporaryPassword);
+        send(toEmail, subject, body);
+    }
 
+    // Fired once per staff account StaffService.createStaff() creates —
+    // previously nothing notified a regular staff member at all, only
+    // org-admin accounts got an email. Same reasoning and same trade-off
+    // as sendAdminAccountCreatedEmail's why-note above; employeeNumber is
+    // included too since it's the identifier most of this system's paper
+    // forms and internal references use, not just email.
+    public void sendStaffAccountCreatedEmail(String toEmail, String firstName, String organizationDisplayName,
+                                              String organizationSlug, String employeeNumber,
+                                              String temporaryPassword) {
+        String subject = "Your staff account is ready — " + organizationDisplayName;
+        String body = """
+                Hi %s,
+
+                A staff account has been created for you on %s (employee number %s).
+
+                Sign in at %s/login with:
+                  Organization: %s
+                  Email: %s
+                  Temporary password: %s
+
+                You'll be asked to choose a new password the first time you sign in — this \
+                temporary one stops working once you do.
+                """.formatted(firstName, organizationDisplayName, employeeNumber, frontendBaseUrl, organizationSlug,
+                toEmail, temporaryPassword);
+        send(toEmail, subject, body);
+    }
+
+    private void send(String toEmail, String subject, String body) {
         // Written synchronously, before this method returns — this is the
         // verifiable "what would this email have said" record (see the
         // why-note below), and it should exist immediately, not only after

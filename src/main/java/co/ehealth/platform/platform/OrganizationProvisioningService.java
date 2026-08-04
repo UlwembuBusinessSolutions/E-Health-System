@@ -11,6 +11,8 @@ import co.ehealth.platform.identity.DuplicateFieldException;
 import co.ehealth.platform.identity.Gender;
 import co.ehealth.platform.identity.StaffService;
 import co.ehealth.platform.identity.User;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -77,7 +79,7 @@ public class OrganizationProvisioningService {
 
         migrationRunner.provisionTenantSchema(schemaName);
 
-        List<ProvisionedAdmin> admins = createAdmins(cmd.admins(), schemaName, cmd.displayName(),
+        List<ProvisionedAdmin> admins = createAdmins(cmd.admins(), schemaName, cmd.displayName(), slug,
                 "ORGANIZATION_PROVISIONED", organization.getId());
 
         recordPlatformAudit(actingOperatorId, "ORGANIZATION_PROVISIONED", organization.getId());
@@ -115,7 +117,7 @@ public class OrganizationProvisioningService {
         }
 
         List<ProvisionedAdmin> admins = createAdmins(cmd.admins(), organization.getSchemaName(),
-                organization.getDisplayName(), "ORGANIZATION_ADMIN_ADDED", organizationId);
+                organization.getDisplayName(), organization.getSlug(), "ORGANIZATION_ADMIN_ADDED", organizationId);
 
         recordPlatformAudit(actingOperatorId, "ORGANIZATION_ADMIN_ADDED", organizationId);
 
@@ -189,11 +191,35 @@ public class OrganizationProvisioningService {
                 new PlatformAuditLog(actingOperatorId, action, organizationId, Instant.now()));
     }
 
+    // Still no pagination — see the original why-note below, still true.
+    // Search/status-filter/sort added once the org list actually grew
+    // large enough during real testing that scrolling a flat, unordered
+    // list to find one client stopped being reasonable — the same
+    // trigger pagination itself is waiting on, just reached first.
+    //
     // No pagination — organizations get created one at a time by a human
     // running client onboarding, not at a volume where "page 4 of clients"
     // is a real scenario yet. Revisit if that stops being true.
-    public List<Organization> listOrganizations() {
-        return organizationRepository.findAll();
+    public List<Organization> listOrganizations(String query, OrganizationStatus status, boolean oldestFirst) {
+        Specification<Organization> spec = Specification.where(null);
+
+        // Case-insensitive substring match on either field — a client
+        // onboarding someone types "riverbend" expecting it to match
+        // "Riverbend Health Group" (displayName) or "riverbend-health"
+        // (slug) without caring which one they're actually typing.
+        if (query != null && !query.isBlank()) {
+            String pattern = "%" + query.trim().toLowerCase() + "%";
+            spec = spec.and((root, cq, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("displayName")), pattern),
+                    cb.like(cb.lower(root.get("slug")), pattern)));
+        }
+
+        if (status != null) {
+            spec = spec.and((root, cq, cb) -> cb.equal(root.get("status"), status));
+        }
+
+        Sort sort = Sort.by(oldestFirst ? Sort.Direction.ASC : Sort.Direction.DESC, "createdAt");
+        return organizationRepository.findAll(spec, sort);
     }
 
     // Loops createAdminUser() once per requested admin — provisioning an
@@ -209,13 +235,13 @@ public class OrganizationProvisioningService {
     // creation is still all-or-nothing (StaffService.createOrgAdmin()
     // runs inside its own @Transactional).
     private List<ProvisionedAdmin> createAdmins(List<AdminInput> adminInputs, String schemaName,
-                                                 String organizationDisplayName, String auditAction,
-                                                 UUID auditEntityId) {
+                                                 String organizationDisplayName, String organizationSlug,
+                                                 String auditAction, UUID auditEntityId) {
         List<ProvisionedAdmin> created = new ArrayList<>(adminInputs.size());
         for (AdminInput input : adminInputs) {
             String temporaryPassword = generateTemporaryPassword();
             User admin = createAdminUser(input, schemaName, temporaryPassword, organizationDisplayName,
-                    auditAction, auditEntityId);
+                    organizationSlug, auditAction, auditEntityId);
             created.add(new ProvisionedAdmin(admin.getId(), admin.getEmail(), temporaryPassword));
         }
         return created;
@@ -233,7 +259,8 @@ public class OrganizationProvisioningService {
     // users. Writing it here, before TenantContext.clear() runs, is what
     // keeps the entry inside the tenant it's supposed to belong to.
     private User createAdminUser(AdminInput details, String schemaName, String temporaryPassword,
-                                  String organizationDisplayName, String auditAction, UUID auditEntityId) {
+                                  String organizationDisplayName, String organizationSlug, String auditAction,
+                                  UUID auditEntityId) {
         TenantContext.setCurrentTenant(schemaName);
         try {
             User admin = staffService.createOrgAdmin(details.firstName(), details.lastName(),
@@ -247,7 +274,8 @@ public class OrganizationProvisioningService {
             // to keep the full "an admin now exists" sequence in one
             // place; a failed send is swallowed inside EmailService and
             // never affects this method's outcome.
-            emailService.sendAdminAccountCreatedEmail(admin.getEmail(), admin.getFirstName(), organizationDisplayName);
+            emailService.sendAdminAccountCreatedEmail(admin.getEmail(), admin.getFirstName(), organizationDisplayName,
+                    organizationSlug, temporaryPassword);
             return admin;
         } finally {
             TenantContext.clear();

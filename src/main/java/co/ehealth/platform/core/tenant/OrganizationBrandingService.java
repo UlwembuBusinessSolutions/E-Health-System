@@ -83,4 +83,18 @@ public class OrganizationBrandingService {
         organizationRepository.save(organization);
         return url;
     }
+
+    // The read half — uploadLogo() above wrote branding for real from the
+    // start, but nothing read it back until this existed, which meant a
+    // real, persisted upload looked like it had vanished on every page
+    // reload. Any authenticated staff member can call this (Section 8's
+    // controller puts it outside /api/v1/admin/**, same reasoning as
+    // GET /api/v1/facilities) — a logo is meant to be seen by everyone in
+    // the org, not just admins; only uploadLogo() is admin-gated.
+    public OrganizationBranding getBranding() {
+        String schemaName = TenantContext.getCurrentTenant();
+        Organization organization = organizationRepository.findBySchemaName(schemaName)
+                .orElseThrow(() -> new IllegalStateException("Unknown organization for current tenant"));
+        return organization.getBranding();
+    }
 }

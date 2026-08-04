@@ -1,6 +1,10 @@
 package co.ehealth.platform.identity;
 
 import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.core.notification.EmailService;
+import co.ehealth.platform.core.tenant.Organization;
+import co.ehealth.platform.core.tenant.OrganizationRepository;
+import co.ehealth.platform.core.tenant.TenantContext;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,15 +21,24 @@ public class StaffService {
     private final UserComplianceDetailsRepository complianceDetailsRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditLogService auditLogService;
+    // core.tenant/core.notification, not identity's own — same "shared
+    // core package, fair game across modules" reasoning already true of
+    // AuditLogService above (TenantContext is already used this way
+    // elsewhere in this package, e.g. AuthService, StaffPhotoService).
+    private final OrganizationRepository organizationRepository;
+    private final EmailService emailService;
 
     public StaffService(UserRepository userRepository, RoleRepository roleRepository,
                          UserComplianceDetailsRepository complianceDetailsRepository,
-                         PasswordEncoder passwordEncoder, AuditLogService auditLogService) {
+                         PasswordEncoder passwordEncoder, AuditLogService auditLogService,
+                         OrganizationRepository organizationRepository, EmailService emailService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.complianceDetailsRepository = complianceDetailsRepository;
         this.passwordEncoder = passwordEncoder;
         this.auditLogService = auditLogService;
+        this.organizationRepository = organizationRepository;
+        this.emailService = emailService;
     }
 
     // Called only by OrganizationProvisioningService (the platform module)
@@ -163,6 +176,17 @@ public class StaffService {
 
         auditLogService.append(creatingAdminId, cmd.facilityId(), "STAFF_CREATED",
                 "User", user.getId().toString(), null, null, ipAddress);
+
+        // Previously nothing notified a new staff member at all — only
+        // org-admin accounts (OrganizationProvisioningService) sent an
+        // email. TenantContext is already set to this org's schema for the
+        // whole request (TenantFilter), so the org row is one lookup away;
+        // a failed send is swallowed inside EmailService and never affects
+        // account creation itself, same as the admin path.
+        organizationRepository.findBySchemaName(TenantContext.getCurrentTenant())
+                .ifPresent(organization -> emailService.sendStaffAccountCreatedEmail(
+                        user.getEmail(), user.getFirstName(), organization.getDisplayName(), organization.getSlug(),
+                        user.getEmployeeNumber(), cmd.temporaryPassword()));
 
         return user;
     }
