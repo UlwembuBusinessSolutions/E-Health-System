@@ -5,6 +5,7 @@ import co.ehealth.platform.core.notification.EmailService;
 import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
 import co.ehealth.platform.core.tenant.OrganizationStatus;
+import co.ehealth.platform.core.tenant.SectorType;
 import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.core.tenant.TenantMigrationRunner;
 import co.ehealth.platform.identity.DuplicateFieldException;
@@ -22,12 +23,13 @@ import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import co.ehealth.platform.core.tenant.SectorType;
+
 @Service
 public class OrganizationProvisioningService {
 
     private static final Pattern SLUG_PATTERN = Pattern.compile("^[a-z][a-z0-9-]{1,61}[a-z0-9]$");
-    private static final String TEMP_PASSWORD_CHARS =
-            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    private static final String TEMP_PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final OrganizationRepository organizationRepository;
@@ -74,7 +76,7 @@ public class OrganizationProvisioningService {
         // concatenated into SET search_path.
         String schemaName = slug.replace('-', '_');
 
-        Organization organization = new Organization(slug, schemaName, cmd.displayName());
+        Organization organization = new Organization(slug, schemaName, cmd.displayName(), cmd.sectorType());
         organizationRepository.save(organization);
 
         migrationRunner.provisionTenantSchema(schemaName);
@@ -235,8 +237,8 @@ public class OrganizationProvisioningService {
     // creation is still all-or-nothing (StaffService.createOrgAdmin()
     // runs inside its own @Transactional).
     private List<ProvisionedAdmin> createAdmins(List<AdminInput> adminInputs, String schemaName,
-                                                 String organizationDisplayName, String organizationSlug,
-                                                 String auditAction, UUID auditEntityId) {
+            String organizationDisplayName, String organizationSlug,
+            String auditAction, UUID auditEntityId) {
         List<ProvisionedAdmin> created = new ArrayList<>(adminInputs.size());
         for (AdminInput input : adminInputs) {
             String temporaryPassword = generateTemporaryPassword();
@@ -259,8 +261,8 @@ public class OrganizationProvisioningService {
     // users. Writing it here, before TenantContext.clear() runs, is what
     // keeps the entry inside the tenant it's supposed to belong to.
     private User createAdminUser(AdminInput details, String schemaName, String temporaryPassword,
-                                  String organizationDisplayName, String organizationSlug, String auditAction,
-                                  UUID auditEntityId) {
+            String organizationDisplayName, String organizationSlug, String auditAction,
+            UUID auditEntityId) {
         TenantContext.setCurrentTenant(schemaName);
         try {
             User admin = staffService.createOrgAdmin(details.firstName(), details.lastName(),
@@ -297,7 +299,8 @@ public class OrganizationProvisioningService {
         return password.toString();
     }
 
-    public record ProvisionOrganizationCommand(String slug, String displayName, List<AdminInput> admins) {
+    public record ProvisionOrganizationCommand(String slug, String displayName, SectorType sectorType,
+            List<AdminInput> admins) {
     }
 
     public record AddAdminsCommand(List<AdminInput> admins) {
@@ -307,7 +310,7 @@ public class OrganizationProvisioningService {
     // it's one of an organization's first batch (provisionOrganization) or
     // added to one that already exists (addAdmins).
     public record AdminInput(String firstName, String lastName, String employeeNumber, String email,
-                              String contactNumber, Gender gender) {
+            String contactNumber, Gender gender) {
     }
 
     // temporaryPassword is returned exactly once, in this response — never

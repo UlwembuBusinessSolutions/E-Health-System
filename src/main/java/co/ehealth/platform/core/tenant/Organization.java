@@ -34,6 +34,11 @@ public class Organization {
     @Column(nullable = false, length = 20)
     private OrganizationStatus status;
 
+    // Added the field for sector type to the organization entity
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sector_type", nullable = false, length = 20)
+    private SectorType sectorType;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -51,11 +56,12 @@ public class Organization {
     // ACTIVE and createdAt are set here, not taken as constructor
     // parameters — every organization starts ACTIVE at the moment it's
     // provisioned; there's no real scenario for creating one pre-suspended.
-    public Organization(String slug, String schemaName, String displayName) {
+    public Organization(String slug, String schemaName, String displayName, SectorType sectorType) {
         this.slug = slug;
         this.schemaName = schemaName;
         this.displayName = displayName;
         this.status = OrganizationStatus.ACTIVE;
+        this.sectorType = sectorType != null ? sectorType : SectorType.PRIVATE;
         this.createdAt = Instant.now();
     }
 
@@ -90,6 +96,11 @@ public class Organization {
 
     public OrganizationStatus getStatus() {
         return status;
+    }
+
+    // This method is used to get the sector type of the organization
+    public SectorType getSectorType() {
+        return sectorType;
     }
 
     public Instant getCreatedAt() {
