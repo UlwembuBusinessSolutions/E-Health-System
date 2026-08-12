@@ -5,6 +5,8 @@ import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationStatus;
 import co.ehealth.platform.identity.Gender;
 import co.ehealth.platform.identity.StaffService;
+import co.ehealth.platform.platform.PlatformController.AdminRequest;
+import co.ehealth.platform.platform.PlatformController.OrganizationSummary;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -22,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import co.ehealth.platform.core.tenant.SectorType;
 
 import java.time.Instant;
 import java.util.List;
@@ -66,7 +70,8 @@ public class PlatformController {
             @Valid @RequestBody ProvisionOrganizationRequest request,
             @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         var command = new OrganizationProvisioningService.ProvisionOrganizationCommand(
-                request.slug(), request.displayName(), request.admins().stream().map(AdminRequest::toInput).toList());
+                request.slug(), request.displayName(), request.sectorType(),
+                request.admins().stream().map(AdminRequest::toInput).toList());
         var result = provisioningService.provisionOrganization(command, operator.operatorId());
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
@@ -102,28 +107,35 @@ public class PlatformController {
     // requires already being one.
     @DeleteMapping("/{id}/admins/{userId}")
     public ResponseEntity<Void> removeAdmin(@PathVariable UUID id, @PathVariable UUID userId,
-                                             @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.removeAdmin(id, userId, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/suspend")
     public ResponseEntity<Void> suspend(@PathVariable UUID id,
-                                         @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.suspend(id, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/reactivate")
     public ResponseEntity<Void> reactivate(@PathVariable UUID id,
-                                            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.reactivate(id, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
 
+    // public record ProvisionOrganizationRequest(
+    // @NotBlank @Pattern(regexp = "^[a-z][a-z0-9-]{1,61}[a-z0-9]$") String slug,
+    // @NotBlank String displayName,
+    // @NotEmpty List<@Valid AdminRequest> admins) {
+    // }
+
     public record ProvisionOrganizationRequest(
             @NotBlank @Pattern(regexp = "^[a-z][a-z0-9-]{1,61}[a-z0-9]$") String slug,
             @NotBlank String displayName,
+            SectorType sectorType,
             @NotEmpty List<@Valid AdminRequest> admins) {
     }
 
@@ -142,11 +154,21 @@ public class PlatformController {
         }
     }
 
+    // public record OrganizationSummary(UUID id, String slug, String displayName,
+    // OrganizationStatus status,
+    // Instant createdAt) {
+    // static OrganizationSummary from(Organization o) {
+    // return new OrganizationSummary(o.getId(), o.getSlug(), o.getDisplayName(),
+    // o.getStatus(),
+    // o.getCreatedAt());
+    // }
+    // }
+
     public record OrganizationSummary(UUID id, String slug, String displayName, OrganizationStatus status,
-                                       Instant createdAt) {
+            SectorType sectorType, Instant createdAt) {
         static OrganizationSummary from(Organization o) {
             return new OrganizationSummary(o.getId(), o.getSlug(), o.getDisplayName(), o.getStatus(),
-                    o.getCreatedAt());
+                    o.getSectorType(), o.getCreatedAt());
         }
     }
 }
