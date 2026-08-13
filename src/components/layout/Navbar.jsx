@@ -2,47 +2,60 @@ export default function Navbar() {
   return (
     <header
       style={{
-        height: 76,
-        background: "#ffffff",
-        borderBottom: "1px solid #e2e8f0",
+        height: "76px",
+        background: "rgba(255,255,255,0.9)",
+        backdropFilter: "blur(10px)",
+        borderBottom: "1px solid var(--line)",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
         padding: "0 28px",
+        position: "sticky",
+        top: 0,
+        zIndex: 20,
       }}
     >
-      <div>
-        <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-          ORGANISATION / FACILITY
-        </div>
-
-        <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a" }}>
-          Mamelodi West Clinic · Tenant Admin
-        </div>
+      <div style={{ flex: 1, maxWidth: "520px" }}>
+        <input
+          type="text"
+          placeholder="Search patients, visits, staff..."
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            borderRadius: "14px",
+            border: "1px solid var(--line)",
+            background: "var(--surface)",
+            fontSize: "14px",
+            color: "var(--text)",
+            outline: "none",
+          }}
+        />
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontWeight: 600, color: "var(--ink)", fontSize: "14px" }}>
+            Mamelodi Health Services
+          </div>
+          <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+            Tenant Administrator
+          </div>
+        </div>
+
         <div
           style={{
-            width: 38,
-            height: 38,
+            width: "44px",
+            height: "44px",
             borderRadius: "50%",
-            background: "#0f766e",
-            color: "#ffffff",
+            background: "var(--accent)",
+            color: "white",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             fontWeight: 700,
           }}
         >
-          AA
-        </div>
-
-        <div>
-          <div style={{ fontWeight: 600, color: "#0f172a" }}>Amo Admin</div>
-          <div style={{ fontSize: 13, color: "#64748b" }}>
-            Tenant Administrator
-          </div>
+          AE
         </div>
       </div>
     </header>

@@ -1,11 +1,12 @@
-import { useState } from "react";
 import {
-  FaUsers,
+  FaUsersCog,
   FaUserShield,
   FaHospital,
+  FaMoneyCheckAlt,
   FaCog,
+  FaBell,
+  FaSave,
   FaPlus,
-  FaEdit,
   FaTrash,
 } from "react-icons/fa";
 
@@ -14,315 +15,490 @@ const cardStyle = {
   border: "1px solid #dbe7e4",
   borderRadius: "20px",
   padding: "24px",
+  boxShadow: "0 8px 24px rgba(15, 23, 42, 0.05)",
 };
 
-const buttonStyle = {
-  background: "#0f766e",
-  color: "white",
-  border: "none",
-  borderRadius: "10px",
-  padding: "10px 16px",
+const inputStyle = {
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: "12px",
+  border: "1px solid #cbd5e1",
+  fontSize: "14px",
+  boxSizing: "border-box",
+};
+
+const labelStyle = {
+  fontSize: "13px",
   fontWeight: 600,
-  cursor: "pointer",
+  color: "#334155",
+  marginBottom: "6px",
+  display: "block",
 };
 
-const secondaryButton = {
-  background: "#ffffff",
-  border: "1px solid #dbe7e4",
-  borderRadius: "10px",
-  padding: "8px 14px",
-  cursor: "pointer",
-  color: "#334155",
-};
+function Field({ label, children }) {
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      {children}
+    </div>
+  );
+}
 
 export default function Administration() {
-  const [departments, setDepartments] = useState([
-    "Reception",
-    "Clinical Services",
-    "Pharmacy",
-    "Laboratory",
-    "Billing",
-  ]);
-
-  const [newDepartment, setNewDepartment] = useState("");
-
-  const addDepartment = () => {
-    if (!newDepartment.trim()) return;
-    setDepartments([...departments, newDepartment.trim()]);
-    setNewDepartment("");
-  };
-
-  const removeDepartment = (name) => {
-    setDepartments(departments.filter((d) => d !== name));
-  };
-
   return (
-    <div style={{ padding: "32px", background: "#f3f7f6", minHeight: "100vh" }}>
-      <div style={{ maxWidth: "1300px", margin: "0 auto" }}>
-        <div style={{ marginBottom: "28px" }}>
+    <div style={{ display: "grid", gap: "24px" }}>
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "16px",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
           <div
             style={{
-              color: "#64748b",
-              fontSize: "14px",
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-              marginBottom: "8px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "8px 14px",
+              borderRadius: "999px",
+              background: "#ccfbf1",
+              color: "#0f766e",
+              fontSize: "13px",
+              fontWeight: 600,
+              marginBottom: "12px",
             }}
           >
-            Management
+            <FaCog size={12} />
+            Platform Administration
           </div>
 
-          <h1 style={{ fontSize: "44px", margin: 0, color: "#0f172a" }}>
-            Administration
+          <h1
+            style={{
+              margin: 0,
+              fontSize: "32px",
+              fontWeight: 800,
+              color: "#0f172a",
+            }}
+          >
+            Administration Dashboard
           </h1>
 
-          <p style={{ color: "#64748b", fontSize: "16px", marginTop: "12px" }}>
-            Configure departments, user roles, permissions, and system-wide administrative settings for the Ulwembu Healthcare platform.
+          <p style={{ margin: "8px 0 0", color: "#64748b" }}>
+            Configure staff, roles, departments, tariffs, notifications, and
+            system-wide healthcare administration settings.
           </p>
         </div>
 
-        <div
+        <button
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: "18px",
-            marginBottom: "28px",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "12px 18px",
+            borderRadius: "12px",
+            border: "none",
+            background: "#0f766e",
+            color: "#ffffff",
+            fontWeight: 700,
+            cursor: "pointer",
           }}
         >
-          <StatCard icon={<FaUsers size={20} />} label="Active Users" value="124" />
-          <StatCard icon={<FaUserShield size={20} />} label="User Roles" value="6" />
-          <StatCard icon={<FaHospital size={20} />} label="Departments" value={departments.length.toString()} />
-          <StatCard icon={<FaCog size={20} />} label="System Status" value="Healthy" />
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.2fr 0.8fr",
-            gap: "24px",
-          }}
-        >
-          <div style={{ display: "grid", gap: "24px" }}>
-            <div style={cardStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-                <div>
-                  <h2 style={{ margin: 0, color: "#0f172a" }}>Department Management</h2>
-                  <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: "14px" }}>
-                    Manage operational departments available to clinic staff.
-                  </p>
-                </div>
-
-                <button style={buttonStyle}>
-                  <FaPlus size={12} style={{ marginRight: "8px" }} />
-                  New Department
-                </button>
-              </div>
-
-              <div style={{ display: "flex", gap: "12px", marginBottom: "20px" }}>
-                <input
-                  value={newDepartment}
-                  onChange={(e) => setNewDepartment(e.target.value)}
-                  placeholder="Enter department name"
-                  style={{
-                    flex: 1,
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #dbe7e4",
-                    fontSize: "14px",
-                    outline: "none",
-                  }}
-                />
-
-                <button onClick={addDepartment} style={buttonStyle}>
-                  Add
-                </button>
-              </div>
-
-              <div style={{ display: "grid", gap: "12px" }}>
-                {departments.map((department) => (
-                  <div
-                    key={department}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "14px 16px",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "14px",
-                      background: "#f8fafc",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div
-                        style={{
-                          width: "38px",
-                          height: "38px",
-                          borderRadius: "10px",
-                          background: "#ecfeff",
-                          color: "#0f766e",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <FaHospital size={16} />
-                      </div>
-
-                      <div>
-                        <div style={{ fontWeight: 600, color: "#0f172a" }}>{department}</div>
-                        <div style={{ fontSize: "12px", color: "#64748b" }}>Operational department</div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: "8px" }}>
-                      <button style={secondaryButton}>
-                        <FaEdit size={12} />
-                      </button>
-
-                      <button
-                        onClick={() => removeDepartment(department)}
-                        style={{
-                          ...secondaryButton,
-                          color: "#dc2626",
-                        }}
-                      >
-                        <FaTrash size={12} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div style={cardStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-                <div>
-                  <h2 style={{ margin: 0, color: "#0f172a" }}>Role & Permission Templates</h2>
-                  <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: "14px" }}>
-                    Standard access profiles for common healthcare roles.
-                  </p>
-                </div>
-
-                <button style={buttonStyle}>Manage Roles</button>
-              </div>
-
-              <div style={{ display: "grid", gap: "12px" }}>
-                {[
-                  { role: "Super Administrator", access: "Full platform access" },
-                  { role: "Tenant Administrator", access: "Organisation-wide management" },
-                  { role: "Doctor", access: "Clinical records and consultations" },
-                  { role: "Receptionist", access: "Registration, queue, and appointments" },
-                  { role: "Pharmacist", access: "Dispensing and inventory management" },
-                ].map((item) => (
-                  <div
-                    key={item.role}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      padding: "14px 16px",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "14px",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 600, color: "#0f172a" }}>{item.role}</div>
-                      <div style={{ fontSize: "13px", color: "#64748b" }}>{item.access}</div>
-                    </div>
-
-                    <button style={secondaryButton}>View</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: "24px", alignContent: "start" }}>
-            <div style={cardStyle}>
-              <h2 style={{ marginTop: 0, color: "#0f172a" }}>System Settings</h2>
-
-              <div style={{ display: "grid", gap: "16px", marginTop: "18px" }}>
-                <SettingRow label="Enable patient SMS notifications" defaultChecked />
-                <SettingRow label="Allow online appointment requests" defaultChecked />
-                <SettingRow label="Require two-factor authentication for administrators" />
-                <SettingRow label="Automatic nightly database backup" defaultChecked />
-              </div>
-
-              <button style={{ ...buttonStyle, width: "100%", marginTop: "24px" }}>
-                Save System Settings
-              </button>
-            </div>
-
-            <div style={cardStyle}>
-              <h2 style={{ marginTop: 0, color: "#0f172a" }}>Recent Administrative Activity</h2>
-
-              <div style={{ display: "grid", gap: "16px", marginTop: "18px" }}>
-                <ActivityItem title="Department added" description="Laboratory Services created by Amo Admin" time="12 minutes ago" />
-                <ActivityItem title="User role updated" description="Dr. Nkosi assigned Clinical Supervisor permissions" time="1 hour ago" />
-                <ActivityItem title="Security setting changed" description="Two-factor authentication policy updated" time="Today · 08:45" />
-              </div>
-            </div>
-          </div>
-        </div>
+          <FaSave size={14} />
+          Save Configuration
+        </button>
       </div>
-    </div>
-  );
-}
 
-function StatCard({ icon, label, value }) {
-  return (
-    <div style={cardStyle}>
+      {/* Quick Stats */}
       <div
         style={{
-          width: "44px",
-          height: "44px",
-          borderRadius: "12px",
-          background: "#ecfeff",
-          color: "#0f766e",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: "16px",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: "18px",
         }}
       >
-        {icon}
+        {[
+          { label: "Active Users", value: "84", hint: "6 pending invitations" },
+          { label: "Departments", value: "12", hint: "2 recently added" },
+          { label: "Roles Configured", value: "9", hint: "RBAC enabled" },
+          { label: "Tariff Schedules", value: "4", hint: "Updated this month" },
+        ].map((item) => (
+          <div key={item.label} style={cardStyle}>
+            <div style={{ color: "#64748b", fontSize: "13px" }}>
+              {item.label}
+            </div>
+            <div
+              style={{
+                marginTop: "10px",
+                fontSize: "2rem",
+                fontWeight: 800,
+                color: "#0f172a",
+              }}
+            >
+              {item.value}
+            </div>
+            <div style={{ marginTop: "6px", color: "#0f766e", fontSize: "13px" }}>
+              {item.hint}
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div style={{ fontSize: "14px", color: "#64748b" }}>{label}</div>
-      <div style={{ fontSize: "32px", fontWeight: 700, color: "#0f172a", marginTop: "6px" }}>
-        {value}
+      {/* Staff & Roles */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.2fr 0.8fr",
+          gap: "20px",
+        }}
+      >
+        <div style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "18px",
+            }}
+          >
+            <FaUsersCog size={18} color="#0f766e" />
+            <div>
+              <h2 style={{ margin: 0, fontSize: "18px", color: "#0f172a" }}>
+                Staff & User Management
+              </h2>
+              <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
+                Create user accounts and assign departmental access.
+              </p>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "16px",
+            }}
+          >
+            <Field label="Full Name">
+              <input style={inputStyle} placeholder="Enter staff member name" />
+            </Field>
+
+            <Field label="Email Address">
+              <input style={inputStyle} placeholder="staff@ulwembu.health" />
+            </Field>
+
+            <Field label="Department">
+              <select style={inputStyle}>
+                <option>Reception</option>
+                <option>Clinical Services</option>
+                <option>Pharmacy</option>
+                <option>Billing</option>
+                <option>Administration</option>
+              </select>
+            </Field>
+
+            <Field label="Role">
+              <select style={inputStyle}>
+                <option>Tenant Administrator</option>
+                <option>Doctor</option>
+                <option>Nurse</option>
+                <option>Pharmacist</option>
+                <option>Receptionist</option>
+                <option>Billing Officer</option>
+              </select>
+            </Field>
+          </div>
+
+          <div style={{ display: "flex", gap: "12px", marginTop: "18px" }}>
+            <button
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "12px 16px",
+                borderRadius: "12px",
+                border: "none",
+                background: "#0f766e",
+                color: "#ffffff",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              <FaPlus size={12} />
+              Add User
+            </button>
+
+            <button
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "12px 16px",
+                borderRadius: "12px",
+                border: "1px solid #cbd5e1",
+                background: "#ffffff",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              <FaTrash size={12} />
+              Deactivate Selected
+            </button>
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "18px",
+            }}
+          >
+            <FaUserShield size={18} color="#0f766e" />
+            <div>
+              <h2 style={{ margin: 0, fontSize: "18px", color: "#0f172a" }}>
+                Role-Based Access
+              </h2>
+              <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
+                Configure permissions for operational modules.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: "12px" }}>
+            {[
+              "Patient Management",
+              "Reception & Queue",
+              "Clinical Consultation",
+              "Pharmacy Dispensing",
+              "Billing & Claims",
+              "Reports & Analytics",
+            ].map((item) => (
+              <label
+                key={item}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "10px 12px",
+                  borderRadius: "12px",
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  fontSize: "14px",
+                  color: "#0f172a",
+                }}
+              >
+                <input type="checkbox" defaultChecked />
+                {item}
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
-    </div>
-  );
-}
 
-function SettingRow({ label, defaultChecked = false }) {
-  return (
-    <label
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "12px",
-        padding: "12px 0",
-        borderBottom: "1px solid #eef2f7",
-        color: "#334155",
-        fontSize: "14px",
-      }}
-    >
-      <span>{label}</span>
-      <input type="checkbox" defaultChecked={defaultChecked} />
-    </label>
-  );
-}
+      {/* Departments & Tariffs */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "20px",
+        }}
+      >
+        <div style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "18px",
+            }}
+          >
+            <FaHospital size={18} color="#0f766e" />
+            <div>
+              <h2 style={{ margin: 0, fontSize: "18px", color: "#0f172a" }}>
+                Department Configuration
+              </h2>
+              <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
+                Manage clinical and operational departments.
+              </p>
+            </div>
+          </div>
 
-function ActivityItem({ title, description, time }) {
-  return (
-    <div style={{ display: "grid", gap: "4px" }}>
-      <div style={{ fontWeight: 600, color: "#0f172a" }}>{title}</div>
-      <div style={{ fontSize: "13px", color: "#64748b" }}>{description}</div>
-      <div style={{ fontSize: "12px", color: "#94a3b8" }}>{time}</div>
+          <div style={{ display: "grid", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>Reception</span>
+              <strong>5 staff</strong>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>Clinical Services</span>
+              <strong>12 staff</strong>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>Pharmacy</span>
+              <strong>4 staff</strong>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>Billing</span>
+              <strong>3 staff</strong>
+            </div>
+          </div>
+
+          <button
+            style={{
+              marginTop: "18px",
+              padding: "12px 16px",
+              borderRadius: "12px",
+              border: "1px solid #cbd5e1",
+              background: "#ffffff",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Manage Departments
+          </button>
+        </div>
+
+        <div style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "18px",
+            }}
+          >
+            <FaMoneyCheckAlt size={18} color="#0f766e" />
+            <div>
+              <h2 style={{ margin: 0, fontSize: "18px", color: "#0f172a" }}>
+                Consultation Tariffs
+              </h2>
+              <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
+                Configure service fees and billing schedules.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: "16px" }}>
+            <Field label="General Consultation">
+              <input style={inputStyle} defaultValue="450.00" />
+            </Field>
+
+            <Field label="Follow-Up Consultation">
+              <input style={inputStyle} defaultValue="280.00" />
+            </Field>
+
+            <Field label="Emergency Consultation">
+              <input style={inputStyle} defaultValue="850.00" />
+            </Field>
+          </div>
+        </div>
+      </div>
+
+      {/* Notifications & System Settings */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "20px",
+        }}
+      >
+        <div style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "18px",
+            }}
+          >
+            <FaBell size={18} color="#0f766e" />
+            <div>
+              <h2 style={{ margin: 0, fontSize: "18px", color: "#0f172a" }}>
+                Notification Settings
+              </h2>
+              <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
+                Configure operational alerts and reminders.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: "12px" }}>
+            {[
+              "Low stock alerts",
+              "Outstanding account reminders",
+              "Daily operational summary",
+              "Critical audit notifications",
+            ].map((item) => (
+              <label
+                key={item}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "10px 12px",
+                  borderRadius: "12px",
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  fontSize: "14px",
+                  color: "#0f172a",
+                }}
+              >
+                <input type="checkbox" defaultChecked />
+                {item}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "18px",
+            }}
+          >
+            <FaCog size={18} color="#0f766e" />
+            <div>
+              <h2 style={{ margin: 0, fontSize: "18px", color: "#0f172a" }}>
+                System Preferences
+              </h2>
+              <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
+                Core platform configuration for the current tenant.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: "16px" }}>
+            <Field label="Organisation Name">
+              <input
+                style={inputStyle}
+                defaultValue="Mamelodi Health Services"
+              />
+            </Field>
+
+            <Field label="Default Facility">
+              <input
+                style={inputStyle}
+                defaultValue="Mamelodi West Clinic"
+              />
+            </Field>
+
+            <Field label="System Time Zone">
+              <select style={inputStyle}>
+                <option>Africa/Johannesburg</option>
+                <option>UTC</option>
+              </select>
+            </Field>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

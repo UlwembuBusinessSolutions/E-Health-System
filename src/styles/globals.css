@@ -1,0 +1,44 @@
+:root {
+  --bg: #f4f7f7;
+  --surface: #f8fbfb;
+  --surface-alt: #f1f5f9;
+  --card: #ffffff;
+  --line: #dbe7e4;
+
+  --ink: #0f172a;
+  --text: #1e293b;
+  --muted: #64748b;
+
+  --accent: #0f766e;
+  --accent-strong: #115e59;
+  --accent-soft: #ccfbf1;
+
+  --success: #16a34a;
+  --warning: #f59e0b;
+  --danger: #dc2626;
+
+  --shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 24px rgba(15, 23, 42, 0.06);
+
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font: inherit;
+}

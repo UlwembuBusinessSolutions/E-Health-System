@@ -6,16 +6,16 @@ export default function MainLayout() {
   return (
     <div
       style={{
-        display: "flex",
+        display: "grid",
+        gridTemplateColumns: "320px 1fr",
         minHeight: "100vh",
-        background: "#f1f5f4",
+        background: "#f1f5f9",
       }}
     >
       <Sidebar />
 
       <div
         style={{
-          flex: 1,
           display: "flex",
           flexDirection: "column",
           minWidth: 0,
@@ -30,14 +30,7 @@ export default function MainLayout() {
             overflowY: "auto",
           }}
         >
-          <div
-            style={{
-              maxWidth: "1400px",
-              margin: "0 auto",
-            }}
-          >
-            <Outlet />
-          </div>
+          <Outlet />
         </main>
       </div>
     </div>

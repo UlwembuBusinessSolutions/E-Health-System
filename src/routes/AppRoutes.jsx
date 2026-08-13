@@ -5,8 +5,9 @@ import MainLayout from "../components/layout/MainLayout";
 // Dashboard
 import Dashboard from "../pages/dashboard/Dashboard";
 
-// Patients
+// Patient Management
 import Patients from "../pages/patients/Patients";
+import PatientRegistration from "../pages/patients/PatientRegistration";
 import Appointments from "../pages/patients/Appointments";
 
 // Reception
@@ -22,16 +23,6 @@ import Dispensing from "../pages/pharmacy/Dispensing";
 import Inventory from "../pages/pharmacy/Inventory";
 import StockManagement from "../pages/pharmacy/StockManagement";
 
-// Management
-import Reports from "../pages/management/Reports";
-import Administration from "../pages/management/Administration";
-import AuditCompliance from "../pages/management/AuditCompliance";
-import Training from "../pages/management/Training";
-
-// Tenant / Organisation
-import StaffUsers from "../pages/tenant/StaffUsers";
-import Branding from "../pages/organisations/Branding";
-
 // Billing
 import BillingDashboard from "../pages/billing/BillingDashboard";
 import CreateInvoice from "../pages/billing/CreateInvoice";
@@ -41,52 +32,169 @@ import MedicalAidClaims from "../pages/billing/MedicalAidClaims";
 import Revenue from "../pages/billing/Revenue";
 import OutstandingAccounts from "../pages/billing/OutstandingAccounts";
 
+// Management
+import Reports from "../pages/management/Reports";
+import Administration from "../pages/management/Administration";
+import AuditCompliance from "../pages/management/AuditCompliance";
+import Training from "../pages/management/Training";
+
+// Tenant / Organisation
+import StaffUsers from "../pages/tenant/StaffUsers";
+import Branding from "../pages/organisations/Branding";
+import Organisations from "../pages/organisations/Organisations";
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
         <Route element={<MainLayout />}>
-          {/* Dashboard */}
+
+          {/* =========================
+              DASHBOARD
+          ========================== */}
           <Route path="/" element={<Dashboard />} />
 
-          {/* Patient Management */}
+          {/* =========================
+              PATIENT MANAGEMENT
+          ========================== */}
           <Route path="/patients" element={<Patients />} />
-          <Route path="/appointments" element={<Appointments />} />
 
-          {/* Reception & Queue */}
-          <Route path="/reception" element={<ReceptionDashboard />} />
-          <Route path="/reception/board" element={<QueueBoard />} />
+          <Route
+            path="/patients/register"
+            element={<PatientRegistration />}
+          />
 
-          {/* Clinical */}
-          <Route path="/clinical" element={<ClinicalDashboard />} />
+          <Route
+            path="/appointments"
+            element={<Appointments />}
+          />
 
-          {/* Pharmacy */}
-          <Route path="/pharmacy" element={<PharmacyDashboard />} />
-          <Route path="/pharmacy/dispensing" element={<Dispensing />} />
-          <Route path="/pharmacy/inventory" element={<Inventory />} />
-          <Route path="/pharmacy/stock" element={<StockManagement />} />
+          {/* =========================
+              RECEPTION & QUEUE
+          ========================== */}
+          <Route
+            path="/reception"
+            element={<ReceptionDashboard />}
+          />
 
-          {/* Billing */}
-          <Route path="/billing" element={<BillingDashboard />} />
-          <Route path="/billing/invoices" element={<CreateInvoice />} />
-          <Route path="/billing/payments" element={<Payments />} />
-          <Route path="/billing/receipts" element={<Receipts />} />
-          <Route path="/billing/claims" element={<MedicalAidClaims />} />
-          <Route path="/billing/revenue" element={<Revenue />} />
-          <Route path="/billing/outstanding" element={<OutstandingAccounts />} />
+          <Route
+            path="/reception/board"
+            element={<QueueBoard />}
+          />
 
-          {/* Management */}
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/administration" element={<Administration />} />
-          <Route path="/audit" element={<AuditCompliance />} />
-          <Route path="/training" element={<Training />} />
+          {/* =========================
+              CLINICAL SERVICES
+          ========================== */}
+          <Route
+            path="/clinical"
+            element={<ClinicalDashboard />}
+          />
 
-          {/* Tenant Administration */}
-          <Route path="/tenant/staff" element={<StaffUsers />} />
-          <Route path="/branding" element={<Branding />} />
+          {/* =========================
+              PHARMACY
+          ========================== */}
+          <Route
+            path="/pharmacy"
+            element={<PharmacyDashboard />}
+          />
 
-         
+          <Route
+            path="/pharmacy/dispensing"
+            element={<Dispensing />}
+          />
+
+          <Route
+            path="/pharmacy/inventory"
+            element={<Inventory />}
+          />
+
+          <Route
+            path="/pharmacy/stock"
+            element={<StockManagement />}
+          />
+
+          {/* =========================
+              BILLING
+          ========================== */}
+          <Route
+            path="/billing"
+            element={<BillingDashboard />}
+          />
+
+          <Route
+            path="/billing/invoices"
+            element={<CreateInvoice />}
+          />
+
+          <Route
+            path="/billing/payments"
+            element={<Payments />}
+          />
+
+          <Route
+            path="/billing/receipts"
+            element={<Receipts />}
+          />
+
+          <Route
+            path="/billing/claims"
+            element={<MedicalAidClaims />}
+          />
+
+          <Route
+            path="/billing/revenue"
+            element={<Revenue />}
+          />
+
+          <Route
+            path="/billing/outstanding"
+            element={<OutstandingAccounts />}
+          />
+
+          {/* =========================
+              MANAGEMENT
+          ========================== */}
+          <Route
+            path="/reports"
+            element={<Reports />}
+          />
+
+          <Route
+            path="/administration"
+            element={<Administration />}
+          />
+
+          <Route
+            path="/audit"
+            element={<AuditCompliance />}
+          />
+
+          <Route
+            path="/training"
+            element={<Training />}
+          />
+
+          {/* =========================
+              TENANT ADMINISTRATION
+          ========================== */}
+          <Route
+            path="/tenant/staff"
+            element={<StaffUsers />}
+          />
+
+          <Route
+            path="/branding"
+            element={<Branding />}
+          />
+
+          {/* =========================
+              ORGANISATIONS
+          ========================== */}
+          <Route
+            path="/organisations"
+            element={<Organisations />}
+          />
+
         </Route>
       </Routes>
     </BrowserRouter>
