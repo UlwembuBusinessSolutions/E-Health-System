@@ -1,464 +1,544 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   FaSearch,
-  FaUserCheck,
-  FaClock,
-  FaStethoscope,
-  FaHeartbeat,
+  FaClipboardList,
+  FaUserClock,
   FaCheckCircle,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 
-const queueData = [
-  {
-    id: "Q-001",
-    patient: "Thandi Mokoena",
-    time: "08:12",
-    status: "Waiting",
-  },
-  {
-    id: "Q-002",
-    patient: "Sipho Dlamini",
-    time: "08:20",
-    status: "Vitals",
-  },
-  {
-    id: "Q-003",
-    patient: "Lerato Khumalo",
-    time: "08:34",
-    status: "Consultation",
-  },
-  {
-    id: "Q-004",
-    patient: "Musa Nkosi",
-    time: "08:45",
-    status: "Waiting",
-  },
-];
+const PATIENT_STORAGE_KEY = "ulwembu_patients";
+const VISIT_STORAGE_KEY = "ulwembu_visits";
 
-const statusStyles = {
-  Waiting: { background: "#fef3c7", color: "#92400e" },
-  Vitals: { background: "#dbeafe", color: "#1d4ed8" },
-  Consultation: { background: "#dcfce7", color: "#166534" },
-};
+function generateQueueNumber(existingVisits) {
+  const today = new Date().toISOString().slice(0, 10);
 
-const cardStyle = {
-  background: "#ffffff",
-  border: "1px solid #dbe7e4",
-  borderRadius: "20px",
-  padding: "22px",
-  boxShadow: "0 8px 24px rgba(15, 23, 42, 0.05)",
-};
+  const todaysVisits = existingVisits.filter(
+    (visit) => visit.visitDate === today
+  );
+
+  const next = todaysVisits.length + 1;
+
+  return `Q-${String(next).padStart(3, "0")}`;
+}
 
 export default function ReceptionDashboard() {
-  const [search, setSearch] = useState("");
-
-  const filteredQueue = queueData.filter((item) =>
-    item.patient.toLowerCase().includes(search.toLowerCase())
+  const patients = useMemo(
+    () =>
+      JSON.parse(localStorage.getItem(PATIENT_STORAGE_KEY) || "[]"),
+    []
   );
+
+  const [search, setSearch] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [priority, setPriority] = useState("Routine");
+  const [reason, setReason] = useState("");
+  const [queue, setQueue] = useState(() =>
+    JSON.parse(localStorage.getItem(VISIT_STORAGE_KEY) || "[]")
+  );
+
+  const filteredPatients = patients.filter((patient) => {
+    const query = search.toLowerCase();
+
+    return (
+      patient.fullName?.toLowerCase().includes(query) ||
+      patient.mpi?.toLowerCase().includes(query) ||
+      patient.idNumber?.toLowerCase().includes(query)
+    );
+  });
+
+  function createVisit() {
+    if (!selectedPatient) return;
+
+    const visit = {
+      id: crypto.randomUUID(),
+      mpi: selectedPatient.mpi,
+      patientName: selectedPatient.fullName,
+      queueNumber: generateQueueNumber(queue),
+      priority,
+      reason,
+      status: "Waiting",
+      visitDate: new Date().toISOString().slice(0, 10),
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = [visit, ...queue];
+
+    localStorage.setItem(VISIT_STORAGE_KEY, JSON.stringify(updated));
+
+    setQueue(updated);
+    setSelectedPatient(null);
+    setSearch("");
+    setReason("");
+    setPriority("Routine");
+  }
+
+  const waitingCount = queue.filter((v) => v.status === "Waiting").length;
+  const urgentCount = queue.filter((v) => v.priority === "Urgent").length;
 
   return (
     <div style={{ display: "grid", gap: "24px" }}>
-      {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "16px",
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "8px 14px",
-              borderRadius: "999px",
-              background: "#ccfbf1",
-              color: "#0f766e",
-              fontSize: "13px",
-              fontWeight: 600,
-              marginBottom: "12px",
-            }}
-          >
-            <FaUserCheck size={12} />
-            Front Desk Operations
-          </div>
-
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "32px",
-              fontWeight: 800,
-              color: "#0f172a",
-            }}
-          >
-            Reception & Queue Dashboard
-          </h1>
-
-          <p style={{ margin: "8px 0 0", color: "#64748b" }}>
-            Manage patient arrivals, check-ins, and consultation queues across
-            the clinic.
-          </p>
-        </div>
-
-        <button
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "8px",
-            padding: "12px 18px",
-            borderRadius: "12px",
-            border: "none",
-            background: "#0f766e",
-            color: "#ffffff",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          <FaUserCheck size={14} />
-          Check In Patient
-        </button>
+      <div>
+        <h1 style={{ marginBottom: "6px" }}>Reception & Queue</h1>
+        <p style={{ color: "var(--muted)", margin: 0 }}>
+          Create patient visits, assign queue numbers, and manage clinic flow.
+        </p>
       </div>
 
-      {/* KPI Cards */}
+      {/* Summary */}
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "18px",
+          gap: "16px",
         }}
       >
-        <div style={cardStyle}>
-          <div style={{ color: "#64748b", fontSize: "13px" }}>
-            Patients Waiting
-          </div>
-          <div
-            style={{
-              marginTop: "10px",
-              fontSize: "2rem",
-              fontWeight: 800,
-              color: "#0f172a",
-            }}
-          >
-            12
-          </div>
-          <div style={{ marginTop: "6px", color: "#92400e", fontSize: "13px" }}>
-            +2 in the last hour
-          </div>
-        </div>
-
-        <div style={cardStyle}>
-          <div style={{ color: "#64748b", fontSize: "13px" }}>
-            In Vitals
-          </div>
-          <div
-            style={{
-              marginTop: "10px",
-              fontSize: "2rem",
-              fontWeight: 800,
-              color: "#0f172a",
-            }}
-          >
-            4
-          </div>
-          <div style={{ marginTop: "6px", color: "#1d4ed8", fontSize: "13px" }}>
-            Average 7 min wait
-          </div>
-        </div>
-
-        <div style={cardStyle}>
-          <div style={{ color: "#64748b", fontSize: "13px" }}>
-            Ready for Consultation
-          </div>
-          <div
-            style={{
-              marginTop: "10px",
-              fontSize: "2rem",
-              fontWeight: 800,
-              color: "#0f172a",
-            }}
-          >
-            6
-          </div>
-          <div style={{ marginTop: "6px", color: "#166534", fontSize: "13px" }}>
-            3 doctors available
-          </div>
-        </div>
-
-        <div style={cardStyle}>
-          <div style={{ color: "#64748b", fontSize: "13px" }}>
-            Completed Today
-          </div>
-          <div
-            style={{
-              marginTop: "10px",
-              fontSize: "2rem",
-              fontWeight: 800,
-              color: "#0f172a",
-            }}
-          >
-            38
-          </div>
-          <div style={{ marginTop: "6px", color: "#0f766e", fontSize: "13px" }}>
-            +14% vs yesterday
-          </div>
-        </div>
+        <StatCard
+          icon={<FaClipboardList />}
+          label="Queue Today"
+          value={queue.length}
+        />
+        <StatCard
+          icon={<FaUserClock />}
+          label="Waiting Patients"
+          value={waitingCount}
+        />
+        <StatCard
+          icon={<FaExclamationTriangle />}
+          label="Urgent Cases"
+          value={urgentCount}
+        />
       </div>
 
-      {/* Search */}
-      <div style={cardStyle}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.2fr 1fr",
+          gap: "24px",
+          alignItems: "start",
+        }}
+      >
+        {/* Patient Search */}
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            marginBottom: "18px",
+            background: "var(--card)",
+            border: "1px solid var(--line)",
+            borderRadius: "20px",
+            padding: "24px",
+            boxShadow: "var(--shadow)",
+            display: "grid",
+            gap: "18px",
           }}
         >
-          <FaSearch size={18} color="#0f766e" />
           <div>
-            <h2 style={{ margin: 0, fontSize: "18px", color: "#0f172a" }}>
-              Find Patient
-            </h2>
-            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
-              Search registered patients before check-in.
+            <h2 style={{ margin: 0 }}>Find Patient</h2>
+            <p
+              style={{
+                margin: "6px 0 0",
+                color: "var(--muted)",
+                fontSize: "14px",
+              }}
+            >
+              Search by MPI, patient name, or ID number.
             </p>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              padding: "12px 14px",
+              border: "1px solid var(--line)",
+              borderRadius: "12px",
+              background: "var(--surface-alt)",
+            }}
+          >
+            <FaSearch size={14} color="var(--muted)" />
+
+            <input
+              type="text"
+              placeholder="Search patient..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                width: "100%",
+                fontSize: "14px",
+                color: "var(--text)",
+              }}
+            />
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "10px",
+              maxHeight: "420px",
+              overflowY: "auto",
+            }}
+          >
+            {filteredPatients.length === 0 ? (
+              <div
+                style={{
+                  padding: "24px",
+                  textAlign: "center",
+                  color: "var(--muted)",
+                  border: "1px dashed var(--line)",
+                  borderRadius: "16px",
+                }}
+              >
+                No patients found
+              </div>
+            ) : (
+              filteredPatients.map((patient) => (
+                <button
+                  key={patient.id}
+                  type="button"
+                  onClick={() => setSelectedPatient(patient)}
+                  style={{
+                    textAlign: "left",
+                    padding: "14px",
+                    borderRadius: "14px",
+                    border:
+                      selectedPatient?.id === patient.id
+                        ? "1px solid var(--accent)"
+                        : "1px solid var(--line)",
+                    background:
+                      selectedPatient?.id === patient.id
+                        ? "rgba(15, 118, 110, 0.08)"
+                        : "var(--surface-alt)",
+                    cursor: "pointer",
+                    display: "grid",
+                    gap: "4px",
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: "var(--ink)" }}>
+                    {patient.fullName}
+                  </div>
+
+                  <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+                    {patient.mpi}
+                  </div>
+
+                  <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+                    {patient.phone || "No contact number"}
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
+        {/* Visit Form */}
         <div
           style={{
+            background: "var(--card)",
+            border: "1px solid var(--line)",
+            borderRadius: "20px",
+            padding: "24px",
+            boxShadow: "var(--shadow)",
             display: "grid",
-            gridTemplateColumns: "1fr auto",
-            gap: "12px",
+            gap: "18px",
           }}
         >
-          <input
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by patient name, ID, or folder number"
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              borderRadius: "12px",
-              border: "1px solid #cbd5e1",
-              fontSize: "14px",
-              boxSizing: "border-box",
-            }}
-          />
+          <div>
+            <h2 style={{ margin: 0 }}>Create Visit</h2>
+            <p
+              style={{
+                margin: "6px 0 0",
+                color: "var(--muted)",
+                fontSize: "14px",
+              }}
+            >
+              Select a patient and assign a queue entry.
+            </p>
+          </div>
+
+          {selectedPatient ? (
+            <div
+              style={{
+                padding: "16px",
+                borderRadius: "16px",
+                background: "rgba(15, 118, 110, 0.08)",
+                border: "1px solid rgba(15, 118, 110, 0.2)",
+                display: "grid",
+                gap: "6px",
+              }}
+            >
+              <div style={{ fontWeight: 700, color: "var(--ink)" }}>
+                {selectedPatient.fullName}
+              </div>
+              <div style={{ fontSize: "13px", color: "var(--muted)" }}>
+                {selectedPatient.mpi}
+              </div>
+              <div style={{ fontSize: "13px", color: "var(--muted)" }}>
+                {selectedPatient.idNumber}
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                padding: "16px",
+                borderRadius: "16px",
+                border: "1px dashed var(--line)",
+                color: "var(--muted)",
+                fontSize: "14px",
+              }}
+            >
+              Select a patient from the search results.
+            </div>
+          )}
+
+          <label style={labelStyle}>
+            Priority
+            <select
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+              style={inputStyle}
+            >
+              <option>Routine</option>
+              <option>Urgent</option>
+              <option>Emergency</option>
+            </select>
+          </label>
+
+          <label style={labelStyle}>
+            Reason for Visit
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={5}
+              placeholder="Describe the patient's presenting complaint or reason for the visit..."
+              style={{ ...inputStyle, resize: "vertical" }}
+            />
+          </label>
 
           <button
+            type="button"
+            disabled={!selectedPatient}
+            onClick={createVisit}
             style={{
               padding: "12px 18px",
               borderRadius: "12px",
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              fontWeight: 600,
-              cursor: "pointer",
+              border: "none",
+              background: selectedPatient ? "var(--accent)" : "#94a3b8",
+              color: "white",
+              fontWeight: 700,
+              cursor: selectedPatient ? "pointer" : "not-allowed",
             }}
           >
-            Search
+            Add to Queue
           </button>
         </div>
       </div>
 
       {/* Queue Table */}
-      <div style={cardStyle}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            marginBottom: "18px",
-          }}
-        >
-          <FaClock size={18} color="#0f766e" />
-          <div>
-            <h2 style={{ margin: 0, fontSize: "18px", color: "#0f172a" }}>
-              Live Queue
-            </h2>
-            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
-              Real-time patient flow for reception, vitals, and consultation.
-            </p>
-          </div>
-        </div>
-
-        <div style={{ overflowX: "auto" }}>
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              fontSize: "14px",
-            }}
-          >
-            <thead>
-              <tr
-                style={{
-                  textAlign: "left",
-                  color: "#64748b",
-                  borderBottom: "1px solid #e2e8f0",
-                }}
-              >
-                <th style={{ padding: "12px 0" }}>Queue No.</th>
-                <th style={{ padding: "12px 0" }}>Patient</th>
-                <th style={{ padding: "12px 0" }}>Arrival Time</th>
-                <th style={{ padding: "12px 0" }}>Status</th>
-                <th style={{ padding: "12px 0" }}>Action</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredQueue.map((item) => (
-                <tr
-                  key={item.id}
-                  style={{ borderBottom: "1px solid #f1f5f9" }}
-                >
-                  <td style={{ padding: "14px 0", fontWeight: 700 }}>
-                    {item.id}
-                  </td>
-
-                  <td style={{ padding: "14px 0" }}>
-                    {item.patient}
-                  </td>
-
-                  <td style={{ padding: "14px 0" }}>{item.time}</td>
-
-                  <td style={{ padding: "14px 0" }}>
-                    <span
-                      style={{
-                        padding: "6px 12px",
-                        borderRadius: "999px",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        ...statusStyles[item.status],
-                      }}
-                    >
-                      {item.status}
-                    </span>
-                  </td>
-
-                  <td style={{ padding: "14px 0" }}>
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      <button
-                        style={{
-                          padding: "8px 12px",
-                          borderRadius: "10px",
-                          border: "1px solid #cbd5e1",
-                          background: "#ffffff",
-                          cursor: "pointer",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          fontSize: "13px",
-                          fontWeight: 600,
-                        }}
-                      >
-                        <FaHeartbeat size={12} />
-                        Vitals
-                      </button>
-
-                      <button
-                        style={{
-                          padding: "8px 12px",
-                          borderRadius: "10px",
-                          border: "none",
-                          background: "#0f766e",
-                          color: "#ffffff",
-                          cursor: "pointer",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          fontSize: "13px",
-                          fontWeight: 700,
-                        }}
-                      >
-                        <FaStethoscope size={12} />
-                        Consult
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Queue Flow */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "18px",
+          background: "var(--card)",
+          border: "1px solid var(--line)",
+          borderRadius: "20px",
+          overflow: "hidden",
+          boxShadow: "var(--shadow)",
         }}
       >
-        <div style={cardStyle}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              marginBottom: "12px",
-            }}
-          >
-            <FaUserCheck size={18} color="#92400e" />
-            <h3 style={{ margin: 0, color: "#0f172a" }}>Waiting</h3>
-          </div>
-
-          <div style={{ display: "grid", gap: "10px" }}>
-            <div style={{ padding: "10px 12px", borderRadius: "12px", background: "#f8fafc" }}>
-              Thandi Mokoena
-            </div>
-            <div style={{ padding: "10px 12px", borderRadius: "12px", background: "#f8fafc" }}>
-              Musa Nkosi
-            </div>
-          </div>
+        <div
+          style={{
+            padding: "20px 24px",
+            borderBottom: "1px solid var(--line)",
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Today's Queue</h2>
         </div>
 
-        <div style={cardStyle}>
+        {queue.length === 0 ? (
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              marginBottom: "12px",
+              padding: "48px 24px",
+              textAlign: "center",
+              color: "var(--muted)",
             }}
           >
-            <FaHeartbeat size={18} color="#1d4ed8" />
-            <h3 style={{ margin: 0, color: "#0f172a" }}>Vitals</h3>
+            No active visits have been created yet.
           </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "var(--surface-alt)" }}>
+                  <th style={thStyle}>Queue</th>
+                  <th style={thStyle}>Patient</th>
+                  <th style={thStyle}>MPI</th>
+                  <th style={thStyle}>Priority</th>
+                  <th style={thStyle}>Status</th>
+                </tr>
+              </thead>
 
-          <div style={{ display: "grid", gap: "10px" }}>
-            <div style={{ padding: "10px 12px", borderRadius: "12px", background: "#eff6ff" }}>
-              Sipho Dlamini
-            </div>
-          </div>
-        </div>
+              <tbody>
+                {queue.map((visit) => (
+                  <tr key={visit.id} style={{ borderTop: "1px solid var(--line)" }}>
+                    <td style={tdStyle}>
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          padding: "6px 10px",
+                          borderRadius: "999px",
+                          background: "rgba(15, 118, 110, 0.1)",
+                          color: "var(--accent)",
+                          fontWeight: 700,
+                          fontSize: "12px",
+                        }}
+                      >
+                        {visit.queueNumber}
+                      </div>
+                    </td>
 
-        <div style={cardStyle}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              marginBottom: "12px",
-            }}
-          >
-            <FaCheckCircle size={18} color="#166534" />
-            <h3 style={{ margin: 0, color: "#0f172a" }}>Ready for Doctor</h3>
+                    <td style={tdStyle}>{visit.patientName}</td>
+                    <td style={tdStyle}>{visit.mpi}</td>
+                    <td style={tdStyle}>
+                      <PriorityBadge priority={visit.priority} />
+                    </td>
+                    <td style={tdStyle}>
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          padding: "6px 10px",
+                          borderRadius: "999px",
+                          background: "rgba(245, 158, 11, 0.12)",
+                          color: "#92400e",
+                          fontWeight: 600,
+                          fontSize: "12px",
+                        }}
+                      >
+                        <FaCheckCircle size={11} />
+                        {visit.status}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-
-          <div style={{ display: "grid", gap: "10px" }}>
-            <div style={{ padding: "10px 12px", borderRadius: "12px", background: "#ecfdf5" }}>
-              Lerato Khumalo
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
 }
+
+function StatCard({ icon, label, value }) {
+  return (
+    <div
+      style={{
+        background: "var(--card)",
+        border: "1px solid var(--line)",
+        borderRadius: "18px",
+        padding: "18px",
+        boxShadow: "var(--shadow)",
+        display: "grid",
+        gap: "10px",
+      }}
+    >
+      <div
+        style={{
+          width: "38px",
+          height: "38px",
+          borderRadius: "12px",
+          background: "rgba(15, 118, 110, 0.1)",
+          color: "var(--accent)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {icon}
+      </div>
+
+      <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+        {label}
+      </div>
+
+      <div
+        style={{
+          fontSize: "28px",
+          fontWeight: 700,
+          color: "var(--ink)",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function PriorityBadge({ priority }) {
+  const styles = {
+    Routine: {
+      background: "rgba(22, 163, 74, 0.12)",
+      color: "#166534",
+    },
+    Urgent: {
+      background: "rgba(245, 158, 11, 0.12)",
+      color: "#92400e",
+    },
+    Emergency: {
+      background: "rgba(220, 38, 38, 0.12)",
+      color: "#991b1b",
+    },
+  };
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "6px 10px",
+        borderRadius: "999px",
+        fontWeight: 600,
+        fontSize: "12px",
+        ...styles[priority],
+      }}
+    >
+      {priority}
+    </span>
+  );
+}
+
+const inputStyle = {
+  width: "100%",
+  padding: "11px 12px",
+  border: "1px solid var(--line)",
+  borderRadius: "10px",
+  background: "var(--surface-alt)",
+  color: "var(--text)",
+  fontSize: "14px",
+  boxSizing: "border-box",
+};
+
+const labelStyle = {
+  display: "grid",
+  gap: "6px",
+  fontSize: "13px",
+  fontWeight: 600,
+  color: "var(--text)",
+};
+
+const thStyle = {
+  textAlign: "left",
+  padding: "14px 18px",
+  fontSize: "12px",
+  fontWeight: 700,
+  color: "var(--muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+};
+
+const tdStyle = {
+  padding: "16px 18px",
+  fontSize: "14px",
+  color: "var(--text)",
+};
