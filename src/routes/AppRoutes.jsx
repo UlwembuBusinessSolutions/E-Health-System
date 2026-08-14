@@ -9,6 +9,7 @@ import Dashboard from "../pages/dashboard/Dashboard";
 import Patients from "../pages/patients/Patients";
 import PatientRegistration from "../pages/patients/PatientRegistration";
 import Appointments from "../pages/patients/Appointments";
+import PatientProfile from "../pages/patients/PatientProfile";
 
 // Reception
 import ReceptionDashboard from "../pages/reception/ReceptionDashboard";
@@ -58,16 +59,11 @@ export default function AppRoutes() {
               PATIENT MANAGEMENT
           ========================== */}
           <Route path="/patients" element={<Patients />} />
+          <Route path="/patients/register" element={<PatientRegistration />} />
+          <Route path="/patients/:mpi" element={<PatientProfile />} />
+          <Route path="/appointments" element={<Appointments />} />
 
-          <Route
-            path="/patients/register"
-            element={<PatientRegistration />}
-          />
 
-          <Route
-            path="/appointments"
-            element={<Appointments />}
-          />
 
           {/* =========================
               RECEPTION & QUEUE
