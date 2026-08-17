@@ -31,6 +31,7 @@ import PatientProfile from "../pages/tenant/patients/PatientProfile";
 import Appointments from "../pages/tenant/patients/Appointments";
 import Reception from "../pages/tenant/patients/Reception";
 
+
 // ======================================================
 // TENANT - RECEPTION
 // ======================================================
@@ -46,9 +47,6 @@ import WalkInVisit from "../pages/tenant/reception/WalkInVisit";
 import ClinicalDashboard from "../pages/tenant/clinical/ClinicalDashboard";
 import ClinicalServices from "../pages/tenant/clinical/ClinicalServices";
 import Consultations from "../pages/tenant/clinical/Consultations";
-import ConsultationWorkspace from "../pages/tenant/clinical/ConsultationWorkspace";
-import ConsultationSummary from "../pages/tenant/clinical/ConsultationSummary";
-
 import Diagnosis from "../pages/tenant/clinical/Diagnosis";
 import LabRequests from "../pages/tenant/clinical/LabRequests";
 import PatientSearch from "../pages/tenant/clinical/PatientSearch";
@@ -83,9 +81,11 @@ import AuditCompliance from "../pages/tenant/management/AuditCompliance";
 import Reports from "../pages/tenant/management/Reports";
 import Training from "../pages/tenant/management/Training";
 
+
 export default function AppRoutes() {
   return (
     <BrowserRouter>
+
       <Routes>
 
         {/* ==================================================
@@ -96,6 +96,7 @@ export default function AppRoutes() {
           path="/"
           element={<Navigate to="/login" replace />}
         />
+
 
         {/* ==================================================
             AUTHENTICATION
@@ -111,6 +112,7 @@ export default function AppRoutes() {
           element={<Navigate to="/login" replace />}
         />
 
+
         {/* ==================================================
             SUPER ADMIN PORTAL
         ================================================== */}
@@ -120,22 +122,26 @@ export default function AppRoutes() {
           element={<SuperAdminLayout />}
         >
 
+          {/* Super Admin Dashboard */}
           <Route
             path="dashboard"
             element={<SuperAdminDashboard />}
           />
 
+          {/* Organisations */}
           <Route
             path="organisations"
             element={<Organisations />}
           />
 
+          {/* Tenant Administration */}
           <Route
             path="tenant-administration"
             element={<TenantAdministration />}
           />
 
         </Route>
+
 
         {/* ==================================================
             TENANT PORTAL
@@ -150,54 +156,65 @@ export default function AppRoutes() {
               ORGANISATION
           ================================================== */}
 
+          {/* Organisation Dashboard */}
           <Route
             path="dashboard"
             element={<TenantDashboard />}
           />
 
+          {/* Staff & Users */}
           <Route
             path="staff"
             element={<StaffUsers />}
           />
 
+          {/* Clinics */}
           <Route
             path="clinics"
             element={<Clinics />}
-          />
+          />  
 
+          {/* Branding & Preferences */}
           <Route
             path="branding"
             element={<Branding />}
           />
 
+
           {/* ==================================================
               PATIENT MANAGEMENT
           ================================================== */}
 
+          {/* Patient list */}
           <Route
             path="patients"
             element={<Patients />}
           />
 
+          {/* Patient registration */}
           <Route
             path="patients/register"
             element={<PatientRegistration />}
           />
 
+          {/* Patient profile */}
           <Route
-            path="patients/:patientId"
+            path="patients/:mpi"
             element={<PatientProfile />}
           />
 
+          {/* Appointments */}
           <Route
             path="appointments"
             element={<Appointments />}
           />
 
+          {/* Patient reception */}
           <Route
             path="patients/reception"
             element={<Reception />}
           />
+
 
           {/* ==================================================
               RECEPTION & QUEUE
@@ -228,6 +245,7 @@ export default function AppRoutes() {
             element={<WalkInVisit />}
           />
 
+
           {/* ==================================================
               CLINICAL SERVICES
           ================================================== */}
@@ -242,37 +260,10 @@ export default function AppRoutes() {
             element={<ClinicalServices />}
           />
 
-          {/* ==================================================
-              CONSULTATIONS
-          ================================================== */}
-
-          {/* Consultation List */}
-
           <Route
             path="clinical/consultations"
             element={<Consultations />}
           />
-
-          {/* New/ Consultation Workspace */}
-
-          <Route
-            path="clinical/consultations/workspace/:consultationId"
-            element={<ConsultationWorkspace />}
-          />
-
-
-          {/* Summary */}
-          <Route
-            path="clinical/consultations/:consultationId/summary"
-            element={<ConsultationSummary />}
-          />
-
-
-
-
-          {/* ==================================================
-              OTHER CLINICAL MODULES
-          ================================================== */}
 
           <Route
             path="clinical/diagnosis"
@@ -304,6 +295,7 @@ export default function AppRoutes() {
             element={<VitalsCapture />}
           />
 
+
           {/* ==================================================
               PHARMACY
           ================================================== */}
@@ -327,6 +319,7 @@ export default function AppRoutes() {
             path="pharmacy/stock"
             element={<StockManagement />}
           />
+
 
           {/* ==================================================
               BILLING
@@ -367,6 +360,7 @@ export default function AppRoutes() {
             element={<OutstandingAccounts />}
           />
 
+
           {/* ==================================================
               MANAGEMENT
           ================================================== */}
@@ -394,6 +388,7 @@ export default function AppRoutes() {
         </Route>
 
       </Routes>
+
     </BrowserRouter>
   );
 }
