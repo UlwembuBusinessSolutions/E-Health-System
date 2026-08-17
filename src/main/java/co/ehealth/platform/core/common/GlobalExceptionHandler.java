@@ -192,6 +192,69 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.badRequest().body(new ApiErrorResponse("Upload failed. Please try again.", null));
     }
 
+    // Patient Record exceptions — BR-PREG-150 compliance: patient records
+    // cannot be deleted. All attempts are rejected with 403 FORBIDDEN and
+    // logged as audit events. Records can only be withdrawn from active use
+    // via archiving.
+
+    // Thrown by PatientRecordService.createRecord() when an MRN is already
+    // in use. Same shape as DuplicateFieldException (identity module),
+    // but for patient records instead of users.
+    @ExceptionHandler(co.ehealth.platform.facility.DuplicatePatientRecordException.class)
+    public ResponseEntity<ApiErrorResponse> handleDuplicatePatientRecord(
+            co.ehealth.platform.facility.DuplicatePatientRecordException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                new ApiErrorResponse(ex.getMessage(),
+                        Map.of(ex.getField(), ex.getMessage())));
+    }
+
+    // Thrown by PatientRecordService.getRecord() when a record ID doesn't
+    // exist. Same as OrganizationNotFoundException or other resource-not-found
+    // cases.
+    @ExceptionHandler(co.ehealth.platform.facility.RecordNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleRecordNotFound(
+            co.ehealth.platform.facility.RecordNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // Thrown by PatientRecordService.archiveRecord() when archiving an
+    // already-archived record. "Conflicts with current state" — the record
+    // exists and is well-formed, but is already in the target state.
+    @ExceptionHandler(co.ehealth.platform.facility.RecordAlreadyArchivedException.class)
+    public ResponseEntity<ApiErrorResponse> handleRecordAlreadyArchived(
+            co.ehealth.platform.facility.RecordAlreadyArchivedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // UnsupportedOperationException — catch deletion attempts. This exception
+    // is thrown by PatientRecordRepository when delete() is called (any variant)
+    // and by PatientRecordService.deleteRecord() if somehow called directly.
+    // Check the message to ensure it's a compliance-driven deletion block
+    // (contains "BR-PREG-150"), not some other UnsupportedOperationException
+    // from elsewhere in the application.
+    @ExceptionHandler(UnsupportedOperationException.class)
+    public ResponseEntity<ApiErrorResponse> handleUnsupportedOperation(
+            UnsupportedOperationException ex) {
+        // Check if this is a patient record deletion attempt
+        if (ex.getMessage() != null && ex.getMessage().contains("BR-PREG-150")) {
+            // This is a compliance-driven deletion block. Log it and return
+            // 403 FORBIDDEN. The caller already has their request details
+            // logged by their @AuthenticationPrincipal, but the attempt itself
+            // (the operation that was blocked) is worth noting.
+            log.warn("Deletion attempt blocked by compliance requirement BR-PREG-150: {}",
+                    ex.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+                    new ApiErrorResponse(
+                            "Patient records cannot be deleted. Use archiving to withdraw from active use.",
+                            null));
+        }
+        // Some other UnsupportedOperationException — let it fall through to
+        // the catch-all Exception handler below.
+        throw ex;
+    }
+
     // Everything below overrides a protected hook ResponseEntityExceptionHandler
     // already owns, rather than declaring a competing @ExceptionHandler —
     // see the class-level comment for why that distinction is required, not
