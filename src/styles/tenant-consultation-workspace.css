@@ -1,0 +1,447 @@
+.consultation-workspace-page {
+  display: grid;
+  gap: 24px;
+  padding: 4px;
+}
+
+.consultation-workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.consultation-workspace-header h1 {
+  margin: 6px 0 8px;
+  color: var(--ink);
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.consultation-workspace-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.consultation-workspace-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  padding: 0;
+  margin-bottom: 18px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.consultation-workspace-id {
+  display: grid;
+  gap: 5px;
+  min-width: 190px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+
+.consultation-workspace-id span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.consultation-workspace-id strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.consultation-workspace-card {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.consultation-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.consultation-card-header h2 {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.consultation-card-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.consultation-card-title-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: rgba(15, 118, 110, .1);
+  color: var(--accent);
+}
+
+.consultation-patient-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-alt);
+  color: var(--muted);
+}
+
+.consultation-patient-search input {
+  width: 100%;
+  padding: 13px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.consultation-patient-results {
+  display: grid;
+  gap: 8px;
+}
+
+.consultation-patient-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  text-align: left;
+  cursor: pointer;
+}
+
+.consultation-patient-result:hover {
+  border-color: var(--accent);
+  background: var(--surface-alt);
+}
+
+.consultation-patient-avatar,
+.selected-patient-avatar {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: rgba(15, 118, 110, .1);
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.consultation-result-details {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+}
+
+.consultation-result-details strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.consultation-result-details span,
+.consultation-result-meta span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.consultation-result-meta {
+  display: flex;
+  gap: 16px;
+}
+
+.consultation-no-patients {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 35px;
+  color: var(--muted);
+}
+
+.selected-patient {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 18px;
+  border: 1px solid rgba(15, 118, 110, .25);
+  border-radius: 14px;
+  background: rgba(15, 118, 110, .05);
+}
+
+.selected-patient-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.selected-patient-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.selected-patient h3 {
+  margin: 0 0 3px;
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.selected-patient strong {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.change-patient-button {
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.consultation-demographics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--line);
+}
+
+.consultation-demographics-grid > div {
+  display: grid;
+  gap: 6px;
+  padding: 15px;
+  background: var(--card);
+}
+
+.consultation-demographics-grid span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.consultation-demographics-grid strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.consultation-workspace-card textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  outline: none;
+  background: var(--surface-alt);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.consultation-workspace-card textarea:focus,
+.consultation-form-grid input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, .08);
+}
+
+.consultation-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.consultation-form-grid > div {
+  display: grid;
+  gap: 7px;
+}
+
+.consultation-form-grid label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.consultation-form-grid input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  outline: none;
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.consultation-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.consultation-action-box {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-alt);
+}
+
+.consultation-action-box > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.consultation-action-box button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: fit-content;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.consultation-workspace-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-bottom: 10px;
+}
+
+.consultation-cancel-button,
+.consultation-complete-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.consultation-cancel-button {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+}
+
+.consultation-complete-button {
+  border: 0;
+  background: var(--accent);
+  color: white;
+}
+
+.consultation-complete-button:disabled {
+  opacity: .7;
+  cursor: not-allowed;
+}
+
+.consultation-completed-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid rgba(21, 128, 61, .2);
+  border-radius: 14px;
+  background: rgba(21, 128, 61, .07);
+}
+
+.consultation-completed-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(21, 128, 61, .12);
+  color: #15803d;
+}
+
+.consultation-completed-message strong,
+.consultation-completed-message span {
+  display: block;
+}
+
+.consultation-completed-message strong {
+  color: #166534;
+  font-size: 13px;
+}
+
+.consultation-completed-message span {
+  margin-top: 3px;
+  color: #4d7c5a;
+  font-size: 12px;
+}
+
+@media (max-width: 1000px) {
+  .consultation-demographics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .consultation-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .consultation-actions-grid,
+  .consultation-demographics-grid,
+  .consultation-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .selected-patient {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .consultation-workspace-actions {
+    flex-direction: column;
+  }
+}
