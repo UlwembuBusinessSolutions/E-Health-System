@@ -392,3 +392,59 @@ select.patient-form-input {
     width: 100%;
   }
 }
+
+/* =========================================================
+   CLINICAL INFORMATION
+========================================================= */
+
+.patient-form-field textarea.patient-form-input {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.5;
+  font-family: inherit;
+  padding: 14px 16px;
+}
+
+/* =========================================================
+   CONSENT
+========================================================= */
+
+.patient-consent-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.patient-consent-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.patient-consent-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.patient-consent-item span {
+  font-size: 14px;
+  color: #475569;
+}
+
+.patient-consent-item strong {
+  color: #dc2626;
+}
+
+.patient-consent-error {
+  display: block;
+  margin-top: -10px;
+  margin-left: 30px;
+  color: #dc2626;
+  font-size: 12px;
+}

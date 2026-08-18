@@ -1,0 +1,609 @@
+.reception-dashboard-page {
+  min-height: 100%;
+  padding: 32px;
+  background: #f4f8fa;
+}
+
+/* ==========================================================
+   HEADER
+========================================================== */
+
+.reception-dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.reception-page-eyebrow {
+  margin-bottom: 8px;
+  color: #087f78;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+}
+
+.reception-dashboard-header h1 {
+  margin: 0;
+  color: #0d1b36;
+  font-size: 34px;
+  font-weight: 800;
+}
+
+.reception-dashboard-header p {
+  margin: 8px 0 0;
+  color: #60708a;
+  font-size: 15px;
+}
+
+.reception-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reception-primary-button,
+.reception-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.reception-primary-button {
+  background: #087f78;
+  color: #fff;
+}
+
+.reception-primary-button:hover {
+  background: #066b65;
+}
+
+.reception-secondary-button {
+  background: #fff;
+  color: #173052;
+  border-color: #d9e2e8;
+}
+
+.reception-secondary-button:hover {
+  background: #f7fafb;
+}
+
+/* ==========================================================
+   STATISTICS
+========================================================== */
+
+.reception-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.reception-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #dfe7ec;
+  border-radius: 14px;
+  box-shadow: 0 3px 12px rgba(15, 35, 60, 0.04);
+}
+
+.reception-stat-icon {
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  font-size: 21px;
+}
+
+.reception-stat-icon.total {
+  background: #e9eefb;
+  color: #37558f;
+}
+
+.reception-stat-icon.waiting {
+  background: #fff4dc;
+  color: #a66b00;
+}
+
+.reception-stat-icon.consultation {
+  background: #e0f5f2;
+  color: #087f78;
+}
+
+.reception-stat-icon.completed {
+  background: #e4f6e9;
+  color: #2e7d45;
+}
+
+.reception-stat-card span {
+  display: block;
+  margin-bottom: 4px;
+  color: #6c7b91;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.reception-stat-card strong {
+  display: block;
+  color: #0d1b36;
+  font-size: 27px;
+  line-height: 1;
+}
+
+/* ==========================================================
+   CURRENT CONSULTATION
+========================================================== */
+
+.reception-current-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 25px;
+  margin-bottom: 22px;
+  padding: 22px 24px;
+  background: #0d1b36;
+  color: #fff;
+  border-radius: 14px;
+}
+
+.reception-current-left {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+}
+
+.reception-current-icon {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #087f78;
+  color: #fff;
+  font-size: 23px;
+}
+
+.reception-current-left span {
+  display: block;
+  margin-bottom: 4px;
+  color: #65ddd2;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.reception-current-left h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 26px;
+}
+
+.reception-current-left strong {
+  color: #dbe6f2;
+  font-size: 14px;
+}
+
+.reception-current-details {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.reception-current-details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.reception-current-details span {
+  color: #9fb0c5;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.reception-current-details strong {
+  color: #fff;
+}
+
+.reception-complete-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #35a878;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+/* ==========================================================
+   QUEUE CARD
+========================================================== */
+
+.reception-queue-card {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dfe7ec;
+  border-radius: 14px;
+  box-shadow: 0 3px 12px rgba(15, 35, 60, 0.04);
+}
+
+.reception-queue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 22px 24px;
+  border-bottom: 1px solid #e6edf1;
+}
+
+.reception-queue-header h2 {
+  margin: 0;
+  color: #0d1b36;
+  font-size: 20px;
+}
+
+.reception-queue-header p {
+  margin: 5px 0 0;
+  color: #738198;
+  font-size: 13px;
+}
+
+.reception-search {
+  width: 320px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border: 1px solid #d8e1e7;
+  border-radius: 8px;
+  background: #fff;
+  color: #748197;
+}
+
+.reception-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: #172b4d;
+  font-size: 13px;
+}
+
+.reception-search input::placeholder {
+  color: #9aa6b7;
+}
+
+/* ==========================================================
+   ROOM SELECTOR
+========================================================== */
+
+.reception-room-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 24px;
+  background: #f8fafb;
+  border-bottom: 1px solid #e6edf1;
+}
+
+.reception-room-selector span {
+  margin-right: 5px;
+  color: #65748a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reception-room-selector button {
+  padding: 7px 13px;
+  border: 1px solid #d7e0e6;
+  border-radius: 7px;
+  background: #fff;
+  color: #52647d;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.reception-room-selector button.active {
+  background: #087f78;
+  border-color: #087f78;
+  color: #fff;
+}
+
+/* ==========================================================
+   TABLE
+========================================================== */
+
+.reception-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.reception-queue-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.reception-queue-table th {
+  padding: 13px 16px;
+  background: #f8fafb;
+  color: #718096;
+  border-bottom: 1px solid #e1e8ed;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.reception-queue-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #edf1f4;
+  color: #53647b;
+  font-size: 13px;
+}
+
+.reception-queue-table tbody tr:hover {
+  background: #fafcfd;
+}
+
+.reception-queue-table tbody tr.urgent-row {
+  background: #fff9f7;
+}
+
+/* ==========================================================
+   TOKEN
+========================================================== */
+
+.reception-token {
+  display: inline-flex;
+  min-width: 58px;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: #e1f4f1;
+  color: #087f78;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+/* ==========================================================
+   PATIENT
+========================================================== */
+
+.reception-patient {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reception-patient-avatar {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #e8edf5;
+  color: #31496d;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.reception-patient strong {
+  display: block;
+  color: #172b4d;
+  font-size: 13px;
+}
+
+.reception-patient span {
+  display: block;
+  margin-top: 2px;
+  color: #8793a5;
+  font-size: 11px;
+}
+
+/* ==========================================================
+   STATUS
+========================================================== */
+
+.reception-status-badge,
+.reception-priority-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.reception-status-badge {
+  padding: 6px 10px;
+}
+
+.reception-status-badge.waiting {
+  background: #fff3d9;
+  color: #996400;
+}
+
+.reception-status-badge.in-consultation {
+  background: #dff5f1;
+  color: #087f78;
+}
+
+.reception-status-badge.completed {
+  background: #e4f5e8;
+  color: #2c7844;
+}
+
+.reception-status-badge.cancelled {
+  background: #f5e8e8;
+  color: #9a4141;
+}
+
+.reception-priority-badge {
+  padding: 6px 10px;
+  border: 1px solid #dce4ea;
+  background: #fff;
+  color: #607087;
+  cursor: pointer;
+}
+
+.reception-priority-badge.urgent {
+  background: #fff0ed;
+  border-color: #f0b3a8;
+  color: #b44a3a;
+}
+
+/* ==========================================================
+   ACTIONS
+========================================================== */
+
+.reception-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reception-call-button,
+.reception-complete-small-button,
+.reception-cancel-button,
+.reception-view-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 31px;
+  padding: 0 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.reception-call-button {
+  background: #087f78;
+  border: 1px solid #087f78;
+  color: #fff;
+}
+
+.reception-complete-small-button {
+  background: #e5f6e9;
+  border: 1px solid #c6e9cf;
+  color: #287542;
+}
+
+.reception-cancel-button {
+  width: 31px;
+  padding: 0;
+  background: #fff;
+  border: 1px solid #e2d0d0;
+  color: #a34c4c;
+}
+
+.reception-view-button {
+  background: #fff;
+  border: 1px solid #d8e1e7;
+  color: #52647b;
+}
+
+/* ==========================================================
+   EMPTY STATE
+========================================================== */
+
+.reception-empty-cell {
+  height: 220px;
+  text-align: center;
+}
+
+.reception-empty-cell svg {
+  display: block;
+  margin: 0 auto 10px;
+  color: #9aa8b9;
+  font-size: 28px;
+}
+
+.reception-empty-cell strong {
+  display: block;
+  color: #4f6077;
+}
+
+.reception-empty-cell span {
+  display: block;
+  margin-top: 5px;
+  color: #8a97a8;
+  font-size: 12px;
+}
+
+/* ==========================================================
+   RESPONSIVE
+========================================================== */
+
+@media (max-width: 1100px) {
+  .reception-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .reception-dashboard-header {
+    flex-direction: column;
+  }
+
+  .reception-current-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .reception-current-details {
+    width: 100%;
+  }
+}
+
+@media (max-width: 700px) {
+  .reception-dashboard-page {
+    padding: 20px;
+  }
+
+  .reception-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reception-header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .reception-queue-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .reception-search {
+    width: 100%;
+  }
+
+  .reception-current-details {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

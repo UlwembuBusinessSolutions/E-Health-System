@@ -53,6 +53,8 @@ import PatientSearch from "../pages/tenant/clinical/PatientSearch";
 import PrescriptionBuilder from "../pages/tenant/clinical/PrescriptionBuilder";
 import Referrals from "../pages/tenant/clinical/Referrals";
 import VitalsCapture from "../pages/tenant/clinical/VitalsCapture";
+import ConsultationWorkspace from "../pages/tenant/clinical/ConsultationWorkspace";
+import ConsultationSummary from "../pages/tenant/clinical/ConsultationSummary";
 
 // ======================================================
 // TENANT - PHARMACY
@@ -245,6 +247,11 @@ export default function AppRoutes() {
             element={<WalkInVisit />}
           />
 
+          <Route
+            path="/pages/tenant/reception/queue-board"
+            element={<QueueBoard />}
+          />
+
 
           {/* ==================================================
               CLINICAL SERVICES
@@ -259,10 +266,25 @@ export default function AppRoutes() {
             path="clinical/services"
             element={<ClinicalServices />}
           />
-
+          {/*Consultation List */}
           <Route
             path="clinical/consultations"
             element={<Consultations />}
+          />
+          {/*New Consultation Workspace */}
+          <Route
+            path="clinical/consultation/workspace/:consultationId"
+            element={<ConsultationWorkspace />}
+          />
+          {/* Consultation Workspace using consultation ID*/}
+          <Route
+            path="clinical/consultations/:consultationId"
+            element={<ConsultationWorkspace />} 
+          />
+          {/* Consultation Summary */}
+          <Route
+            path="clinical/consultations/:consultationId/summary"
+            element={<ConsultationSummary />}
           />
 
           <Route

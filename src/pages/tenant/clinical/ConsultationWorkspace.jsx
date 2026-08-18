@@ -156,10 +156,18 @@ export default function ConsultationWorkspace() {
 
       status: "Completed",
 
-      startedAt: now,
+      startedAt: new Date().toISOString(),
 
-      completedAt: now,
+      completedAt: new Date().toISOString(),
     };
+    localStorage.setItem(
+      "ulwembu_completed_consultation",
+      JSON.stringify(consultation)
+    );
+    
+    navigate(
+        `/tenant/clinical/consultations/${newConsultationId}/summary`
+    );
 
     // ====================================================
     // SAVE CONSULTATION
@@ -200,49 +208,72 @@ export default function ConsultationWorkspace() {
           HEADER
       ================================================== */}
 
-      <div className="consultation-workspace-header">
+     <div className="consultation-workspace-header">
 
-        <div>
+  <div>
 
-          <button
-            type="button"
-            className="consultation-workspace-back"
-            onClick={() =>
-              navigate("/tenant/clinical/consultations")
-            }
-          >
-            <FiArrowLeft />
-            Back to Clinical Services
-          </button>
+    <button
+      type="button"
+      className="consultation-workspace-back"
+      onClick={() =>
+        navigate("/tenant/clinical/services")
+      }
+    >
+      <FiArrowLeft />
+      Back to Clinical Services
+    </button>
 
-          <div className="tenant-page-eyebrow">
-            CLINICAL SERVICES
-          </div>
+    <div className="tenant-page-eyebrow">
+      CLINICAL SERVICES
+    </div>
 
-          <h1>
-            Consultation Workspace
-          </h1>
+    <h1>
+      Consultation Workspace
+    </h1>
 
-          <p>
-            Conduct and document a complete patient
-            consultation.
-          </p>
+    <p>
+      Conduct and document a complete patient
+      consultation.
+    </p>
 
-        </div>
+  </div>
 
-        <div className="consultation-workspace-id">
+  <div className="consultation-workspace-id">
 
-          <span>
-            CONSULTATION
-          </span>
+    <span>
+      CONSULTATION
+    </span>
 
-          <strong>
-            {consultationId || "In Progress"}
-          </strong>
+    <strong>
+      {consultationId || "In Progress"}
+    </strong>
 
-        </div>
+  </div>
 
-      </div>
+</div>
+
+<div className="consultation-workspace-actions">
+
+  <button
+    type="button"
+    className="consultation-cancel-button"
+    onClick={() =>
+      navigate("/tenant/clinical/consultations")
+    }
+  >
+    Cancel
+  </button>
+
+  <button
+    type="button"
+    className="consultation-complete-button"
+    onClick={handleCompleteConsultation}
+  >
+    <FiCheck />
+    Complete Consultation
+  </button>
+
+</div>
 
       {/* ==================================================
           PATIENT SELECTION
