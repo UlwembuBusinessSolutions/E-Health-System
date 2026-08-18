@@ -15,13 +15,16 @@ import org.springframework.stereotype.Component;
 class StartupMigrations implements ApplicationRunner {
 
     private final TenantMigrationRunner migrationRunner;
+    private final ModuleEntitlementCache entitlementCache;
 
-    StartupMigrations(TenantMigrationRunner migrationRunner) {
+    StartupMigrations(TenantMigrationRunner migrationRunner, ModuleEntitlementCache entitlementCache) {
         this.migrationRunner = migrationRunner;
+        this.entitlementCache = entitlementCache;
     }
 
     @Override
     public void run(ApplicationArguments args) {
         migrationRunner.migrateControlSchema();
+        entitlementCache.refresh();
     }
 }

@@ -7,7 +7,7 @@ services:
       # Matches application.yml's own local-dev default exactly
       # (spring.datasource.password: ${DB_PASSWORD:ulwembu_dev_local}) — so
       # the api service below, with nothing else set, just connects.
-      POSTGRES_PASSWORD: ulwembu_dev_local
+      POSTGRES_PASSWORD: Linhle@12
     ports:
       - "5432:5432"
     volumes:

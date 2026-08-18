@@ -30,8 +30,14 @@ public class AuthService {
     private final SessionActivityStore activityStore;
     private final Clock clock;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService,
-                        AuditLogService auditLogService, SessionActivityStore activityStore, Clock clock) {
+    public AuthService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService,
+            AuditLogService auditLogService,
+            SessionActivityStore activityStore,
+            Clock clock
+    ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -46,47 +52,84 @@ public class AuthService {
     // signal the failure to the caller. Both are unchecked, and Spring's
     // default @Transactional behavior rolls back the whole transaction on
     // any unchecked exception — which would silently discard the very
-    // bookkeeping this method just did, every single time, since the
-    // exception that reports "login failed" is thrown from inside the same
-    // transaction that recorded why. Without this, failedLoginCount never
-    // advances past 0 and the lockout policy never engages.
-    @Transactional(noRollbackFor = {InvalidCredentialsException.class, AccountLockedException.class})
-    public JwtService.IssuedToken login(String email, String rawPassword, String ipAddress) {
+    // bookkeeping this method just did.
+    @Transactional(
+            noRollbackFor = {
+                    InvalidCredentialsException.class,
+                    AccountLockedException.class
+            }
+    )
+    public JwtService.IssuedToken login(
+            String email,
+            String rawPassword,
+            String ipAddress
+    ) {
         Instant now = clock.instant();
+
         Optional<User> maybeUser = userRepository.findByEmail(email);
+
         maybeUser.ifPresent(user -> autoUnlockIfExpired(user, now));
 
-        if (maybeUser.isPresent() && maybeUser.get().getStatus() == UserStatus.LOCKED) {
-            // Still within LOCKOUT_DURATION — reject before touching BCrypt
-            // at all. Running the password check here would let repeated
-            // retries during the window keep extending the lockout, since
-            // registerFailedAttempt below stamps a fresh lastFailedLoginAt
-            // on every call.
-            throw new AccountLockedException(remainingLockoutSeconds(maybeUser.get(), now));
+        if (maybeUser.isPresent()
+                && maybeUser.get().getStatus() == UserStatus.LOCKED) {
+
+            // Still within LOCKOUT_DURATION — reject before touching BCrypt.
+            throw new AccountLockedException(
+                    remainingLockoutSeconds(maybeUser.get(), now)
+            );
         }
 
-        String hashToCheck = maybeUser.map(User::getPasswordHash).orElse(DummyHash.VALUE);
-        boolean passwordMatches = passwordEncoder.matches(rawPassword, hashToCheck);
+        String hashToCheck = maybeUser
+                .map(User::getPasswordHash)
+                .orElse(DummyHash.VALUE);
 
-        if (maybeUser.isEmpty() || !passwordMatches || maybeUser.get().getStatus() != UserStatus.ACTIVE) {
-            // DISABLED is deliberately excluded from the counter: it's an
-            // admin action, not something failed attempts should ever be
-            // able to escalate past.
-            maybeUser.filter(user -> user.getStatus() != UserStatus.DISABLED)
+        boolean passwordMatches =
+                passwordEncoder.matches(rawPassword, hashToCheck);
+
+        if (maybeUser.isEmpty()
+                || !passwordMatches
+                || maybeUser.get().getStatus() != UserStatus.ACTIVE) {
+
+            // DISABLED is deliberately excluded from the counter.
+            maybeUser
+                    .filter(user -> user.getStatus() != UserStatus.DISABLED)
                     .ifPresent(user -> registerFailedAttempt(user, now));
+
             throw new InvalidCredentialsException();
         }
 
         User user = maybeUser.get();
+
         user.resetFailedAttempts();
         user.setLastLoginAt(now);
 
-        List<String> roles = userRepository.findRoleNames(user.getId());
-        JwtService.IssuedToken issued = jwtService.issue(
-                user.getId(), TenantContext.getCurrentTenant(), roles, user.getTokenVersion());
+        List<String> roles =
+                userRepository.findRoleNames(user.getId());
 
-        activityStore.recordActivity(issued.jti(), now);
-        auditLogService.append(user.getId(), null, "LOGIN", "User", user.getId().toString(), null, null, ipAddress);
+        JwtService.IssuedToken issued = jwtService.issue(
+                user.getId(),
+                TenantContext.getCurrentTenant(),
+                roles,
+                user.getTokenVersion()
+        );
+
+        activityStore.recordActivity(
+                issued.jti(),
+                now
+        );
+
+        // Audit successful login.
+        // The ipAddress comes from the login request.
+        auditLogService.append(
+                user.getId(),
+                null,
+                "LOGIN",
+                "User",
+                user.getId().toString(),
+                null,
+                null,
+                ipAddress
+        );
 
         return issued;
     }
@@ -96,39 +139,78 @@ public class AuthService {
     }
 
     @Transactional
-    public void unlock(UUID userId, String jti, String rawPassword) {
-        User user = userRepository.findById(userId).orElseThrow(InvalidCredentialsException::new);
-        if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
+    public void unlock(
+            UUID userId,
+            String jti,
+            String rawPassword
+    ) {
+        User user = userRepository
+                .findById(userId)
+                .orElseThrow(InvalidCredentialsException::new);
+
+        if (!passwordEncoder.matches(
+                rawPassword,
+                user.getPasswordHash()
+        )) {
             throw new InvalidCredentialsException();
         }
-        activityStore.recordActivity(jti, clock.instant());
+
+        activityStore.recordActivity(
+                jti,
+                clock.instant()
+        );
     }
 
-    private void autoUnlockIfExpired(User user, Instant now) {
+    private void autoUnlockIfExpired(
+            User user,
+            Instant now
+    ) {
         if (user.getStatus() == UserStatus.LOCKED
-                && Duration.between(user.getLockedAt(), now).compareTo(LOCKOUT_DURATION) >= 0) {
+                && Duration.between(
+                        user.getLockedAt(),
+                        now
+                ).compareTo(LOCKOUT_DURATION) >= 0) {
+
             user.unlock();
         }
     }
 
-    private long remainingLockoutSeconds(User user, Instant now) {
-        Duration elapsed = Duration.between(user.getLockedAt(), now);
-        return Math.max(0, LOCKOUT_DURATION.minus(elapsed).toSeconds());
+    private long remainingLockoutSeconds(
+            User user,
+            Instant now
+    ) {
+        Duration elapsed =
+                Duration.between(user.getLockedAt(), now);
+
+        return Math.max(
+                0,
+                LOCKOUT_DURATION
+                        .minus(elapsed)
+                        .toSeconds()
+        );
     }
 
     // Failures roll off after FAILURE_WINDOW rather than accumulating
     // forever — a failed attempt from three days ago shouldn't count
-    // toward locking the account today. Crossing MAX_FAILED_ATTEMPTS
-    // within the window locks for LOCKOUT_DURATION; a successful login
-    // above is the other path back to zero.
-    private void registerFailedAttempt(User user, Instant now) {
-        boolean withinWindow = user.getLastFailedLoginAt() != null
-                && Duration.between(user.getLastFailedLoginAt(), now).compareTo(FAILURE_WINDOW) <= 0;
+    // toward locking the account today.
+    private void registerFailedAttempt(
+            User user,
+            Instant now
+    ) {
+        boolean withinWindow =
+                user.getLastFailedLoginAt() != null
+                        && Duration.between(
+                                user.getLastFailedLoginAt(),
+                                now
+                        ).compareTo(FAILURE_WINDOW) <= 0;
+
         if (!withinWindow) {
             user.resetFailedAttempts();
         }
+
         user.incrementFailedAttempts();
         user.setLastFailedLoginAt(now);
+
         if (user.getFailedLoginCount() >= MAX_FAILED_ATTEMPTS) {
             user.lock(now);
         }

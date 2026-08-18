@@ -17,4 +17,16 @@ public class TenantFilterConfig {
         registration.addUrlPatterns("/*");
         return registration;
     }
+
+    @Bean
+    public FilterRegistrationBean<ModuleEntitlementFilter> moduleEntitlementFilterRegistration(
+            ModuleEntitlementCache entitlementCache) {
+        FilterRegistrationBean<ModuleEntitlementFilter> registration =
+                new FilterRegistrationBean<>(new ModuleEntitlementFilter(entitlementCache));
+        // TenantFilter establishes TenantContext first; entitlement checks must
+        // run immediately after it and before Spring Security's filter chain.
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
+        registration.addUrlPatterns("/*");
+        return registration;
+    }
 }

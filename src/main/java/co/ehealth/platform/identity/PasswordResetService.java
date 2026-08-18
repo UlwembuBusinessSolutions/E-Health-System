@@ -24,8 +24,13 @@ public class PasswordResetService {
     private final AuditLogService auditLogService;
     private final Clock clock;
 
-    public PasswordResetService(UserRepository userRepository, PasswordResetTokenRepository tokenRepository,
-                                 PasswordEncoder passwordEncoder, AuditLogService auditLogService, Clock clock) {
+    public PasswordResetService(
+            UserRepository userRepository,
+            PasswordResetTokenRepository tokenRepository,
+            PasswordEncoder passwordEncoder,
+            AuditLogService auditLogService,
+            Clock clock
+    ) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
         this.passwordEncoder = passwordEncoder;
@@ -36,59 +41,99 @@ public class PasswordResetService {
     @Transactional
     public void requestReset(String email, String requestIp) {
         Optional<User> maybeUser = userRepository.findByEmail(email);
-        // Always returns normally whether or not the email matched — same
-        // account-enumeration guard as login's identical 401.
+
+        // Always returns normally whether or not the email matched —
+        // same account-enumeration guard as login's identical 401.
         if (maybeUser.isEmpty()) {
             return;
         }
 
-        String code = String.format("%06d", RANDOM.nextInt(1_000_000));
-        // BCrypt on a 6-digit code is a deliberate choice, not an odd reuse
-        // of a password hasher: a 6-digit keyspace (1,000,000 values) is
-        // only brute-force resistant if guessing it is slow AND rate
-        // limited AND short-lived — this covers the "slow" leg without a
-        // second hashing library.
-        PasswordResetToken token = new PasswordResetToken(maybeUser.get().getId(),
-                passwordEncoder.encode(code), clock.instant().plus(CODE_TTL), requestIp);
-        tokenRepository.save(token);
+        String code = String.format(
+                "%06d",
+                RANDOM.nextInt(1_000_000)
+        );
 
-        // TODO: EmailService (core/notification) only knows how to send one
-        // thing today, sendAdminAccountCreatedEmail(). The reset code still
-        // needs its own method there (or an SMS channel, per the original
-        // spec) once this is wired up; it's never stored anywhere the
-        // client can read it back from either way.
+        // BCrypt on a 6-digit code is a deliberate choice.
+        // The code is short-lived and should also be rate limited.
+        PasswordResetToken token = new PasswordResetToken(
+                maybeUser.get().getId(),
+                passwordEncoder.encode(code),
+                clock.instant().plus(CODE_TTL),
+                requestIp
+        );
+
+        tokenRepository.save(token);
     }
 
-    // noRollbackFor is load-bearing — same reasoning as AuthService.login():
-    // the invalid-code branch below calls token.incrementAttempts() and
-    // then throws InvalidResetCodeException, and Spring's default
-    // @Transactional rollback-on-unchecked-exception would silently
-    // discard that increment on every wrong guess, making MAX_ATTEMPTS
-    // unenforceable — a code could be guessed an unlimited number of
-    // times instead of 5.
-    @Transactional(noRollbackFor = InvalidResetCodeException.class)
-    public void confirmReset(String email, String code, String newPassword, String requestIp) {
-        Optional<User> maybeUser = userRepository.findByEmail(email);
-        Optional<PasswordResetToken> maybeToken = maybeUser
-                .flatMap(u -> tokenRepository.findTopByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc(u.getId()))
-                .filter(t -> !t.isExpired(clock.instant()) && t.getAttemptCount() < MAX_ATTEMPTS);
+    @Transactional(
+            noRollbackFor = InvalidResetCodeException.class
+    )
+    public void confirmReset(
+            String email,
+            String code,
+            String newPassword,
+            String requestIp
+    ) {
+        Optional<User> maybeUser =
+                userRepository.findByEmail(email);
 
-        String hashToCheck = maybeToken.map(PasswordResetToken::getCodeHash).orElse(DummyHash.VALUE);
-        boolean codeMatches = passwordEncoder.matches(code, hashToCheck);
+        Optional<PasswordResetToken> maybeToken =
+                maybeUser
+                        .flatMap(user ->
+                                tokenRepository
+                                        .findTopByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc(
+                                                user.getId()
+                                        )
+                        )
+                        .filter(token ->
+                                !token.isExpired(clock.instant())
+                                        && token.getAttemptCount() < MAX_ATTEMPTS
+                        );
 
-        if (maybeUser.isEmpty() || maybeToken.isEmpty() || !codeMatches) {
-            maybeToken.ifPresent(PasswordResetToken::incrementAttempts);
+        String hashToCheck =
+                maybeToken
+                        .map(PasswordResetToken::getCodeHash)
+                        .orElse(DummyHash.VALUE);
+
+        boolean codeMatches =
+                passwordEncoder.matches(code, hashToCheck);
+
+        if (maybeUser.isEmpty()
+                || maybeToken.isEmpty()
+                || !codeMatches) {
+
+            maybeToken.ifPresent(
+                    PasswordResetToken::incrementAttempts
+            );
+
             throw new InvalidResetCodeException();
         }
 
         User user = maybeUser.get();
         PasswordResetToken token = maybeToken.get();
 
-        user.setPasswordHash(passwordEncoder.encode(newPassword)); // bumps tokenVersion — see User.java
-        token.markConsumed(clock.instant());
-        tokenRepository.invalidateOutstandingTokens(user.getId(), clock.instant());
+        user.setPasswordHash(
+                passwordEncoder.encode(newPassword)
+        );
 
-        auditLogService.append(user.getId(), null, "PASSWORD_RESET", "User", user.getId().toString(),
-                null, null, requestIp);
+        token.markConsumed(clock.instant());
+
+        tokenRepository.invalidateOutstandingTokens(
+                user.getId(),
+                clock.instant()
+        );
+
+        // Audit successful password reset.
+        // requestIp is passed to AuditLogService as the IP address.
+        auditLogService.append(
+                user.getId(),
+                null,
+                "PASSWORD_RESET",
+                "User",
+                user.getId().toString(),
+                null,
+                null,
+                requestIp
+        );
     }
 }

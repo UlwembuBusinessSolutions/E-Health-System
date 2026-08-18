@@ -13,7 +13,8 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/ulwembu}
     username: ${DB_USERNAME:ulwembu}
-    password: ${DB_PASSWORD:ulwembu_dev_local}
+    # Keep this local default aligned with docker-compose.yml.
+    password: ${DB_PASSWORD:YourPassword123}
     hikari:
       maximum-pool-size: 20
   jpa:

@@ -102,6 +102,20 @@
   <build>
     <finalName>platform</finalName>
     <plugins>
+      <!-- Mockito's Byte Buddy version is managed by Spring Boot 3.3 and
+           does not yet officially list Java 25 as supported. This enables
+           its forward-compatible class-file reader for the local JDK while
+           keeping the test command itself standard. Remove this setting when
+           the managed Byte Buddy version adds Java 25 support. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <net.bytebuddy.experimental>true</net.bytebuddy.experimental>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>

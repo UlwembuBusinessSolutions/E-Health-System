@@ -1,6 +1,7 @@
 package co.ehealth.platform.core.security;
 
 import co.ehealth.platform.core.common.FilterResponses;
+import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
@@ -23,10 +24,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final AuditLogService auditLogService;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository) {
+    public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository,
+                                   AuditLogService auditLogService) {
         this.jwtService = jwtService;
         this.userRepository = userRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Override
@@ -57,12 +61,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String tokenTenant = claims.get("tenant", String.class);
-        if (!tokenTenant.equals(TenantContext.getCurrentTenant())) {
+        String requestTenant = TenantContext.getCurrentTenant();
+        if (tokenTenant == null || !tokenTenant.equals(requestTenant)) {
             // A token minted for one client presented against another
-            // client's subdomain — reject even though the signature itself
-            // is valid, since every tenant currently shares one signing key.
-            FilterResponses.writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED,
-                    "Session expired. Please sign in again.");
+            // client's subdomain is an authorization violation, rather than
+            // an expired session. The actor cannot be referenced from the
+            // target tenant's audit_log (its FK points at that tenant's
+            // users table), so retain the immutable subject in entity_id.
+            auditLogService.append(
+                    null,
+                    null,
+                    "CROSS_TENANT_ACCESS_DENIED",
+                    "TenantAccess",
+                    claims.getSubject(),
+                    null,
+                    "{\"tokenTenant\":\"" + tokenTenant
+                            + "\",\"requestTenant\":\"" + requestTenant + "\"}",
+                    request.getRemoteAddr());
+            FilterResponses.writeJsonError(response, HttpServletResponse.SC_FORBIDDEN,
+                    "Access to another tenant is forbidden.");
             return;
         }
 
