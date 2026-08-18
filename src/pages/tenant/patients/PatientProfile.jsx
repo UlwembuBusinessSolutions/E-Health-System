@@ -3,14 +3,16 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   FaIdCard,
   FaPhone,
-  FaMapMarkerAlt,
   FaUserFriends,
   FaShieldAlt,
   FaArrowLeft,
   FaCalendarAlt,
+  FaUserCheck,
 } from "react-icons/fa";
 
 import { getPatientById } from "../../../services/patientService";
+import { addToQueue } from "../../../services/receptionService";
+
 import "../../../styles/tenant-patient-profile.css";
 
 function DetailCard({ title, icon, children }) {
@@ -57,6 +59,16 @@ export default function PatientProfile() {
     return `${patient?.firstName || ""} ${
       patient?.surname || ""
     }`.trim();
+  };
+
+  const handleCheckIn = () => {
+    if (!patient) {
+      return;
+    }
+
+    addToQueue(patient);
+
+    navigate("/tenant/patients/reception");
   };
 
   if (!patient) {
@@ -106,7 +118,9 @@ export default function PatientProfile() {
   return (
     <div className="patient-profile-page">
 
-      {/* BACK BUTTON */}
+      {/* ==================================================
+          BACK BUTTON
+      ================================================== */}
 
       <button
         type="button"
@@ -119,7 +133,9 @@ export default function PatientProfile() {
         Back to Patients
       </button>
 
-      {/* PATIENT HEADER */}
+      {/* ==================================================
+          PATIENT HEADER
+      ================================================== */}
 
       <section className="patient-profile-hero">
 
@@ -142,6 +158,7 @@ export default function PatientProfile() {
 
             <div className="patient-profile-mpi">
               MPI:
+
               <strong>
                 {patient.id}
               </strong>
@@ -150,6 +167,30 @@ export default function PatientProfile() {
           </div>
 
         </div>
+
+        {/* ==================================================
+            PATIENT ACTIONS
+        ================================================== */}
+
+        <div className="patient-profile-hero-actions">
+
+          <button
+            type="button"
+            className="patient-check-in-button"
+            onClick={() =>{
+              addToQueue(patient);
+              navigate("/tenant/reception",);
+            }}
+          >
+            <FaUserCheck />
+            Check In Patient
+          </button>
+
+        </div>
+
+        {/* ==================================================
+            STATUS
+        ================================================== */}
 
         <div className="patient-profile-status-panel">
 
@@ -177,11 +218,15 @@ export default function PatientProfile() {
 
       </section>
 
-      {/* MAIN INFORMATION */}
+      {/* ==================================================
+          MAIN INFORMATION
+      ================================================== */}
 
       <div className="patient-profile-grid">
 
-        {/* DEMOGRAPHICS */}
+        {/* ==================================================
+            DEMOGRAPHICS
+        ================================================== */}
 
         <DetailCard
           title="Demographics"
@@ -225,7 +270,9 @@ export default function PatientProfile() {
 
         </DetailCard>
 
-        {/* CONTACT */}
+        {/* ==================================================
+            CONTACT
+        ================================================== */}
 
         <DetailCard
           title="Contact Information"
@@ -264,7 +311,9 @@ export default function PatientProfile() {
 
         </DetailCard>
 
-        {/* MEDICAL AID */}
+        {/* ==================================================
+            MEDICAL AID
+        ================================================== */}
 
         <DetailCard
           title="Medical Aid Information"
@@ -288,7 +337,9 @@ export default function PatientProfile() {
 
         </DetailCard>
 
-        {/* EMERGENCY CONTACT */}
+        {/* ==================================================
+            EMERGENCY CONTACT
+        ================================================== */}
 
         <DetailCard
           title="Emergency Contact"
@@ -320,7 +371,9 @@ export default function PatientProfile() {
 
       </div>
 
-      {/* PATIENT TIMELINE */}
+      {/* ==================================================
+          PATIENT TIMELINE
+      ================================================== */}
 
       <section className="patient-profile-timeline">
 
@@ -331,12 +384,16 @@ export default function PatientProfile() {
           </div>
 
           <div>
-            <h2>Patient Timeline</h2>
+
+            <h2>
+              Patient Timeline
+            </h2>
 
             <p>
               Healthcare activity associated
               with this patient.
             </p>
+
           </div>
 
         </div>
@@ -344,28 +401,40 @@ export default function PatientProfile() {
         <div className="patient-profile-timeline-grid">
 
           <div className="patient-profile-timeline-item">
-            <strong>Appointments</strong>
+            <strong>
+              Appointments
+            </strong>
+
             <span>
               Patient appointments will appear here.
             </span>
           </div>
 
           <div className="patient-profile-timeline-item">
-            <strong>Clinical Visits</strong>
+            <strong>
+              Clinical Visits
+            </strong>
+
             <span>
               Clinical consultations will appear here.
             </span>
           </div>
 
           <div className="patient-profile-timeline-item">
-            <strong>Prescriptions</strong>
+            <strong>
+              Prescriptions
+            </strong>
+
             <span>
               Patient prescriptions will appear here.
             </span>
           </div>
 
           <div className="patient-profile-timeline-item">
-            <strong>Billing</strong>
+            <strong>
+              Billing
+            </strong>
+
             <span>
               Patient billing activity will appear here.
             </span>

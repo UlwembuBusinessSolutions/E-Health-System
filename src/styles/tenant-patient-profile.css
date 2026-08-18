@@ -1113,4 +1113,34 @@
   .patient-profile-timeline-grid {
     grid-template-columns: 1fr;
   }
+
+.patient-profile-hero-actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  margin-right: 24px;
+}
+
+.patient-check-in-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border: none;
+  border-radius: 8px;
+  background: #0f766e;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.patient-check-in-button:hover {
+  background: #115e59;
+}
+
+.patient-check-in-button svg {
+  font-size: 16px;
+}
 }

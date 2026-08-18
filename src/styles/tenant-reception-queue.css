@@ -1,0 +1,374 @@
+.reception-queue-page {
+  padding: 32px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.reception-queue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.reception-back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin-bottom: 18px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.reception-queue-header h1 {
+  margin: 6px 0;
+  font-size: 32px;
+}
+
+.reception-queue-header p {
+  margin: 0;
+  color: #64748b;
+}
+
+.reception-header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.reception-refresh-button,
+.reception-walkin-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.reception-refresh-button {
+  background: #fff;
+  border: 1px solid #dbe2ea;
+}
+
+.reception-walkin-button {
+  border: none;
+  background: #0f766e;
+  color: white;
+}
+
+.reception-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.reception-stat-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.reception-stat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ecfeff;
+  color: #0f766e;
+  font-size: 20px;
+}
+
+.reception-stat-icon.urgent {
+  background: #fff1f2;
+  color: #dc2626;
+}
+
+.reception-stat-card span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 5px;
+}
+
+.reception-stat-card strong {
+  font-size: 25px;
+}
+
+.reception-queue-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.reception-queue-card-header {
+  padding: 22px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.reception-queue-card-header h2 {
+  margin: 0 0 5px;
+}
+
+.reception-queue-card-header p {
+  margin: 0;
+  color: #64748b;
+}
+
+.reception-queue-card-header > strong {
+  background: #f1f5f9;
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+}
+
+.reception-filters {
+  padding: 18px 24px;
+  display: flex;
+  gap: 14px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.reception-search {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.reception-search svg {
+  position: absolute;
+  left: 13px;
+  color: #94a3b8;
+}
+
+.reception-search input {
+  width: 100%;
+  padding: 11px 12px 11px 40px;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  outline: none;
+}
+
+.reception-filters select {
+  min-width: 180px;
+  padding: 11px 12px;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  background: white;
+}
+
+.reception-table-wrapper {
+  overflow-x: auto;
+}
+
+.reception-queue-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.reception-queue-table th {
+  text-align: left;
+  padding: 14px 18px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.reception-queue-table td {
+  padding: 16px 18px;
+  border-top: 1px solid #eef2f7;
+  vertical-align: middle;
+}
+
+.queue-number {
+  font-weight: 700;
+  color: #64748b;
+}
+
+.reception-patient {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.reception-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #e0f2fe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0369a1;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.reception-patient strong,
+.reception-patient span {
+  display: block;
+}
+
+.reception-patient span {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.wait-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.priority-select {
+  border: none;
+  padding: 6px 9px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.priority-select.normal {
+  background: #f1f5f9;
+}
+
+.priority-select.urgent {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.queue-status {
+  display: inline-flex;
+  padding: 6px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.queue-status.waiting {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.queue-status.in-consultation {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.queue-status.completed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.reception-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.reception-actions button {
+  border: none;
+  border-radius: 7px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.view-patient-button {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.start-consultation-button {
+  background: #0f766e;
+  color: white;
+}
+
+.complete-queue-button {
+  background: #16a34a;
+  color: white;
+}
+
+.reception-empty-state {
+  text-align: center;
+  padding: 70px 20px;
+  color: #64748b;
+}
+
+.reception-empty-state svg {
+  margin-bottom: 12px;
+}
+
+.reception-empty-state h3 {
+  margin: 0 0 8px;
+  color: #1e293b;
+}
+
+.reception-empty-state p {
+  margin: 0 0 20px;
+}
+
+.reception-empty-state button {
+  border: none;
+  background: #0f766e;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+@media (max-width: 1000px) {
+  .reception-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .reception-queue-header {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 650px) {
+  .reception-queue-page {
+    padding: 20px;
+  }
+
+  .reception-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reception-filters {
+    flex-direction: column;
+  }
+
+  .reception-header-actions {
+    width: 100%;
+  }
+
+  .reception-header-actions button {
+    flex: 1;
+  }
+}

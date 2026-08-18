@@ -8,6 +8,8 @@ import {
   FiMapPin,
   FiHeart,
   FiShield,
+  FiActivity,
+  FiFileText,
 } from "react-icons/fi";
 
 import { createPatient } from "../../../services/patientService";
@@ -23,29 +25,40 @@ export default function PatientRegistration() {
     idNumber: "",
     dateOfBirth: "",
     gender: "",
+
     phone: "",
     email: "",
     address: "",
     city: "",
     province: "",
     postalCode: "",
+
     medicalAid: "",
     medicalAidNumber: "",
     medicalAidPlan: "",
+
     emergencyContactName: "",
     emergencyContactPhone: "",
     emergencyContactRelationship: "",
+
+    allergies: "",
+    chronicConditions: "",
+    currentMedication: "",
+    medicalHistory: "",
+
+    privacyConsent: false,
+    treatmentConsent: false,
   });
 
   const [errors, setErrors] = useState({});
   const [success, setSuccess] = useState(false);
 
   const handleChange = (event) => {
-    const { name, value } = event.target;
+    const { name, value, type, checked } = event.target;
 
     setForm((previous) => ({
       ...previous,
-      [name]: value,
+      [name]: type === "checkbox" ? checked : value,
     }));
 
     setErrors((previous) => ({
@@ -70,8 +83,7 @@ export default function PatientRegistration() {
     }
 
     if (!form.dateOfBirth) {
-      newErrors.dateOfBirth =
-        "Date of birth is required";
+      newErrors.dateOfBirth = "Date of birth is required";
     }
 
     if (!form.gender) {
@@ -80,6 +92,16 @@ export default function PatientRegistration() {
 
     if (!form.phone.trim()) {
       newErrors.phone = "Phone number is required";
+    }
+
+    if (!form.privacyConsent) {
+      newErrors.privacyConsent =
+        "Privacy consent is required";
+    }
+
+    if (!form.treatmentConsent) {
+      newErrors.treatmentConsent =
+        "Treatment consent is required";
     }
 
     setErrors(newErrors);
@@ -111,16 +133,16 @@ export default function PatientRegistration() {
   return (
     <div className="patient-registration-page">
 
-      {/* HEADER */}
+      {/* ==================================================
+          HEADER
+      ================================================== */}
 
       <div className="patient-registration-header">
 
         <button
           type="button"
           className="patient-back-button"
-          onClick={() =>
-            navigate("/tenant/patients")
-          }
+          onClick={() => navigate("/tenant/patients")}
         >
           <FiArrowLeft />
           Back to Patients
@@ -134,15 +156,16 @@ export default function PatientRegistration() {
           <h1>Register Patient</h1>
 
           <p>
-            Create a new patient record and
-            generate a unique medical patient
-            identifier.
+            Create a new patient record and generate
+            a unique medical patient identifier.
           </p>
         </div>
 
       </div>
 
-      {/* SUCCESS */}
+      {/* ==================================================
+          SUCCESS
+      ================================================== */}
 
       {success && (
         <div className="patient-success-message">
@@ -165,7 +188,9 @@ export default function PatientRegistration() {
         onSubmit={handleSubmit}
       >
 
-        {/* PERSONAL INFORMATION */}
+        {/* ==================================================
+            PERSONAL INFORMATION
+        ================================================== */}
 
         <section className="patient-form-card">
 
@@ -179,8 +204,8 @@ export default function PatientRegistration() {
               <h2>Personal Information</h2>
 
               <p>
-                Basic demographic information
-                for the patient.
+                Basic demographic information for
+                the patient.
               </p>
             </div>
 
@@ -200,16 +225,12 @@ export default function PatientRegistration() {
                 name="firstName"
                 value={form.firstName}
                 onChange={handleChange}
-                className={inputClass(
-                  "firstName"
-                )}
+                className={inputClass("firstName")}
                 placeholder="Enter first name"
               />
 
               {errors.firstName && (
-                <small>
-                  {errors.firstName}
-                </small>
+                <small>{errors.firstName}</small>
               )}
 
             </div>
@@ -226,16 +247,12 @@ export default function PatientRegistration() {
                 name="surname"
                 value={form.surname}
                 onChange={handleChange}
-                className={inputClass(
-                  "surname"
-                )}
+                className={inputClass("surname")}
                 placeholder="Enter surname"
               />
 
               {errors.surname && (
-                <small>
-                  {errors.surname}
-                </small>
+                <small>{errors.surname}</small>
               )}
 
             </div>
@@ -269,17 +286,13 @@ export default function PatientRegistration() {
                 name="idNumber"
                 value={form.idNumber}
                 onChange={handleChange}
-                className={inputClass(
-                  "idNumber"
-                )}
+                className={inputClass("idNumber")}
                 placeholder="13 digit ID number"
                 maxLength={13}
               />
 
               {errors.idNumber && (
-                <small>
-                  {errors.idNumber}
-                </small>
+                <small>{errors.idNumber}</small>
               )}
 
             </div>
@@ -296,15 +309,11 @@ export default function PatientRegistration() {
                 name="dateOfBirth"
                 value={form.dateOfBirth}
                 onChange={handleChange}
-                className={inputClass(
-                  "dateOfBirth"
-                )}
+                className={inputClass("dateOfBirth")}
               />
 
               {errors.dateOfBirth && (
-                <small>
-                  {errors.dateOfBirth}
-                </small>
+                <small>{errors.dateOfBirth}</small>
               )}
 
             </div>
@@ -320,9 +329,7 @@ export default function PatientRegistration() {
                 name="gender"
                 value={form.gender}
                 onChange={handleChange}
-                className={inputClass(
-                  "gender"
-                )}
+                className={inputClass("gender")}
               >
                 <option value="">
                   Select gender
@@ -346,9 +353,7 @@ export default function PatientRegistration() {
               </select>
 
               {errors.gender && (
-                <small>
-                  {errors.gender}
-                </small>
+                <small>{errors.gender}</small>
               )}
 
             </div>
@@ -357,7 +362,9 @@ export default function PatientRegistration() {
 
         </section>
 
-        {/* CONTACT INFORMATION */}
+        {/* ==================================================
+            CONTACT INFORMATION
+        ================================================== */}
 
         <section className="patient-form-card">
 
@@ -392,16 +399,12 @@ export default function PatientRegistration() {
                 name="phone"
                 value={form.phone}
                 onChange={handleChange}
-                className={inputClass(
-                  "phone"
-                )}
+                className={inputClass("phone")}
                 placeholder="e.g. 082 123 4567"
               />
 
               {errors.phone && (
-                <small>
-                  {errors.phone}
-                </small>
+                <small>{errors.phone}</small>
               )}
 
             </div>
@@ -537,7 +540,9 @@ export default function PatientRegistration() {
 
         </section>
 
-        {/* MEDICAL AID */}
+        {/* ==================================================
+            MEDICAL AID
+        ================================================== */}
 
         <section className="patient-form-card">
 
@@ -551,8 +556,7 @@ export default function PatientRegistration() {
               <h2>Medical Aid</h2>
 
               <p>
-                Medical aid and insurance
-                information.
+                Medical aid and insurance information.
               </p>
             </div>
 
@@ -615,7 +619,9 @@ export default function PatientRegistration() {
 
         </section>
 
-        {/* EMERGENCY CONTACT */}
+        {/* ==================================================
+            EMERGENCY CONTACT
+        ================================================== */}
 
         <section className="patient-form-card">
 
@@ -629,8 +635,8 @@ export default function PatientRegistration() {
               <h2>Emergency Contact</h2>
 
               <p>
-                Person to contact in case of
-                an emergency.
+                Person to contact in case of an
+                emergency.
               </p>
             </div>
 
@@ -647,9 +653,7 @@ export default function PatientRegistration() {
               <input
                 type="text"
                 name="emergencyContactName"
-                value={
-                  form.emergencyContactName
-                }
+                value={form.emergencyContactName}
                 onChange={handleChange}
                 className="patient-form-input"
                 placeholder="Emergency contact"
@@ -666,9 +670,7 @@ export default function PatientRegistration() {
               <input
                 type="tel"
                 name="emergencyContactPhone"
-                value={
-                  form.emergencyContactPhone
-                }
+                value={form.emergencyContactPhone}
                 onChange={handleChange}
                 className="patient-form-input"
                 placeholder="Contact number"
@@ -684,9 +686,7 @@ export default function PatientRegistration() {
 
               <select
                 name="emergencyContactRelationship"
-                value={
-                  form.emergencyContactRelationship
-                }
+                value={form.emergencyContactRelationship}
                 onChange={handleChange}
                 className="patient-form-input"
               >
@@ -729,16 +729,205 @@ export default function PatientRegistration() {
 
         </section>
 
-        {/* FORM ACTIONS */}
+        {/* ==================================================
+            CLINICAL INFORMATION
+        ================================================== */}
+
+        <section className="patient-form-card">
+
+          <div className="patient-form-card-header">
+
+            <div className="patient-form-section-icon">
+              <FiActivity />
+            </div>
+
+            <div>
+              <h2>Clinical Information</h2>
+
+              <p>
+                Important clinical information that
+                should be available to healthcare
+                professionals.
+              </p>
+            </div>
+
+          </div>
+
+          <div className="patient-form-grid">
+
+            {/* ALLERGIES */}
+
+            <div className="patient-form-field full">
+
+              <label>
+                Known Allergies
+              </label>
+
+              <textarea
+                name="allergies"
+                value={form.allergies}
+                onChange={handleChange}
+                className="patient-form-input"
+                placeholder="List any known medication, food or other allergies. Enter 'None known' if applicable."
+                rows="4"
+              />
+
+            </div>
+
+            {/* CHRONIC CONDITIONS */}
+
+            <div className="patient-form-field full">
+
+              <label>
+                Chronic Conditions
+              </label>
+
+              <textarea
+                name="chronicConditions"
+                value={form.chronicConditions}
+                onChange={handleChange}
+                className="patient-form-input"
+                placeholder="e.g. Diabetes, hypertension, asthma, epilepsy..."
+                rows="4"
+              />
+
+            </div>
+
+            {/* CURRENT MEDICATION */}
+
+            <div className="patient-form-field full">
+
+              <label>
+                Current Medication
+              </label>
+
+              <textarea
+                name="currentMedication"
+                value={form.currentMedication}
+                onChange={handleChange}
+                className="patient-form-input"
+                placeholder="List current medication, dosage and frequency where known."
+                rows="4"
+              />
+
+            </div>
+
+            {/* MEDICAL HISTORY */}
+
+            <div className="patient-form-field full">
+
+              <label>
+                Previous Medical History
+              </label>
+
+              <textarea
+                name="medicalHistory"
+                value={form.medicalHistory}
+                onChange={handleChange}
+                className="patient-form-input"
+                placeholder="Record relevant previous illnesses, surgeries, hospitalisations or other medical history."
+                rows="5"
+              />
+
+            </div>
+
+          </div>
+
+        </section>
+
+        {/* ==================================================
+            CONSENT
+        ================================================== */}
+
+        <section className="patient-form-card">
+
+          <div className="patient-form-card-header">
+
+            <div className="patient-form-section-icon">
+              <FiFileText />
+            </div>
+
+            <div>
+              <h2>Consent & Privacy</h2>
+
+              <p>
+                Confirm the patient's consent before
+                completing registration.
+              </p>
+            </div>
+
+          </div>
+
+          <div className="patient-consent-section">
+
+            {/* PRIVACY CONSENT */}
+
+            <label className="patient-consent-item">
+
+              <input
+                type="checkbox"
+                name="privacyConsent"
+                checked={form.privacyConsent}
+                onChange={handleChange}
+              />
+
+              <span>
+                I confirm that the patient has been
+                informed about the collection and use
+                of their personal and healthcare
+                information in accordance with the
+                organisation's privacy requirements.
+                <strong> *</strong>
+              </span>
+
+            </label>
+
+            {errors.privacyConsent && (
+              <small className="patient-consent-error">
+                {errors.privacyConsent}
+              </small>
+            )}
+
+            {/* TREATMENT CONSENT */}
+
+            <label className="patient-consent-item">
+
+              <input
+                type="checkbox"
+                name="treatmentConsent"
+                checked={form.treatmentConsent}
+                onChange={handleChange}
+              />
+
+              <span>
+                I confirm that the patient has provided
+                the required consent to receive healthcare
+                services from this organisation.
+                <strong> *</strong>
+              </span>
+
+            </label>
+
+            {errors.treatmentConsent && (
+              <small className="patient-consent-error">
+                {errors.treatmentConsent}
+              </small>
+            )}
+
+          </div>
+
+        </section>
+
+        {/* ==================================================
+            FORM ACTIONS
+        ================================================== */}
 
         <div className="patient-form-actions">
 
           <button
             type="button"
             className="patient-cancel-button"
-            onClick={() =>
-              navigate("/tenant/patients")
-            }
+            onClick={() => navigate("/tenant/patients")}
           >
             Cancel
           </button>
