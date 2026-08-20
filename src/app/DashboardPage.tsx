@@ -11,7 +11,8 @@ import { StatCard } from "@/shared/components/StatCard";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { PageHeader } from "@/shared/components/PageHeader";
 
-function sectorLabel(sector: string): string {
+function sectorLabel(sector: string | null | undefined): string | undefined {
+  if (!sector) return undefined;
   return sector.charAt(0) + sector.slice(1).toLowerCase();
 }
 
@@ -86,7 +87,7 @@ export function DashboardPage() {
           label="Status"
           value={org ? (org.status === "ACTIVE" ? "Active" : "Suspended") : "—"}
           icon={ShieldCheck}
-          hint={org ? sectorLabel(org.sector) + " sector" : undefined}
+          hint={org && sectorLabel(org.sector) ? sectorLabel(org.sector) + " sector" : undefined}
         />
       </div>
 
@@ -159,7 +160,7 @@ export function DashboardPage() {
           <div className="mt-5 grid grid-cols-2 gap-4 border-t border-border-subtle pt-5">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">Sector</p>
-              <p className="mt-1 text-[13.5px] text-text-primary">{org ? sectorLabel(org.sector) : "—"}</p>
+              <p className="mt-1 text-[13.5px] text-text-primary">{sectorLabel(org?.sector) ?? "—"}</p>
             </div>
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">Your role</p>
