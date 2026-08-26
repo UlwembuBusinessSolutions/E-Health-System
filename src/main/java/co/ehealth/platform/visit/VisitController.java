@@ -1,6 +1,7 @@
 package co.ehealth.platform.visit;
 
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
+import co.ehealth.platform.visit.VisitController.VisitResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
@@ -15,9 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 import java.util.UUID;
 
-// No @RequestMapping("/api/v1/admin/...") — starting a patient's visit is
-// front-line reception/clinical work, same reasoning as PatientController's
-// own why-note. Falls through to .anyRequest().authenticated().
 @RestController
 public class VisitController {
 
@@ -27,13 +25,10 @@ public class VisitController {
         this.visitService = visitService;
     }
 
-    // PREG-US-019 + RECQ-US-001 — creates the visit and, in the same
-    // transaction, issues its queue token (VisitService.createVisit()'s
-    // own why-note). The response carries both so the reception UI can
-    // show the token number immediately, without a second round trip.
     @PostMapping("/api/v1/visits")
-    public ResponseEntity<VisitWithTokenResponse> create(@Valid @RequestBody CreateVisitRequest request,
-                                                           @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+    public ResponseEntity<VisitWithTokenResponse> create(
+            @Valid @RequestBody CreateVisitRequest request,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         var command = new VisitService.CreateVisitCommand(request.patientId(), request.facilityId(),
                 request.visitType(), request.serviceStream());
         VisitService.VisitWithToken result = visitService.createVisit(command, staff.userId());
@@ -45,15 +40,29 @@ public class VisitController {
         return ResponseEntity.ok(VisitResponse.from(visitService.get(id)));
     }
 
-    public record CreateVisitRequest(@NotNull UUID patientId, @NotNull UUID facilityId,
-                                      @NotNull VisitType visitType, @NotNull ServiceStream serviceStream) {
+    public record CreateVisitRequest(
+            @NotNull UUID patientId,
+            @NotNull UUID facilityId,
+            @NotNull VisitType visitType,
+            @NotNull ServiceStream serviceStream) {
     }
 
+    // public record VisitResponse(UUID id, UUID patientId, UUID facilityId,
+    // VisitType visitType, ServiceStream serviceStream, Instant visitDateTime)
+    // {
+    // static VisitResponse from(Visit v)
+    // {
+    // return new VisitResponse(v.getId(), v.getPatientId(),
+    // v.getFacilityId(), v.getVisitType(), v.getServiceStream(),
+    // v.getVisitDateTime());
+    // }
+    // }
+
     public record VisitResponse(UUID id, UUID patientId, UUID facilityId, VisitType visitType,
-                                 ServiceStream serviceStream, Instant visitDateTime) {
+            ServiceStream serviceStream, Instant visitDateTime, UUID createdByUserId) {
         static VisitResponse from(Visit v) {
             return new VisitResponse(v.getId(), v.getPatientId(), v.getFacilityId(), v.getVisitType(),
-                    v.getServiceStream(), v.getVisitDateTime());
+                    v.getServiceStream(), v.getVisitDateTime(), v.getCreatedByUserId());
         }
     }
 

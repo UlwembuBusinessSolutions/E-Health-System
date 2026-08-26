@@ -1,6 +1,7 @@
 package co.ehealth.platform.visit;
 
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
+import co.ehealth.platform.visit.QueueController.QueueEntryResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
@@ -33,15 +34,15 @@ public class QueueController {
 
     @GetMapping("/api/v1/queue")
     public ResponseEntity<Map<String, Object>> list(@RequestParam UUID facilityId) {
-        List<QueueEntryResponse> items =
-                queueService.listActiveQueueView(facilityId).stream().map(QueueEntryResponse::from).toList();
+        List<QueueEntryResponse> items = queueService.listActiveQueueView(facilityId).stream()
+                .map(QueueEntryResponse::from).toList();
         return ResponseEntity.ok(Map.of("items", items));
     }
 
     // RECQ-US-002 — manual issuance against an existing visit.
     @PostMapping("/api/v1/queue/tokens")
     public ResponseEntity<QueueTokenResponse> issueManual(@Valid @RequestBody IssueManualTokenRequest request,
-                                                            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         QueueToken token = queueService.issueManualToken(request.visitId(), request.priority(), staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(QueueTokenResponse.from(token));
     }
@@ -51,7 +52,7 @@ public class QueueController {
     // pick which one.
     @PostMapping("/api/v1/queue/call-next")
     public ResponseEntity<QueueEntryResponse> callNext(@RequestParam UUID facilityId,
-                                                         @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         QueueService.QueueEntryView called = queueService.callNext(facilityId, staff.userId());
         return ResponseEntity.ok(QueueEntryResponse.from(called));
     }
@@ -59,10 +60,20 @@ public class QueueController {
     public record IssueManualTokenRequest(@NotNull UUID visitId, @NotNull TokenPriority priority) {
     }
 
-    public record QueueEntryResponse(QueueTokenResponse token, String patientName, String patientMpi) {
+    // public record QueueEntryResponse(QueueTokenResponse token, String
+    // patientName, String patientMpi) {
+    // static QueueEntryResponse from(QueueService.QueueEntryView view) {
+    // return new QueueEntryResponse(QueueTokenResponse.from(view.token()),
+    // view.patientName(),
+    // view.patientMpi());
+    // }
+    // }
+
+    public record QueueEntryResponse(QueueTokenResponse token, String patientName, String patientMpi,
+            ServiceStream serviceStream) {
         static QueueEntryResponse from(QueueService.QueueEntryView view) {
             return new QueueEntryResponse(QueueTokenResponse.from(view.token()), view.patientName(),
-                    view.patientMpi());
+                    view.patientMpi(), view.serviceStream());
         }
     }
 }

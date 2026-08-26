@@ -6,13 +6,6 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.Year;
 
-// PREG-US-003's "SA ID check-digit validation" + "DOB/gender auto-derived" —
-// the registration form only ever collects the 13-digit number itself;
-// everything here is what turns that single field into the three others
-// PatientService.register() actually stores. Format: YYMMDD SSSS C A Z —
-// birthdate, gender sequence, citizenship, (unused race digit, historical),
-// Luhn check digit. A parse() call either returns all three derived values
-// together or throws — there's no partially-valid ID number.
 public record SouthAfricanIdNumber(LocalDate dateOfBirth, Gender gender, CitizenshipStatus citizenshipStatus) {
 
     public static SouthAfricanIdNumber parse(String idNumber) {
@@ -27,7 +20,8 @@ public record SouthAfricanIdNumber(LocalDate dateOfBirth, Gender gender, Citizen
         LocalDate dateOfBirth = deriveDateOfBirth(idNumber);
         int genderSequence = Integer.parseInt(idNumber.substring(6, 10));
         Gender gender = genderSequence < 5000 ? Gender.FEMALE : Gender.MALE;
-        CitizenshipStatus citizenship = digits[10] == 0 ? CitizenshipStatus.SA_CITIZEN : CitizenshipStatus.PERMANENT_RESIDENT;
+        CitizenshipStatus citizenship = digits[10] == 0 ? CitizenshipStatus.SA_CITIZEN
+                : CitizenshipStatus.PERMANENT_RESIDENT;
 
         return new SouthAfricanIdNumber(dateOfBirth, gender, citizenship);
     }
