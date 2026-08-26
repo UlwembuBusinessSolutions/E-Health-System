@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpCircle, PhoneCall, Ticket } from "lucide-react";
 import { callNext, issueManualToken, listQueue, type QueueEntry } from "@/shared/api/queue";
 import { getFacilities } from "@/shared/api/facilities";
 import { ApiError } from "@/shared/api/client";
+import type { ServiceStream } from "@/shared/api/visits";
+import { SERVICE_STREAM_LABELS, SERVICE_STREAM_OPTIONS } from "@/shared/serviceStreamLabels";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
 import { PageHeader } from "@/shared/components/PageHeader";
@@ -18,9 +20,19 @@ function formatTime(iso: string): string {
 // in for "which queue"), same reasoning QueueController's own why-note
 // gives for why facilityId is always explicit rather than assumed from the
 // caller's own profile.
+//
+// The service-stream filter/column is PREG-F04/BR-CSAC-080's own
+// contribution — "allocated to the corresponding service stream and
+// appear in the relevant queue" needed a way to actually SEE that
+// allocation, not just have it silently true in the database. Filtered
+// client-side rather than a new backend query param: a single facility's
+// active queue is realistically a handful of people, the same scale
+// reasoning QueueTokenRepository.findActiveQueue()'s own why-note already
+// applies.
 export function QueuePage() {
   const queryClient = useQueryClient();
   const [facilityId, setFacilityId] = useState("");
+  const [streamFilter, setStreamFilter] = useState<ServiceStream | "">("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [justCalled, setJustCalled] = useState<QueueEntry | null>(null);
 
@@ -62,6 +74,10 @@ export function QueuePage() {
 
   const facilities = facilitiesQuery.data ?? [];
   const queue = queueQuery.data ?? [];
+  const filteredQueue = useMemo(
+    () => (streamFilter ? queue.filter((entry) => entry.serviceStream === streamFilter) : queue),
+    [queue, streamFilter],
+  );
 
   return (
     <div>
@@ -69,21 +85,37 @@ export function QueuePage() {
         title="Queue"
         description="Reception's live token queue — issued when a visit starts."
         action={
-          facilities.length > 1 && (
+          <div className="flex items-center gap-2">
+            {facilities.length > 1 && (
+              <div className="relative">
+                <select
+                  value={facilityId}
+                  onChange={(e) => setFacilityId(e.target.value)}
+                  className="h-11 appearance-none rounded-lg border border-border-strong bg-surface-raised pl-3.5 pr-10 text-[14px] text-text-primary outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                >
+                  {facilities.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="relative">
               <select
-                value={facilityId}
-                onChange={(e) => setFacilityId(e.target.value)}
+                value={streamFilter}
+                onChange={(e) => setStreamFilter(e.target.value as ServiceStream | "")}
                 className="h-11 appearance-none rounded-lg border border-border-strong bg-surface-raised pl-3.5 pr-10 text-[14px] text-text-primary outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
               >
-                {facilities.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
+                <option value="">All service streams</option>
+                {SERVICE_STREAM_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
                   </option>
                 ))}
               </select>
             </div>
-          )
+          </div>
         }
       />
 
@@ -96,7 +128,9 @@ export function QueuePage() {
                 <p className="mt-1 font-mono text-[22px] font-semibold text-text-primary">
                   #{justCalled.token.tokenNumber}
                 </p>
-                <p className="text-[13.5px] text-text-secondary">{justCalled.patientName}</p>
+                <p className="text-[13.5px] text-text-secondary">
+                  {justCalled.patientName} · {SERVICE_STREAM_LABELS[justCalled.serviceStream]}
+                </p>
               </>
             ) : (
               <p className="mt-1 text-[14px] text-text-secondary">No one called yet.</p>
@@ -124,10 +158,12 @@ export function QueuePage() {
           <p className="px-5 py-10 text-center text-[14px] text-text-secondary">Loading facilities…</p>
         ) : queueQuery.isLoading ? (
           <p className="px-5 py-10 text-center text-[14px] text-text-secondary">Loading queue…</p>
-        ) : queue.length === 0 ? (
+        ) : filteredQueue.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
             <Ticket className="size-6 text-text-secondary" aria-hidden />
-            <p className="text-[14px] text-text-secondary">No one is waiting right now.</p>
+            <p className="text-[14px] text-text-secondary">
+              {streamFilter ? "No one waiting in this service stream." : "No one is waiting right now."}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -141,6 +177,9 @@ export function QueuePage() {
                     Patient
                   </th>
                   <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
+                    Service stream
+                  </th>
+                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
                     Priority
                   </th>
                   <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
@@ -152,7 +191,7 @@ export function QueuePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
-                {queue.map((entry) => (
+                {filteredQueue.map((entry) => (
                   <tr key={entry.token.id} className="transition-colors duration-150 hover:bg-surface-sunken">
                     <td className="px-5 py-3.5 font-mono text-[15px] font-semibold text-text-primary tabular-nums">
                       #{entry.token.tokenNumber}
@@ -160,6 +199,11 @@ export function QueuePage() {
                     <td className="px-5 py-3.5">
                       <p className="text-[13.5px] font-medium text-text-primary">{entry.patientName}</p>
                       <p className="font-mono text-[12px] text-text-secondary">{entry.patientMpi}</p>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className="inline-flex rounded-full bg-brand-50 px-2.5 py-1 text-[12px] font-medium text-brand-700">
+                        {SERVICE_STREAM_LABELS[entry.serviceStream]}
+                      </span>
                     </td>
                     <td className="px-5 py-3.5">
                       <StatusPill tone={entry.token.priority === "PRIORITY" ? "warning" : "neutral"}>

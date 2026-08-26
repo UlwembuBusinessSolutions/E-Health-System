@@ -17,6 +17,7 @@ export interface Visit {
   visitType: VisitType;
   serviceStream: ServiceStream;
   visitDateTime: string;
+  createdByUserId: string;
 }
 
 export interface CreateVisitPayload {
@@ -26,14 +27,12 @@ export interface CreateVisitPayload {
   serviceStream: ServiceStream;
 }
 
-// Creates the visit and, in the same call, issues its queue token —
-// VisitService.createVisit()'s own why-note on why this is one atomic
-// hand-off rather than two separate requests.
 export interface VisitWithToken {
   visit: Visit;
   token: QueueToken;
 }
 
-export async function createVisit(payload: CreateVisitPayload): Promise<VisitWithToken> {
+export async function createVisit(payload: CreateVisitPayload): Promise<VisitWithToken> 
+{
   return apiClient.post<VisitWithToken>("/api/v1/visits", payload, { headers: tenantAuthHeaders() });
 }
