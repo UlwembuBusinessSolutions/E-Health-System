@@ -79,25 +79,6 @@ public class StaffService {
         return admin;
     }
 
-    // Dev/test-seeding only — overwrites an already-created user's password
-    // with a known, fixed value instead of the random one createOrgAdmin()
-    // generates by default. Real user-facing password changes go through
-    // AuthService (login-driven) or PasswordResetService, never this — it
-    // exists purely so DevSeedDataRunner's demo org admin has a
-    // predictable, documented credential instead of one buried in a
-    // captured email file that differs on every fresh database. Deliberately
-    // not folded into createOrgAdmin() itself: that method creates a new
-    // user and enforces uniqueness on email/employeeNumber/contactNumber,
-    // none of which apply to overwriting a password on a user that already
-    // exists.
-    @Transactional
-    public void setKnownPasswordForSeeding(UUID userId, String rawPassword) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("Unknown user"));
-        user.setPasswordHash(passwordEncoder.encode(rawPassword));
-        userRepository.save(user);
-    }
-
     // The read half of OrganizationProvisioningService.listAdmins() — never
     // the full User entity, same passwordHash-leak reasoning as StaffSummary
     // below.
@@ -193,13 +174,14 @@ public class StaffService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
         LocalDate today = LocalDate.now(clock);
-        boolean hpcsaValid = user.getHpcsaNumber() != null && user.getHpcsaExpiryDate() != null
-                && !user.getHpcsaExpiryDate().isBefore(today);
-        boolean sancValid = user.getSancNumber() != null && user.getSancExpiryDate() != null
-                && !user.getSancExpiryDate().isBefore(today);
-        boolean sapcValid = user.getSapcNumber() != null && user.getSapcExpiryDate() != null
-                && !user.getSapcExpiryDate().isBefore(today);
+        boolean hpcsaValid = isCurrentLicense(user.getHpcsaNumber(), user.getHpcsaExpiryDate(), today);
+        boolean sancValid = isCurrentLicense(user.getSancNumber(), user.getSancExpiryDate(), today);
+        boolean sapcValid = isCurrentLicense(user.getSapcNumber(), user.getSapcExpiryDate(), today);
         return new LicenseStatus(hpcsaValid || sancValid, sapcValid);
+    }
+
+    private boolean isCurrentLicense(String number, LocalDate expiryDate, LocalDate today) {
+        return number != null && !number.isBlank() && expiryDate != null && !expiryDate.isBefore(today);
     }
 
     public record LicenseStatus(boolean canPrescribe, boolean canDispense) {

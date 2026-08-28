@@ -48,14 +48,6 @@ import java.util.UUID;
 public class DevSeedDataRunner implements ApplicationRunner {
 
     private static final String DEMO_SLUG = "demo-clinic";
-    // One known password for every seeded demo account — the org admin
-    // included. provisionOrganization() generates a random temporary
-    // password for its admin by default (correct for real tenant
-    // onboarding, where it's emailed and never needs to be typed by a
-    // developer); a fresh random value on every database defeats the
-    // point of a demo environment meant to be documented and shared
-    // across a team. setKnownPasswordForSeeding() below overwrites it.
-    private static final String DEMO_PASSWORD = "ChangeMe123!";
 
     private final OrganizationRepository organizationRepository;
     private final OrganizationProvisioningService provisioningService;
@@ -108,12 +100,7 @@ public class DevSeedDataRunner implements ApplicationRunner {
         Organization organization = organizationRepository.findById(provisioned.organizationId()).orElseThrow();
         TenantContext.setCurrentTenant(organization.getSchemaName());
         try {
-            UUID adminUserId = provisioned.admins().get(0).userId();
-            // Overwrite the random password provisionOrganization() just
-            // generated with the fixed one every other seeded account
-            // uses — see DEMO_PASSWORD's own why-note.
-            staffService.setKnownPasswordForSeeding(adminUserId, DEMO_PASSWORD);
-            seedTenantData(adminUserId);
+            seedTenantData(provisioned.admins().get(0).userId());
         } finally {
             TenantContext.clear();
         }
@@ -184,7 +171,7 @@ public class DevSeedDataRunner implements ApplicationRunner {
                 firstName, lastName, employeeNumber, idNumber, email, contactNumber, gender, dateOfBirth,
                 LocalDate.now(), EmploymentType.PERMANENT, managerId, facilityId, List.of(),
                 department, designation, role.getId(), null, null, null, null, null, null,
-                "Emergency Contact", "Family", "+27831110000", DEMO_PASSWORD), managerId);
+                "Emergency Contact", "Family", "+27831110000", "ChangeMe123!"), managerId);
         return user.getId();
     }
 

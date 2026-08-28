@@ -67,6 +67,15 @@ public class PrescriptionController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/api/v1/prescriptions/manual-verification")
+    public ResponseEntity<Map<String, Object>> manualVerificationQueue() {
+        List<ManualVerificationCaseResponse> items = prescriptionService.listManualVerificationCases().stream()
+                .map(c -> new ManualVerificationCaseResponse(c.getId(), c.getPrescriptionId(), c.getPatientId(),
+                        c.getReason(), c.getCreatedAt()))
+                .toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
     // Enriched with the patient's name/MPI — same reasoning as
     // QueueService.QueueEntryView: this is a staff-facing view where
     // knowing WHO a prescription belongs to at a glance matters, not just
@@ -87,6 +96,10 @@ public class PrescriptionController {
     }
 
     public record PrescriptionItemResponse(String drugName, String dosage, int quantity) {
+    }
+
+    public record ManualVerificationCaseResponse(UUID id, UUID prescriptionId, UUID patientId, String reason,
+                                                  Instant createdAt) {
     }
 
     public record PrescriptionResponse(UUID id, String serialNumber, UUID visitId, UUID patientId,

@@ -91,6 +91,11 @@ public class PlatformJwtAuthenticationFilter extends OncePerRequestFilter {
         String uri = request.getRequestURI();
         // /platform/auth/login is how an operator gets a token in the
         // first place — can't require one to reach it.
-        return !uri.startsWith("/platform/") || uri.equals("/platform/auth/login");
+        // SADM-US-005 exposes the platform tenant register at /api/v1 to
+        // match the console's API contract. It still uses the same operator
+        // token as /platform/**; without this exception SecurityConfig sees
+        // no authenticated principal and correctly (but unhelpfully) 403s.
+        boolean platformProtectedRoute = uri.startsWith("/platform/") || uri.startsWith("/api/v1/tenants");
+        return !platformProtectedRoute || uri.equals("/platform/auth/login");
     }
 }

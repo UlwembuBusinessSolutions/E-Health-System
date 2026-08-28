@@ -20,6 +20,7 @@ import co.ehealth.platform.facility.FacilityNotFoundException;
 import co.ehealth.platform.pharmacy.NotLicensedException;
 import co.ehealth.platform.pharmacy.PrescriptionAlreadyDispensedException;
 import co.ehealth.platform.pharmacy.PrescriptionNotFoundException;
+import co.ehealth.platform.pharmacy.PatientIdentityNotVerifiedException;
 import co.ehealth.platform.visit.EmptyQueueException;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import org.slf4j.Logger;
@@ -275,6 +276,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(PrescriptionAlreadyDispensedException.class)
     public ResponseEntity<ApiErrorResponse> handlePrescriptionAlreadyDispensed(
             PrescriptionAlreadyDispensedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PatientIdentityNotVerifiedException.class)
+    public ResponseEntity<ApiErrorResponse> handlePatientIdentityNotVerified(PatientIdentityNotVerifiedException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
