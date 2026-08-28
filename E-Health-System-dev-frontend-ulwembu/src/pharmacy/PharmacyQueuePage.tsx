@@ -28,6 +28,7 @@ export function PharmacyQueuePage() {
   const [facilityId, setFacilityId] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [dispensingId, setDispensingId] = useState<string | null>(null);
+  const [scannedBarcodes, setScannedBarcodes] = useState<Record<string, string[]>>({});
 
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
 
@@ -45,8 +46,9 @@ export function PharmacyQueuePage() {
   });
 
   const dispenseMutation = useMutation({
-    mutationFn: (id: string) => dispensePrescription(id),
-    onMutate: (id) => {
+    mutationFn: ({ id, scans }: { id: string; scans: { barcode: string; quantity: number }[] }) =>
+      dispensePrescription(id, scans),
+    onMutate: ({ id }) => {
       setActionError(null);
       setDispensingId(id);
     },
@@ -121,9 +123,18 @@ export function PharmacyQueuePage() {
                   </p>
                   <ul className="mt-2 flex flex-col gap-1">
                     {p.items.map((item, i) => (
-                      <li key={i} className="text-[13px] text-text-primary">
-                        {item.drugName} — {item.dosage}{" "}
-                        <span className="text-text-secondary">× {item.quantity}</span>
+                      <li key={i} className="flex flex-col gap-1 text-[13px] text-text-primary sm:flex-row sm:items-center sm:gap-3">
+                        <span>{item.drugName} — {item.dosage} <span className="text-text-secondary">× {item.quantity}</span></span>
+                        <input
+                          aria-label={`Scan barcode for ${item.drugName}`}
+                          placeholder="Scan barcode"
+                          value={scannedBarcodes[p.id]?.[i] ?? ""}
+                          onChange={(event) => setScannedBarcodes((current) => ({
+                            ...current,
+                            [p.id]: p.items.map((_, index) => index === i ? event.target.value : (current[p.id]?.[index] ?? "")),
+                          }))}
+                          className="h-9 w-full rounded-lg border border-border-strong bg-surface-raised px-2.5 font-mono text-[12px] text-text-primary outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 sm:w-44"
+                        />
                       </li>
                     ))}
                   </ul>
@@ -133,7 +144,11 @@ export function PharmacyQueuePage() {
                   size="md"
                   icon={<CheckCircle2 className="size-3.5" aria-hidden />}
                   loading={dispensingId === p.id && dispenseMutation.isPending}
-                  onClick={() => dispenseMutation.mutate(p.id)}
+                  disabled={!p.items.every((_, i) => !!scannedBarcodes[p.id]?.[i]?.trim())}
+                  onClick={() => dispenseMutation.mutate({
+                    id: p.id,
+                    scans: p.items.map((item, i) => ({ barcode: scannedBarcodes[p.id]![i].trim(), quantity: item.quantity })),
+                  })}
                   className="shrink-0"
                 >
                   Dispense

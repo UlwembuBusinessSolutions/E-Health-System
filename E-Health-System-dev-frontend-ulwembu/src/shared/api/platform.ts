@@ -119,6 +119,14 @@ export async function registerPlatformOperator(payload: PlatformRegisterPayload)
   return response.operator;
 }
 
+export async function requestPlatformPasswordReset(email: string): Promise<void> {
+  await apiClient.post<void>("/platform/auth/password-reset/request", { email });
+}
+
+export async function confirmPlatformPasswordReset(email: string, token: string, newPassword: string): Promise<void> {
+  await apiClient.post<void>("/platform/auth/password-reset/confirm", { email, token, newPassword });
+}
+
 export interface ListOrganizationsParams {
   q?: string;
   status?: OrganizationStatus;

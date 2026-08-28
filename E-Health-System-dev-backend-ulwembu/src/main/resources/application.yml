@@ -67,6 +67,8 @@ app:
     # attempted — see core/notification/EmailService.java. Relative to
     # wherever the app is started from.
     capture-dir: ${NOTIFICATIONS_CAPTURE_DIR:./data/emails}
+  pharmacy:
+    expiry-warning-days: ${PHARMACY_EXPIRY_WARNING_DAYS:90}
   frontend:
     base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
 

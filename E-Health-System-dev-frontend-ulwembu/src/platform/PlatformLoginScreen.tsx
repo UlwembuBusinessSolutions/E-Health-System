@@ -139,6 +139,13 @@ export function PlatformLoginScreen() {
             >
               Create the first platform account
             </button>
+            <button
+              type="button"
+              className="text-[13px] font-medium text-brand-600 hover:text-brand-700"
+              onClick={() => navigate("/platform/forgot-password")}
+            >
+              Forgot password?
+            </button>
           </form>
         </Card>
       </div>

@@ -54,6 +54,11 @@ export async function listDispensingQueue(facilityId: string): Promise<Prescript
 
 // 403 if the caller has no current SAPC registration; 409 if this
 // prescription was already dispensed.
-export async function dispensePrescription(id: string): Promise<void> {
-  await apiClient.post<void>(`/api/v1/prescriptions/${id}/dispense`, undefined, { headers: tenantAuthHeaders() });
+export interface StockScan {
+  barcode: string;
+  quantity: number;
+}
+
+export async function dispensePrescription(id: string, scans: StockScan[]): Promise<void> {
+  await apiClient.post<void>(`/api/v1/prescriptions/${id}/dispense`, { scans }, { headers: tenantAuthHeaders() });
 }

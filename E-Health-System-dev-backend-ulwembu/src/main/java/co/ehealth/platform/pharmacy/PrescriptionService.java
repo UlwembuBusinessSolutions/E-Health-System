@@ -15,7 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -30,12 +33,14 @@ public class PrescriptionService {
     private final Clock clock;
     private final PermissionService permissionService;
     private final QueueTokenRepository queueTokenRepository;
+    private final StockBatchRepository stockBatchRepository;
 
     public PrescriptionService(PrescriptionRepository prescriptionRepository,
                                 PrescriptionItemRepository prescriptionItemRepository,
                                 DispensingRecordRepository dispensingRecordRepository, VisitService visitService,
                                 StaffService staffService, AuditLogService auditLogService, Clock clock,
-                                PermissionService permissionService, QueueTokenRepository queueTokenRepository) {
+                                PermissionService permissionService, QueueTokenRepository queueTokenRepository,
+                                StockBatchRepository stockBatchRepository) {
         this.prescriptionRepository = prescriptionRepository;
         this.prescriptionItemRepository = prescriptionItemRepository;
         this.dispensingRecordRepository = dispensingRecordRepository;
@@ -45,6 +50,7 @@ public class PrescriptionService {
         this.clock = clock;
         this.permissionService = permissionService;
         this.queueTokenRepository = queueTokenRepository;
+        this.stockBatchRepository = stockBatchRepository;
     }
 
     // PHRM-US-018 + PHRM-US-009 — patientId/facilityId come from the visit,
@@ -114,7 +120,7 @@ public class PrescriptionService {
     // PHRM-US-009's other half — dispensing requires a current SAPC
     // registration.
     @Transactional
-    public void dispense(UUID prescriptionId, UUID dispenserId) {
+    public void dispense(UUID prescriptionId, List<StockScan> scans, UUID dispenserId) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.MANAGE);
         if (!staffService.getLicenseStatus(dispenserId).canDispense()) {
             throw new NotLicensedException("You need a current SAPC registration to dispense.");
@@ -124,12 +130,49 @@ public class PrescriptionService {
             throw new PrescriptionAlreadyDispensedException();
         }
 
+        Map<String, Integer> required = new HashMap<>();
+        for (PrescriptionItem item : getItems(prescriptionId)) {
+            required.merge(normalize(item.getDrugName()), item.getQuantity(), Integer::sum);
+        }
+        Map<String, Integer> scanned = new HashMap<>();
+        for (StockScan scan : scans) {
+            StockBatch batch = stockBatchRepository.findByBarcodeForUpdate(scan.barcode())
+                    .orElseThrow(() -> new StockBatchNotFoundException(scan.barcode()));
+            if (!batch.getFacilityId().equals(prescription.getFacilityId())) {
+                throw new IllegalArgumentException("Scanned stock belongs to another facility.");
+            }
+            if (batch.getExpiryDate().isBefore(LocalDate.now(clock))) {
+                throw new ExpiredStockException(scan.barcode());
+            }
+            String drug = normalize(batch.getDrugName());
+            scanned.merge(drug, scan.quantity(), Integer::sum);
+            if (scanned.get(drug) > required.getOrDefault(drug, 0)) {
+                throw new IllegalArgumentException("Scanned stock does not match the prescription.");
+            }
+        }
+        if (!scanned.equals(required)) {
+            throw new IllegalArgumentException("Scan every prescribed item before dispensing.");
+        }
+        for (StockScan scan : scans) {
+            StockBatch batch = stockBatchRepository.findByBarcodeForUpdate(scan.barcode())
+                    .orElseThrow(() -> new StockBatchNotFoundException(scan.barcode()));
+            batch.removeQuantity(scan.quantity());
+            stockBatchRepository.save(batch);
+        }
+
         prescription.markDispensed();
         prescriptionRepository.save(prescription);
         dispensingRecordRepository.save(new DispensingRecord(prescriptionId, dispenserId, clock.instant()));
 
         auditLogService.append(dispenserId, prescription.getFacilityId(), "PRESCRIPTION_DISPENSED", "Prescription",
                 prescriptionId.toString(), null, null);
+    }
+
+    private String normalize(String value) {
+        return value.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    public record StockScan(String barcode, int quantity) {
     }
 
     public record CreatePrescriptionCommand(UUID visitId, List<PrescriptionItemInput> items) {

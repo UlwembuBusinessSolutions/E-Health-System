@@ -17,6 +17,8 @@ import { DashboardPage } from "./DashboardPage";
 import { PlatformRoot } from "@/platform/PlatformRoot";
 import { PlatformLoginScreen } from "@/platform/PlatformLoginScreen";
 import { PlatformRegisterScreen } from "@/platform/PlatformRegisterScreen";
+import { PlatformForgotPasswordScreen } from "@/platform/PlatformForgotPasswordScreen";
+import { PlatformResetPasswordScreen } from "@/platform/PlatformResetPasswordScreen";
 import { RequirePlatformAuth } from "@/platform/RequirePlatformAuth";
 import { PlatformShell } from "@/platform/components/PlatformShell";
 import { OverviewPage } from "@/platform/OverviewPage";
@@ -92,6 +94,8 @@ export function AppRouter() {
       <Route path="/platform" element={<PlatformRoot />}>
         <Route path="login" element={<PlatformLoginScreen />} />
         <Route path="register" element={<PlatformRegisterScreen />} />
+        <Route path="forgot-password" element={<PlatformForgotPasswordScreen />} />
+        <Route path="reset-password" element={<PlatformResetPasswordScreen />} />
         <Route
           element={
             <RequirePlatformAuth>

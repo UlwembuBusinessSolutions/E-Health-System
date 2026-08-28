@@ -36,12 +36,14 @@ public class PrescriptionController {
     private final PrescriptionService prescriptionService;
     private final PatientService patientService;
     private final UserRepository userRepository;
+    private final StockService stockService;
 
     public PrescriptionController(PrescriptionService prescriptionService, PatientService patientService,
-                                   UserRepository userRepository) {
+                                   UserRepository userRepository, StockService stockService) {
         this.prescriptionService = prescriptionService;
         this.patientService = patientService;
         this.userRepository = userRepository;
+        this.stockService = stockService;
     }
 
     @PostMapping("/api/v1/prescriptions")
@@ -69,9 +71,34 @@ public class PrescriptionController {
 
     @PostMapping("/api/v1/prescriptions/{id}/dispense")
     public ResponseEntity<Void> dispense(@PathVariable UUID id,
+                                          @Valid @RequestBody DispenseRequest request,
                                           @AuthenticationPrincipal AuthenticatedPrincipal staff) {
-        prescriptionService.dispense(id, staff.userId());
+        var scans = request.scans().stream()
+                .map(scan -> new PrescriptionService.StockScan(scan.barcode(), scan.quantity())).toList();
+        prescriptionService.dispense(id, scans, staff.userId());
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/api/v1/pharmacy/stock")
+    public ResponseEntity<StockBatchResponse> receiveStock(@Valid @RequestBody ReceiveStockRequest request,
+                                                             @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        StockBatch batch = stockService.receive(new StockService.ReceiveStockCommand(request.facilityId(),
+                request.drugName(), request.batchNumber(), request.barcode(), request.expiryDate(), request.quantity()),
+                staff.userId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(StockBatchResponse.from(batch));
+    }
+
+    @GetMapping("/api/v1/pharmacy/stock/expiry-warnings")
+    public ResponseEntity<List<StockBatchResponse>> expiryWarnings(@RequestParam UUID facilityId) {
+        return ResponseEntity.ok(stockService.expiryWarnings(facilityId).stream().map(StockBatchResponse::from).toList());
+    }
+
+    @PostMapping("/api/v1/pharmacy/stock/{id}/write-off")
+    public ResponseEntity<StockBatchResponse> writeOff(@PathVariable UUID id,
+                                                        @Valid @RequestBody WriteOffRequest request,
+                                                        @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return ResponseEntity.ok(StockBatchResponse.from(stockService.writeOff(id, request.quantity(), request.reason(),
+                staff.userId())));
     }
 
     // Enriched with the patient's name/MPI — same reasoning as
@@ -94,6 +121,20 @@ public class PrescriptionController {
     }
 
     public record CreatePrescriptionRequest(@NotNull UUID visitId, @NotEmpty List<@Valid ItemRequest> items) {
+    }
+
+    public record DispenseRequest(@NotEmpty List<@Valid StockScanRequest> scans) {
+    }
+
+    public record StockScanRequest(@NotBlank String barcode, @Positive int quantity) {
+    }
+
+    public record ReceiveStockRequest(@NotNull UUID facilityId, @NotBlank String drugName,
+                                      @NotBlank String batchNumber, @NotBlank String barcode,
+                                      @NotNull java.time.LocalDate expiryDate, @Positive int quantity) {
+    }
+
+    public record WriteOffRequest(@Positive int quantity, @NotBlank String reason) {
     }
 
     public record ItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity) {

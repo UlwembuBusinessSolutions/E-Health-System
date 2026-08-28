@@ -28,6 +28,9 @@ public class PlatformOperator {
     @Column(nullable = false, unique = true, length = 200)
     private String email;
 
+    @Column(name = "email_verified_at")
+    private Instant emailVerifiedAt;
+
     @Column(name = "first_name", nullable = false, length = 100)
     private String firstName;
 
@@ -76,6 +79,7 @@ public class PlatformOperator {
         this.firstName = firstName;
         this.lastName = lastName;
         this.passwordHash = passwordHash;
+        this.emailVerifiedAt = Instant.now();
         this.createdAt = Instant.now();
     }
 
@@ -126,6 +130,10 @@ public class PlatformOperator {
 
     public String getEmail() {
         return email;
+    }
+
+    public Instant getEmailVerifiedAt() {
+        return emailVerifiedAt;
     }
 
     public String getFirstName() {

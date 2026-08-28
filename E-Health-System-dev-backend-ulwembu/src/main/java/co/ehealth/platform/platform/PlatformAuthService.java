@@ -13,6 +13,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.security.SecureRandom;
+import java.util.Base64;
 
 // Same lockout policy as identity.AuthService — rolling 1-hour failure
 // window, 30-minute auto-clearing lockout, same DummyHash timing-safety
@@ -29,21 +31,30 @@ public class PlatformAuthService {
     private static final int MAX_FAILED_ATTEMPTS = 5;
     private static final Duration FAILURE_WINDOW = Duration.ofHours(1);
     private static final Duration LOCKOUT_DURATION = Duration.ofMinutes(30);
+    private static final Duration RESET_TTL = Duration.ofMinutes(30);
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final PlatformOperatorRepository platformOperatorRepository;
     private final PasswordEncoder passwordEncoder;
     private final PlatformJwtService platformJwtService;
     private final Clock clock;
     private final PlatformAuditLogRepository platformAuditLogRepository;
+    private final PlatformPasswordResetTokenRepository resetTokenRepository;
+    private final co.ehealth.platform.core.notification.EmailService emailService;
 
     public PlatformAuthService(PlatformOperatorRepository platformOperatorRepository,
                                 PasswordEncoder passwordEncoder, PlatformJwtService platformJwtService,
-                                Clock clock, PlatformAuditLogRepository platformAuditLogRepository) {
+                                Clock clock, PlatformAuditLogRepository platformAuditLogRepository,
+                                PlatformPasswordResetTokenRepository resetTokenRepository,
+                                co.ehealth.platform.core.notification.EmailService emailService) {
         this.platformOperatorRepository = platformOperatorRepository;
         this.passwordEncoder = passwordEncoder;
         this.platformJwtService = platformJwtService;
         this.clock = clock;
         this.platformAuditLogRepository = platformAuditLogRepository;
+        this.resetTokenRepository = resetTokenRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.emailService = emailService;
     }
 
     @Transactional
@@ -138,4 +149,49 @@ public class PlatformAuthService {
 
     public record RegisteredOperator(PlatformOperator operator, PlatformJwtService.IssuedToken token) {
     }
+
+    @Transactional
+    public void requestPasswordReset(String email) {
+        Optional<PlatformOperator> maybeOperator = platformOperatorRepository.findByEmail(email);
+        if (maybeOperator.isEmpty() || maybeOperator.get().getEmailVerifiedAt() == null) {
+            return;
+        }
+        PlatformOperator operator = maybeOperator.get();
+        Instant now = clock.instant();
+        resetTokenRepository.invalidateOutstandingTokens(operator.getId(), now);
+        String rawToken = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes());
+        resetTokenRepository.save(new PlatformPasswordResetToken(operator.getId(), passwordEncoder.encode(rawToken),
+                now.plus(RESET_TTL), now));
+        emailService.sendPlatformPasswordResetLink(operator.getEmail(), operator.getFirstName(), rawToken,
+                RESET_TTL.toMinutes());
+    }
+
+    @Transactional
+    public void confirmPasswordReset(String email, String rawToken, String newPassword) {
+        Instant now = clock.instant();
+        Optional<PlatformOperator> maybeOperator = platformOperatorRepository.findByEmail(email);
+        Optional<PlatformPasswordResetToken> maybeToken = maybeOperator
+                .flatMap(operator -> resetTokenRepository
+                        .findByOperatorIdAndConsumedAtIsNullOrderByCreatedAtDesc(operator.getId()).stream()
+                        .filter(token -> token.isUsable(now) && passwordEncoder.matches(rawToken, token.getTokenHash()))
+                        .findFirst());
+        if (maybeToken.isEmpty()) {
+            throw new InvalidPlatformResetTokenException();
+        }
+        PlatformPasswordResetToken token = maybeToken.get();
+        PlatformOperator operator = maybeOperator.orElseThrow(InvalidPlatformResetTokenException::new);
+        operator.setPasswordHash(passwordEncoder.encode(newPassword));
+        platformOperatorRepository.save(operator);
+        token.consume(now);
+        resetTokenRepository.invalidateOutstandingTokens(operator.getId(), now);
+        platformAuditLogRepository.save(new PlatformAuditLog(operator.getId(), "PLATFORM_PASSWORD_RESET", null,
+                "All existing sessions terminated", now));
+    }
+
+    private byte[] randomBytes() {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        return bytes;
+    }
+
 }

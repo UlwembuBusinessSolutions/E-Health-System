@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Pill, Plus, Ticket, Trash2 } from "lucide-react";
+import { ArrowLeft, Pill, Plus, Printer, Ticket, Trash2 } from "lucide-react";
 import { getPatient } from "@/shared/api/patients";
 import { createVisit, type ServiceStream, type VisitType, type VisitWithToken } from "@/shared/api/visits";
+import { listQueue } from "@/shared/api/queue";
 import { createPrescription, type Prescription, type PrescriptionItem } from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
 import { ApiError } from "@/shared/api/client";
@@ -25,6 +26,12 @@ const SERVICE_STREAM_OPTIONS: { value: ServiceStream; label: string }[] = [
   { value: "MATERNAL_CHILD", label: "Maternal & child health" },
   { value: "OCCUPATIONAL_HEALTH", label: "Occupational health" },
 ];
+
+const ESTIMATED_MINUTES_PER_PATIENT = 15;
+
+function serviceStationLabel(serviceStream: ServiceStream): string {
+  return SERVICE_STREAM_OPTIONS.find((option) => option.value === serviceStream)?.label ?? serviceStream;
+}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
@@ -84,6 +91,12 @@ export function PatientDetailPage() {
 
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities, enabled: isStartingVisit });
 
+  const ticketQueueQuery = useQuery({
+    queryKey: ["queue", "ticket", startedVisit?.token.facilityId],
+    queryFn: () => listQueue(startedVisit!.token.facilityId),
+    enabled: !!startedVisit,
+  });
+
   const startVisit = useMutation({
     mutationFn: () =>
       createVisit({
@@ -137,6 +150,14 @@ export function PatientDetailPage() {
   };
 
   const patient = patientQuery.data;
+  const selectedFacility = facilitiesQuery.data?.find((facility) => facility.id === startedVisit?.token.facilityId);
+  const peopleAhead = ticketQueueQuery.data
+    ? Math.max(
+        0,
+        ticketQueueQuery.data.findIndex((entry) => entry.token.id === startedVisit?.token.id),
+      )
+    : 0;
+  const estimatedWaitMinutes = Math.max(1, peopleAhead * ESTIMATED_MINUTES_PER_PATIENT);
 
   return (
     <div>
@@ -199,6 +220,14 @@ export function PatientDetailPage() {
                     </Link>
                   </p>
                   <div className="mt-1 flex gap-2">
+                    <Button
+                      variant="primary"
+                      size="md"
+                      icon={<Printer className="size-3.5" aria-hidden />}
+                      onClick={() => window.print()}
+                    >
+                      Print ticket
+                    </Button>
                     {!isPrescribing && !createdPrescription && (
                       <Button
                         variant="secondary"
@@ -256,6 +285,34 @@ export function PatientDetailPage() {
                 </>
               )}
             </Card>
+          )}
+
+          {startedVisit && (
+            <div className="print-ticket" aria-hidden="true">
+              <p className="print-ticket__brand">Ulwembu Healthcare Management System</p>
+              <p className="print-ticket__heading">Queue ticket</p>
+              <p className="print-ticket__token">#{startedVisit.token.tokenNumber}</p>
+              <dl className="print-ticket__details">
+                <div>
+                  <dt>Service station</dt>
+                  <dd>{serviceStationLabel(startedVisit.visit.serviceStream)}</dd>
+                </div>
+                <div>
+                  <dt>Estimated wait</dt>
+                  <dd>About {estimatedWaitMinutes} minutes</dd>
+                </div>
+                <div>
+                  <dt>Issued</dt>
+                  <dd>{formatDateTime(startedVisit.token.issuedAt)}</dd>
+                </div>
+                <div>
+                  <dt>Facility</dt>
+                  <dd>{selectedFacility?.name ?? "Clinic"}</dd>
+                </div>
+              </dl>
+              <p className="print-ticket__patient">Patient: {patient.firstName} {patient.lastName}</p>
+              <p className="print-ticket__footer">Please keep this ticket and wait for your number to be called.</p>
+            </div>
           )}
 
           {(isPrescribing || createdPrescription) && (

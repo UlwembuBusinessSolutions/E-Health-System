@@ -56,7 +56,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/password-reset/**",
                         "/actuator/health").permitAll()
                 // Getting a token in the first place can't require one.
-                .requestMatchers("/platform/auth/login", "/platform/auth/register").permitAll()
+                .requestMatchers("/platform/auth/login", "/platform/auth/register", "/platform/auth/password-reset/**").permitAll()
                 // Everything else under /platform/** needs a real,
                 // ACTIVE, correctly-signed operator token — PlatformJwtAuthenticationFilter
                 // is what actually populates that Authentication; this

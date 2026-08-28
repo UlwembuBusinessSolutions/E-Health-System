@@ -177,6 +177,22 @@ public class EmailService {
         send(toEmail, subject, body);
     }
 
+      public void sendPlatformPasswordResetLink(String toEmail, String firstName, String token, long ttlMinutes) {
+        String subject = "Reset your platform password";
+        String link = frontendBaseUrl + "/platform/reset-password?email="
+          + java.net.URLEncoder.encode(toEmail, java.nio.charset.StandardCharsets.UTF_8) + "&token=" + token;
+        String body = """
+            Hi %s,
+
+            Reset your platform password using this link:
+            %s
+
+            This link expires in %d minutes and can only be used once.
+            If you did not request this, you can ignore this email.
+            """.formatted(firstName, link, ttlMinutes);
+        send(toEmail, subject, body);
+      }
+
     // Fired once per StaffService.resetPassword() call — the admin-triggered
     // counterpart to sendStaffAccountCreatedEmail/sendAdminAccountCreatedEmail
     // above, for a staff member (or org admin) who already has an account
