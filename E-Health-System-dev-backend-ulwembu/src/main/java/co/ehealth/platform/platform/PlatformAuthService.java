@@ -53,7 +53,6 @@ public class PlatformAuthService {
         this.clock = clock;
         this.platformAuditLogRepository = platformAuditLogRepository;
         this.resetTokenRepository = resetTokenRepository;
-        this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
     }
 

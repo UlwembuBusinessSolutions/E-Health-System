@@ -194,7 +194,7 @@ public class DevSeedDataRunner implements ApplicationRunner {
                 firstName, lastName, employeeNumber, idNumber, email, contactNumber, gender, dateOfBirth,
                 LocalDate.now(), EmploymentType.PERMANENT, managerId, facilityId, List.of(),
                 department, designation, role.getId(), null, null, null, null, null, null,
-                "Emergency Contact", "Family", "+27831110000", "ChangeMe123!"), managerId);
+                "Emergency Contact", "Family", "+27831110000"), managerId);
         return user.getId();
     }
 

@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { Loader2 } from "lucide-react";
 
 type ButtonVariant = "primary" | "secondary" | "ghost";
-type ButtonSize = "md" | "lg";
+type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -21,6 +21,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
 };
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {
+  sm: "h-9 px-3 text-[13px] gap-1.5",
   md: "h-11 px-4 text-[14px] gap-2",
   lg: "h-12 px-5 text-[15px] gap-2",
 };
