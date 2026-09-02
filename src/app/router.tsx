@@ -11,6 +11,17 @@ import { RegisterPatientScreen } from "@/patient/RegisterPatientScreen";
 import { PatientDetailPage } from "@/patient/PatientDetailPage";
 import { QueuePage } from "@/queue/QueuePage";
 import { PharmacyQueuePage } from "@/pharmacy/PharmacyQueuePage";
+import { PharmacyDashboard } from "@/pharmacy/PharmacyDashboard";
+import { CreatePrescriptionScreen } from "@/pharmacy/CreatePrescriptionScreen";
+import { PrescriptionDetailPage } from "@/pharmacy/PrescriptionDetailPage";
+import { ManualVerificationQueuePage } from "@/pharmacy/ManualVerificationQueuePage";
+import { PrescriptionsListPage } from "@/pharmacy/PrescriptionsListPage";
+import {
+  TriageDashboard,
+  CaptureVitalsScreen,
+  TriageAssessmentListPage,
+  TriageAssessmentDetailPage,
+} from "@/triage";
 import { AppShell } from "./AppShell";
 import { DashboardPage } from "./DashboardPage";
 import { PlatformRoot } from "@/platform/PlatformRoot";
@@ -76,7 +87,16 @@ export function AppRouter() {
         <Route path="patients/new" element={<RegisterPatientScreen />} />
         <Route path="patients/:id" element={<PatientDetailPage />} />
         <Route path="queue" element={<QueuePage />} />
-        <Route path="pharmacy" element={<PharmacyQueuePage />} />
+        <Route path="pharmacy" element={<PharmacyDashboard />} />
+        <Route path="pharmacy/queue" element={<PharmacyQueuePage />} />
+        <Route path="pharmacy/create" element={<CreatePrescriptionScreen />} />
+        <Route path="pharmacy/list" element={<PrescriptionsListPage />} />
+        <Route path="pharmacy/manual-verification" element={<ManualVerificationQueuePage />} />
+        <Route path="pharmacy/prescriptions/:id" element={<PrescriptionDetailPage />} />
+        <Route path="triage" element={<TriageDashboard />} />
+        <Route path="triage/capture/:visitId" element={<CaptureVitalsScreen />} />
+        <Route path="triage/list" element={<TriageAssessmentListPage />} />
+        <Route path="triage/assessments/:id" element={<TriageAssessmentDetailPage />} />
       </Route>
       {/* Deliberately not RequireAuth/RequireRole — a platform operator
           isn't a staff/org-admin login (backend-auth-guide.html Section 1),

@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Gauge, LogOut, Pill, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
+import { Gauge, LogOut, Pill, Stethoscope, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 import { getTenantSlug } from "@/shared/api/auth";
 import { getOrganizationSelf } from "@/shared/api/organization";
@@ -30,6 +30,7 @@ export function Sidebar() {
     { to: "/app", label: "Dashboard", icon: Gauge, end: true },
     { to: "/app/patients", label: "Patients", icon: UserRound, end: false },
     { to: "/app/queue", label: "Queue", icon: Ticket, end: false },
+    { to: "/app/triage", label: "Triage", icon: Stethoscope, end: false },
     { to: "/app/pharmacy", label: "Pharmacy", icon: Pill, end: false },
     ...(user?.role === "ORG_ADMIN" ? [{ to: "/app/staff", label: "Staff", icon: UsersIcon, end: false }] : []),
   ];

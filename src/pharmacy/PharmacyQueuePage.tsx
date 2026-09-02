@@ -46,7 +46,7 @@ export function PharmacyQueuePage() {
       setActionError(null);
       setDispensingId(id);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pharmacy", "queue", facilityId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pharmacy"] }),
     onError: (error) => {
       setActionError(error instanceof ApiError ? error.message : "Couldn't dispense that prescription. Try again.");
     },
