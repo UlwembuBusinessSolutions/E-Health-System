@@ -191,12 +191,8 @@ public class StaffService {
     // replaces — and the account is usable immediately. mustChangePassword
     // defaults true on User's constructor, so the temp password the admin
     // types can't become a standing credential without the staff member
-    // replacing it first. noRollbackFor is load-bearing, same reasoning as
-    // AuthService.login(): requireAssignableRole() writes the AUDT security
-    // event first and then throws RoleEscalationException to reject the
-    // request — without this, the default rollback-on-unchecked-exception
-    // would discard that audit row on every blocked attempt.
-    @Transactional(noRollbackFor = RoleEscalationException.class)
+    // replacing it first.
+    @Transactional
     public User createStaff(CreateStaffCommand cmd, UUID creatingAdminId) {
         requireUnique("employeeNumber", userRepository.existsByEmployeeNumber(cmd.employeeNumber()));
         requireUnique("email", userRepository.existsByEmail(cmd.email()));
@@ -216,7 +212,6 @@ public class StaffService {
         if (cmd.managerId() != null && !userRepository.existsById(cmd.managerId())) {
             throw new IllegalArgumentException("Unknown manager");
         }
-        requireAssignableRole(cmd.roleId(), creatingAdminId, cmd.facilityId());
 
         User user = new User(cmd.employeeNumber(), cmd.email(), cmd.firstName(), cmd.lastName(),
                 cmd.contactNumber(), passwordEncoder.encode(cmd.temporaryPassword()), cmd.facilityId(), cmd.gender());
@@ -340,27 +335,6 @@ public class StaffService {
                 enabled ? "STAFF_ENABLED" : "STAFF_DISABLED", "User", userId.toString(), null, null);
     }
 
-    // The admin-triggered escape hatch for the lockout AuthService.login()
-    // enforces after MAX_FAILED_ATTEMPTS — normally self-clears after
-    // LOCKOUT_DURATION, but a staff member who needs back in sooner has no
-    // self-service path (they're locked out of the one flow that would let
-    // them prove who they are). No-ops rather than erroring if the account
-    // isn't currently LOCKED, since retrying this call is harmless.
-    @Transactional
-    public void unlockAccount(UUID userId, UUID actingAdminId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
-        if (user.getStatus() != UserStatus.LOCKED) {
-            return;
-        }
-
-        user.unlock();
-        userRepository.save(user);
-
-        auditLogService.append(actingAdminId, user.getFacilityId(), "STAFF_UNLOCKED",
-                "User", userId.toString(), null, null);
-    }
-
     // Separate from createStaff() on purpose. A background check result
     // typically arrives days or weeks after someone starts, not at
     // creation time, and race/disability disclosure is voluntary and can
@@ -399,25 +373,6 @@ public class StaffService {
     private void requireUnique(String field, boolean alreadyTaken) {
         if (alreadyTaken) {
             throw new DuplicateFieldException(field, "This " + field + " is already in use.");
-        }
-    }
-
-    // The structural guard SADM's security architecture requires: an org
-    // admin's roleId comes straight from a request body, and
-    // /api/v1/roles' own dropdown (RoleController) already can't offer a
-    // platform-reserved role because none is ever seeded into a tenant's
-    // roles table — but a crafted request skips that dropdown entirely and
-    // sends a roleId directly, so the same guarantee has to be enforced
-    // here too, not just at the UI layer. Every rejection is audit-logged
-    // before it's thrown, since GlobalExceptionHandler's RoleEscalationException
-    // mapping only produces the HTTP response, not the AUDT trail.
-    private void requireAssignableRole(UUID roleId, UUID actingAdminId, UUID facilityId) {
-        Role role = roleRepository.findById(roleId).orElse(null);
-        if (role == null || ReservedRoleNames.isReserved(role.getName())) {
-            auditLogService.append(actingAdminId, facilityId, "ROLE_ESCALATION_ATTEMPT_BLOCKED",
-                    "Role", roleId.toString(), null, null);
-            throw new RoleEscalationException(
-                    "This role cannot be assigned from a tenant context.");
         }
     }
 

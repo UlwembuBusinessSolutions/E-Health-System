@@ -121,54 +121,6 @@ public class PlatformOperatorService {
                 enabled ? "PLATFORM_OPERATOR_ENABLED" : "PLATFORM_OPERATOR_DISABLED", null, Instant.now()));
     }
 
-    // Same "LOCKED is an automatic consequence, not the same lever as
-    // enable/disable" reasoning as StaffService.unlockAccount() — a
-    // locked-out operator has no self-service password reset, so another
-    // operator clearing the lockout early is the only way back in short of
-    // waiting out LOCKOUT_DURATION. No-ops if the account isn't currently
-    // LOCKED.
-    @Transactional
-    public void unlock(UUID operatorId, UUID actingOperatorId) {
-        PlatformOperator operator = platformOperatorRepository.findById(operatorId)
-                .orElseThrow(PlatformOperatorNotFoundException::new);
-        if (operator.getStatus() != PlatformOperatorStatus.LOCKED) {
-            return;
-        }
-
-        operator.unlock();
-        platformOperatorRepository.save(operator);
-
-        platformAuditLogRepository.save(
-                new PlatformAuditLog(actingOperatorId, "PLATFORM_OPERATOR_UNLOCKED", null, Instant.now()));
-    }
-
-    // Permanent removal, unlike setEnabled(false) above — that's the
-    // reversible "suspend" lever; this is for an operator who was created
-    // by mistake or never used their account and should stop existing
-    // entirely. Same last-ACTIVE-operator guard as setEnabled(): the
-    // platform must always have at least one way in. Checks for existing
-    // audit history explicitly (OperatorHasAuditHistoryException, a clear
-    // 409) rather than letting Postgres's own foreign-key violation
-    // surface as the generic DataIntegrityViolationException 409 — same
-    // constraint either way (platform_audit_log has no ON DELETE CASCADE),
-    // just a message that actually explains why.
-    @Transactional
-    public void delete(UUID operatorId, UUID actingOperatorId) {
-        PlatformOperator operator = platformOperatorRepository.findById(operatorId)
-                .orElseThrow(PlatformOperatorNotFoundException::new);
-        if (operator.getStatus() == PlatformOperatorStatus.ACTIVE
-                && platformOperatorRepository.countByStatus(PlatformOperatorStatus.ACTIVE) <= 1) {
-            throw new LastActiveOperatorException();
-        }
-        if (platformAuditLogRepository.existsByPlatformOperatorId(operatorId)) {
-            throw new OperatorHasAuditHistoryException();
-        }
-
-        platformAuditLogRepository.save(
-                new PlatformAuditLog(actingOperatorId, "PLATFORM_OPERATOR_DELETED", null, Instant.now()));
-        platformOperatorRepository.delete(operator);
-    }
-
     public record CreateOperatorCommand(String firstName, String lastName, String email) {
     }
 

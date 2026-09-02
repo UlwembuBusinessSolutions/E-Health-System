@@ -11,12 +11,4 @@ import java.util.UUID;
 // listOrganizations().
 public interface PlatformAuditLogRepository extends JpaRepository<PlatformAuditLog, UUID>,
         JpaSpecificationExecutor<PlatformAuditLog> {
-
-    // PlatformOperatorService.delete()'s pre-check — platform_audit_log has
-    // no ON DELETE CASCADE back to platform_operators (V2__platform_operators.sql),
-    // so deleting an operator with any history here fails at the database
-    // with an opaque foreign-key error. Checking first means the rejection
-    // can carry a message that actually explains why, instead of the
-    // generic 409 DataIntegrityViolationException produces.
-    boolean existsByPlatformOperatorId(UUID platformOperatorId);
 }

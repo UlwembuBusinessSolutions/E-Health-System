@@ -9,15 +9,12 @@ import co.ehealth.platform.identity.LastRemainingAdminException;
 import co.ehealth.platform.identity.NotAnOrgAdminException;
 import co.ehealth.platform.identity.NotAuthorizedException;
 import co.ehealth.platform.identity.RateLimitExceededException;
-import co.ehealth.platform.identity.RoleEscalationException;
 import co.ehealth.platform.platform.FoundationModuleException;
 import co.ehealth.platform.platform.LastActiveOperatorException;
-import co.ehealth.platform.platform.OperatorHasAuditHistoryException;
 import co.ehealth.platform.platform.OrganizationNotFoundException;
 import co.ehealth.platform.platform.OrganizationSuspendedException;
 import co.ehealth.platform.platform.PlatformOperatorNotFoundException;
 import co.ehealth.platform.patient.InvalidIdNumberException;
-import co.ehealth.platform.patient.MinorNextOfKinRequiredException;
 import co.ehealth.platform.patient.PatientNotFoundException;
 import co.ehealth.platform.facility.FacilityNotFoundException;
 import co.ehealth.platform.pharmacy.NotLicensedException;
@@ -125,12 +122,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(new ApiErrorResponse(ex.getMessage(), Map.of(ex.getField(), ex.getMessage())));
     }
 
-    @ExceptionHandler(MinorNextOfKinRequiredException.class)
-    public ResponseEntity<ApiErrorResponse> handleMinorNextOfKinRequired(MinorNextOfKinRequiredException ex) {
-        return ResponseEntity.badRequest()
-                .body(new ApiErrorResponse(ex.getMessage(), Map.of("nextOfKin", ex.getMessage())));
-    }
-
     // A unique-constraint violation that slipped past the application-level
     // requireUnique()-style check — that check and the INSERT that follows
     // it aren't atomic with each other, so two requests for the same
@@ -227,14 +218,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    // PlatformOperatorService.delete()'s own guard — see that method's
-    // why-note on why an operator with audit history can only be disabled,
-    // never permanently removed.
-    @ExceptionHandler(OperatorHasAuditHistoryException.class)
-    public ResponseEntity<ApiErrorResponse> handleOperatorHasAuditHistory(OperatorHasAuditHistoryException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
     // SouthAfricanIdNumber.parse() — a well-formed 13-digit string that
     // still fails its check digit or doesn't decode to a real calendar
     // date. A client input problem, not a server error.
@@ -281,14 +264,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // distinction between NOT_AUTHORISED and NOT_FOUND).
     @ExceptionHandler(NotAuthorizedException.class)
     public ResponseEntity<ApiErrorResponse> handleNotAuthorized(NotAuthorizedException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
-    // A tenant-context request tried to assign a platform-reserved role —
-    // the audit row was already written before this was thrown (StaffService's
-    // own why-note), this is only the HTTP shape of the rejection.
-    @ExceptionHandler(RoleEscalationException.class)
-    public ResponseEntity<ApiErrorResponse> handleRoleEscalation(RoleEscalationException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 

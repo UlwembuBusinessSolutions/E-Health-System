@@ -29,8 +29,6 @@ services:
       # "postgres", not localhost (that would resolve to the api
       # container itself, where nothing is listening on 5432).
       DB_URL: jdbc:postgresql://postgres:5432/ulwembu
-      DB_USERNAME: ulwembu
-      DB_PASSWORD: ulwembu_dev_local
       # Everything else — JWT secrets, PLATFORM_BOOTSTRAP_*, SMTP, AWS —
       # keeps application.yml's own baked-in local-dev defaults, same as
       # running `mvn spring-boot:run` with no .env at all (Section 2 of

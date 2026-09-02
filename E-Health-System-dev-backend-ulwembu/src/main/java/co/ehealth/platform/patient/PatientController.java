@@ -41,7 +41,7 @@ public class PatientController {
                                                      @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         var command = new PatientService.RegisterPatientCommand(request.firstName(), request.lastName(),
                 request.idNumber(), request.address(), request.contactNumber(), request.medicalAidProvider(),
-                request.medicalAidNumber(), request.nextOfKin().stream().map(item -> item.toModel()).toList());
+                request.medicalAidNumber());
         Patient patient = patientService.register(command, staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(PatientSummary.from(patient));
     }
@@ -64,19 +64,7 @@ public class PatientController {
             @NotBlank @Pattern(regexp = "^\\d{13}$", message = "ID number must be 13 digits") String idNumber,
             @NotBlank String address,
             @NotBlank @Pattern(regexp = "^\\+?[0-9]{9,15}$") String contactNumber,
-            String medicalAidProvider, String medicalAidNumber, @Valid List<NextOfKinRequest> nextOfKin) {
-        public RegisterPatientRequest {
-            if (nextOfKin == null) {
-                nextOfKin = List.of();
-            }
-        }
-    }
-
-    public record NextOfKinRequest(@NotBlank String name, @NotBlank String relationship,
-                                   @NotBlank @Pattern(regexp = "^\\+?[0-9]{9,15}$") String contactNumber) {
-        NextOfKin toModel() {
-            return new NextOfKin(name.trim(), relationship.trim(), contactNumber.trim());
-        }
+            String medicalAidProvider, String medicalAidNumber) {
     }
 
     // idNumber is included, not masked — reception/admin staff handle ID
@@ -86,12 +74,11 @@ public class PatientController {
     public record PatientSummary(UUID id, String mpiNumber, String firstName, String lastName,
                                   LocalDate dateOfBirth, Gender gender, CitizenshipStatus citizenshipStatus,
                                   String idNumber, String address, String contactNumber, String medicalAidProvider,
-                                  String medicalAidNumber, List<NextOfKin> nextOfKin, Instant createdAt) {
+                                  String medicalAidNumber, Instant createdAt) {
         static PatientSummary from(Patient p) {
             return new PatientSummary(p.getId(), p.getMpiNumber(), p.getFirstName(), p.getLastName(),
                     p.getDateOfBirth(), p.getGender(), p.getCitizenshipStatus(), p.getIdNumber(), p.getAddress(),
-                    p.getContactNumber(), p.getMedicalAidProvider(), p.getMedicalAidNumber(), p.getNextOfKin(),
-                    p.getCreatedAt());
+                    p.getContactNumber(), p.getMedicalAidProvider(), p.getMedicalAidNumber(), p.getCreatedAt());
         }
     }
 }

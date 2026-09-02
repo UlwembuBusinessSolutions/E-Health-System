@@ -7,7 +7,6 @@ import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -76,26 +75,6 @@ public class PlatformOperatorController {
     public ResponseEntity<Void> disable(@PathVariable UUID id,
                                          @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         platformOperatorService.setEnabled(id, false, operator.operatorId());
-        return ResponseEntity.noContent().build();
-    }
-
-    // Distinct from enable()/disable() above — see PlatformOperatorService.unlock()'s
-    // own why-note on why LOCKED needs its own lever rather than reusing
-    // setEnabled().
-    @PostMapping("/{id}/unlock")
-    public ResponseEntity<Void> unlock(@PathVariable UUID id,
-                                        @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
-        platformOperatorService.unlock(id, operator.operatorId());
-        return ResponseEntity.noContent().build();
-    }
-
-    // Permanent removal — see PlatformOperatorService.delete()'s own
-    // why-note on why this is separate from disable() and why an operator
-    // with audit history can't actually be removed this way.
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable UUID id,
-                                        @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
-        platformOperatorService.delete(id, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
 

@@ -300,22 +300,6 @@ public class OrganizationProvisioningService {
                 enabled ? "ORGANIZATION_ADMIN_ENABLED" : "ORGANIZATION_ADMIN_DISABLED", organizationId);
     }
 
-    // The platform-side counterpart to StaffController's own
-    // /api/v1/admin/staff/{id}/unlock — same "platform team can reach in
-    // when nobody inside the org still has working credentials" reasoning
-    // as resetAdminPassword() above.
-    public void unlockAdmin(UUID organizationId, UUID userId, UUID actingOperatorId) {
-        Organization organization = organizationRepository.findById(organizationId)
-                .orElseThrow(OrganizationNotFoundException::new);
-        TenantContext.setCurrentTenant(organization.getSchemaName());
-        try {
-            staffService.unlockAccount(userId, userId);
-        } finally {
-            TenantContext.clear();
-        }
-        recordPlatformAudit(actingOperatorId, "ORGANIZATION_ADMIN_UNLOCKED", organizationId);
-    }
-
     public void suspend(UUID organizationId, UUID actingOperatorId) {
         Organization organization = organizationRepository.findById(organizationId)
                 .orElseThrow(OrganizationNotFoundException::new);

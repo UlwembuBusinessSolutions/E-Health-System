@@ -145,15 +145,6 @@ public class PlatformController {
         return ResponseEntity.noContent().build();
     }
 
-    // Distinct from enable/disable above — see StaffController.unlock()'s
-    // own why-note on why LOCKED needs its own lever.
-    @PostMapping("/{id}/admins/{userId}/unlock")
-    public ResponseEntity<Void> unlockAdmin(@PathVariable UUID id, @PathVariable UUID userId,
-                                             @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
-        provisioningService.unlockAdmin(id, userId, operator.operatorId());
-        return ResponseEntity.noContent().build();
-    }
-
     // temporaryPassword returned exactly once — same discipline as every
     // other password-exposing response in this controller.
     public record AdminResetPasswordResponse(String temporaryPassword) {

@@ -2,19 +2,15 @@ package co.ehealth.platform.patient;
 
 import co.ehealth.platform.identity.Gender;
 import jakarta.persistence.Column;
-import jakarta.persistence.CollectionTable;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.UUID;
 
 // PREG-US-001's "PatientEmployee entity" — one row per person registered at
@@ -82,17 +78,12 @@ public class Patient {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @ElementCollection
-    @CollectionTable(name = "patient_next_of_kin", joinColumns = @JoinColumn(name = "patient_id"))
-    private List<NextOfKin> nextOfKin;
-
     protected Patient() {
     }
 
     public Patient(String mpiNumber, String firstName, String lastName, LocalDate dateOfBirth, Gender gender,
                    CitizenshipStatus citizenshipStatus, String idNumber, String address, String contactNumber,
-                   String medicalAidProvider, String medicalAidNumber, List<NextOfKin> nextOfKin,
-                   UUID registeredByUserId, Instant createdAt) {
+                   String medicalAidProvider, String medicalAidNumber, UUID registeredByUserId, Instant createdAt) {
         this.mpiNumber = mpiNumber;
         this.firstName = firstName;
         this.lastName = lastName;
@@ -104,7 +95,6 @@ public class Patient {
         this.contactNumber = contactNumber;
         this.medicalAidProvider = medicalAidProvider;
         this.medicalAidNumber = medicalAidNumber;
-        this.nextOfKin = List.copyOf(nextOfKin);
         this.registeredByUserId = registeredByUserId;
         this.createdAt = createdAt;
     }
@@ -163,9 +153,5 @@ public class Patient {
 
     public Instant getCreatedAt() {
         return createdAt;
-    }
-
-    public List<NextOfKin> getNextOfKin() {
-        return nextOfKin;
     }
 }

@@ -168,12 +168,6 @@ public class AuthService {
         user.setLastFailedLoginAt(now);
         if (user.getFailedLoginCount() >= MAX_FAILED_ATTEMPTS) {
             user.lock(now);
-            // The one transition in this method actually worth its own audit
-            // row — every failed attempt below the threshold is just a
-            // counter increment, but crossing it changes the account's
-            // status, which AUDT-US-005's reviewers need visibility into.
-            auditLogService.append(user.getId(), null, "ACCOUNT_LOCKED", "User", user.getId().toString(),
-                    null, "failedLoginCount: " + user.getFailedLoginCount());
         }
     }
 }

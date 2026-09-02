@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -43,14 +42,11 @@ public class PatientService {
             throw new DuplicateFieldException("idNumber", "A patient with this ID number is already registered.");
         }
         SouthAfricanIdNumber parsed = SouthAfricanIdNumber.parse(cmd.idNumber());
-        if (cmd.nextOfKin().isEmpty() && parsed.dateOfBirth().isAfter(LocalDate.now(clock).minusYears(18))) {
-            throw new MinorNextOfKinRequiredException();
-        }
 
         String mpiNumber = "MPI-" + String.format("%07d", patientRepository.nextMpiSequenceValue());
         Patient patient = new Patient(mpiNumber, cmd.firstName(), cmd.lastName(), parsed.dateOfBirth(),
                 parsed.gender(), parsed.citizenshipStatus(), cmd.idNumber(), cmd.address(), cmd.contactNumber(),
-                cmd.medicalAidProvider(), cmd.medicalAidNumber(), cmd.nextOfKin(), registeredByUserId, clock.instant());
+                cmd.medicalAidProvider(), cmd.medicalAidNumber(), registeredByUserId, clock.instant());
         patientRepository.save(patient);
 
         auditLogService.append(registeredByUserId, null, "PATIENT_REGISTERED", "Patient",
@@ -79,6 +75,6 @@ public class PatientService {
 
     public record RegisterPatientCommand(String firstName, String lastName, String idNumber, String address,
                                           String contactNumber, String medicalAidProvider,
-                                          String medicalAidNumber, List<NextOfKin> nextOfKin) {
+                                          String medicalAidNumber) {
     }
 }

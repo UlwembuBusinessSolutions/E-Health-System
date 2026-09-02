@@ -129,10 +129,6 @@ public class PlatformAuthService {
         operator.setLastFailedLoginAt(now);
         if (operator.getFailedLoginCount() >= MAX_FAILED_ATTEMPTS) {
             operator.lock(now);
-            // Same "crossing the threshold is the one transition worth its
-            // own row" reasoning as identity.AuthService.registerFailedAttempt().
-            platformAuditLogRepository.save(new PlatformAuditLog(operator.getId(), "ACCOUNT_LOCKED", null,
-                    "failedLoginCount: " + operator.getFailedLoginCount(), now));
         }
     }
 

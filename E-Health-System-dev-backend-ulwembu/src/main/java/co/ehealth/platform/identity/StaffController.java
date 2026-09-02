@@ -95,16 +95,6 @@ public class StaffController {
         return ResponseEntity.noContent().build();
     }
 
-    // Distinct from enable() above: enable/disable toggle ACTIVE/DISABLED
-    // (a deliberate admin decision), this reverses LOCKED (an automatic
-    // consequence of failed login attempts) — the two statuses are never
-    // meant to be flipped by the same lever.
-    @PostMapping("/api/v1/admin/staff/{id}/unlock")
-    public ResponseEntity<Void> unlock(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedPrincipal admin) {
-        staffService.unlockAccount(id, admin.userId());
-        return ResponseEntity.noContent().build();
-    }
-
     // temporaryPassword returned exactly once — same discipline as
     // StaffSummary's own creation-time counterpart never re-exposing it.
     public record ResetPasswordResponse(String temporaryPassword) {
