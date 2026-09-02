@@ -288,32 +288,34 @@ export function PatientDetailPage() {
           )}
 
           {startedVisit && (
-            <div className="print-ticket" aria-hidden="true">
-              <p className="print-ticket__brand">Ulwembu Healthcare Management System</p>
-              <p className="print-ticket__heading">Queue ticket</p>
-              <p className="print-ticket__token">#{startedVisit.token.tokenNumber}</p>
-              <dl className="print-ticket__details">
-                <div>
-                  <dt>Service station</dt>
-                  <dd>{serviceStationLabel(startedVisit.visit.serviceStream)}</dd>
-                </div>
-                <div>
-                  <dt>Estimated wait</dt>
-                  <dd>About {estimatedWaitMinutes} minutes</dd>
-                </div>
-                <div>
-                  <dt>Issued</dt>
-                  <dd>{formatDateTime(startedVisit.token.issuedAt)}</dd>
-                </div>
-                <div>
-                  <dt>Facility</dt>
-                  <dd>{selectedFacility?.name ?? "Clinic"}</dd>
-                </div>
-              </dl>
-              <p className="print-ticket__patient">Patient: {patient.firstName} {patient.lastName}</p>
-              <p className="print-ticket__footer">Please keep this ticket and wait for your number to be called.</p>
-            </div>
-          )}
+  <div className="print-ticket" aria-hidden="true">
+    <div className="print-ticket__content">
+      <p className="print-ticket__brand">Ulwembu Healthcare Management System</p>
+      <p className="print-ticket__heading">Queue ticket</p>
+      <p className="print-ticket__token">#{startedVisit.token.tokenNumber}</p>
+      <dl className="print-ticket__details">
+        <div>
+          <dt>Service station</dt>
+          <dd>{serviceStationLabel(startedVisit.visit.serviceStream)}</dd>
+        </div>
+        <div>
+          <dt>Estimated wait</dt>
+          <dd>About {estimatedWaitMinutes} minutes</dd>
+        </div>
+        <div>
+          <dt>Issued</dt>
+          <dd>{formatDateTime(startedVisit.token.issuedAt)}</dd>
+        </div>
+        <div>
+          <dt>Facility</dt>
+          <dd>{selectedFacility?.name ?? "Clinic"}</dd>
+        </div>
+      </dl>
+      <p className="print-ticket__patient">Patient: {patient.firstName} {patient.lastName}</p>
+      <p className="print-ticket__footer">Please keep this ticket and wait for your number to be called.</p>
+    </div>
+  </div>
+)}
 
           {(isPrescribing || createdPrescription) && (
             <Card className="mb-6 p-6">
