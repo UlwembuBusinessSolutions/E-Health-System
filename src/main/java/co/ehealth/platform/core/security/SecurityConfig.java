@@ -1,6 +1,7 @@
 package co.ehealth.platform.core.security;
 
 import co.ehealth.platform.identity.UserRepository;
+import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.platform.PlatformOperatorRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -36,13 +37,13 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(
-            HttpSecurity http, JwtService jwtService, UserRepository userRepository,
+            HttpSecurity http, JwtService jwtService, UserRepository userRepository, AuditLogService auditLogService,
             PlatformJwtService platformJwtService, PlatformOperatorRepository platformOperatorRepository,
             SessionActivityStore activityStore, Clock clock,
             @Value("${app.idle-lock.timeout-minutes}") long idleTimeoutMinutes,
             CorsConfigurationSource corsConfigurationSource) throws Exception {
 
-        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository);
+        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository, auditLogService);
         IdleLockFilter idleLockFilter =
                 new IdleLockFilter(activityStore, Duration.ofMinutes(idleTimeoutMinutes), clock);
         PlatformJwtAuthenticationFilter platformJwtFilter =
