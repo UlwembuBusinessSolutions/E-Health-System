@@ -5,6 +5,8 @@ import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.facility.FacilityService;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
+import co.ehealth.platform.patient.Patient;
+import co.ehealth.platform.patient.PatientArchivedException;
 import co.ehealth.platform.patient.PatientService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,8 +26,8 @@ public class VisitService {
     private final PermissionService permissionService;
 
     public VisitService(VisitRepository visitRepository, PatientService patientService,
-                         FacilityService facilityService, QueueService queueService,
-                         AuditLogService auditLogService, Clock clock, PermissionService permissionService) {
+            FacilityService facilityService, QueueService queueService,
+            AuditLogService auditLogService, Clock clock, PermissionService permissionService) {
         this.visitRepository = visitRepository;
         this.patientService = patientService;
         this.facilityService = facilityService;
@@ -47,6 +49,14 @@ public class VisitService {
     public VisitWithToken createVisit(CreateVisitCommand cmd, UUID staffUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
         patientService.get(cmd.patientId());
+
+        Patient patient = patientService.get(cmd.patientId());
+        if (patient.isDeceased()) {
+            throw new PatientArchivedException();
+        }
+
+        facilityService.get(cmd.facilityId());
+
         facilityService.get(cmd.facilityId());
 
         Visit visit = new Visit(cmd.patientId(), cmd.facilityId(), cmd.visitType(), cmd.serviceStream(),
@@ -67,7 +77,7 @@ public class VisitService {
     }
 
     public record CreateVisitCommand(UUID patientId, UUID facilityId, VisitType visitType,
-                                      ServiceStream serviceStream) {
+            ServiceStream serviceStream) {
     }
 
     public record VisitWithToken(Visit visit, QueueToken token) {

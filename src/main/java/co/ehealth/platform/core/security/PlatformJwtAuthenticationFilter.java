@@ -35,7 +35,7 @@ public class PlatformJwtAuthenticationFilter extends OncePerRequestFilter {
     private final PlatformOperatorRepository platformOperatorRepository;
 
     public PlatformJwtAuthenticationFilter(PlatformJwtService platformJwtService,
-                                            PlatformOperatorRepository platformOperatorRepository) {
+            PlatformOperatorRepository platformOperatorRepository) {
         this.platformJwtService = platformJwtService;
         this.platformOperatorRepository = platformOperatorRepository;
     }
@@ -82,6 +82,8 @@ public class PlatformJwtAuthenticationFilter extends OncePerRequestFilter {
                 new PlatformOperatorPrincipal(operatorId, claims.getId()), null,
                 List.of(new SimpleGrantedAuthority("ROLE_PLATFORM_OPERATOR")));
         SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        request.setAttribute("platformOperatorId", operatorId);
 
         chain.doFilter(request, response);
     }

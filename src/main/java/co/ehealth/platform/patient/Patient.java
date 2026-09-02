@@ -75,7 +75,32 @@ public class Patient {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(nullable = false)
+    private boolean deceased = false;
+
+    @Column(name = "date_of_death")
+    private LocalDate dateOfDeath;
+
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
+    @Column(name = "archived_by_user_id")
+    private UUID archivedByUserId;
+
     protected Patient() {
+    }
+
+    // The one place "is this record locked" is decided — PatientService.update()
+    // and any other write path checks this rather than re-deriving it.
+    public boolean isDeceased() {
+        return deceased;
+    }
+
+    public void markDeceased(LocalDate dateOfDeath, UUID archivedByUserId, Instant archivedAt) {
+        this.deceased = true;
+        this.dateOfDeath = dateOfDeath;
+        this.archivedByUserId = archivedByUserId;
+        this.archivedAt = archivedAt;
     }
 
     public Patient(String mpiNumber, String firstName, String lastName, LocalDate dateOfBirth, Gender gender,
