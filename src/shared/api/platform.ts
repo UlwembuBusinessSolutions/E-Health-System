@@ -436,6 +436,7 @@ export async function listPlatformAudit(params: ListPlatformAuditParams = {}): P
   if (params.organizationId) search.set("organizationId", params.organizationId);
   if (params.from) search.set("from", params.from);
   if (params.to) search.set("to", params.to);
+  if (params.privileged !== undefined) search.set("privileged", String(params.privileged));
   const queryString = search.toString();
   const response = await apiClient.get<{ items: PlatformAuditEntry[] }>(
     `/platform/audit${queryString ? `?${queryString}` : ""}`,
@@ -443,6 +444,20 @@ export async function listPlatformAudit(params: ListPlatformAuditParams = {}): P
   );
   return response.items;
 }
+
+// export async function listPlatformAudit(params: ListPlatformAuditParams = {}): Promise<PlatformAuditEntry[]> {
+//   const search = new URLSearchParams();
+//   if (params.action) search.set("action", params.action);
+//   if (params.organizationId) search.set("organizationId", params.organizationId);
+//   if (params.from) search.set("from", params.from);
+//   if (params.to) search.set("to", params.to);
+//   const queryString = search.toString();
+//   const response = await apiClient.get<{ items: PlatformAuditEntry[] }>(
+//     `/platform/audit${queryString ? `?${queryString}` : ""}`,
+//     { headers: authHeaders() },
+//   );
+//   return response.items;
+// }
 
 // One organization's own trail (its tenant-schema audit_log), viewed by a
 // platform operator — OrganizationProvisioningService.listTenantAuditLog()'s
@@ -471,4 +486,33 @@ export async function listOrganizationAudit(organizationId: string): Promise<Ten
     { headers: authHeaders() },
   );
   return response.items;
+}
+
+
+// PlatformAuditEntry — add one field:
+export interface PlatformAuditEntry {
+  id: string;
+  action: string;
+  detail: string | null;
+  createdAt: string;
+  operatorName: string;
+  operatorEmail: string;
+  organizationId: string | null;
+  organizationName: string | null;
+  // BR-AUDT-030 AC1 — every row here already implies a platform operator
+  // by this table's own nature EXCEPT CROSS_TENANT_ACCESS (AC2), which can
+  // have none. Explicit rather than inferred from operatorName being
+  // "Unknown operator", since that string is also what a since-deleted
+  // real operator would show as.
+  privileged: boolean;
+  ipAddress: string | null;
+  deviceSignature: string | null;
+}
+
+export interface ListPlatformAuditParams {
+  action?: string;
+  organizationId?: string;
+  from?: string;
+  to?: string;
+  privileged?: boolean;
 }
