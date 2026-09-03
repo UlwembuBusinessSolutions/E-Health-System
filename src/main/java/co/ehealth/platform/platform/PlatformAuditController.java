@@ -34,33 +34,15 @@ public class PlatformAuditController {
     // from is midnight that day; to is midnight the NEXT day, so the whole
     // end date is included rather than silently excluding everything after
     // 00:00:00 on it.
-    // @GetMapping
-    // public ResponseEntity<Map<String, Object>> list(
-    // @RequestParam(required = false) String action,
-    // @RequestParam(required = false) UUID organizationId,
-    // @RequestParam(required = false) @DateTimeFormat(iso =
-    // DateTimeFormat.ISO.DATE) LocalDate from,
-    // @RequestParam(required = false) @DateTimeFormat(iso =
-    // DateTimeFormat.ISO.DATE) LocalDate to) {
-    // Instant fromInstant = from != null ?
-    // from.atStartOfDay(ZoneOffset.UTC).toInstant() : null;
-    // Instant toInstant = to != null ?
-    // to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant() : null;
-    // var items = platformAuditService.list(action, organizationId, fromInstant,
-    // toInstant);
-    // return ResponseEntity.ok(Map.of("items", items));
-    // }
-
     @GetMapping
     public ResponseEntity<Map<String, Object>> list(
             @RequestParam(required = false) String action,
             @RequestParam(required = false) UUID organizationId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) Boolean privileged) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         Instant fromInstant = from != null ? from.atStartOfDay(ZoneOffset.UTC).toInstant() : null;
         Instant toInstant = to != null ? to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant() : null;
-        var items = platformAuditService.list(action, organizationId, fromInstant, toInstant, privileged);
+        var items = platformAuditService.list(action, organizationId, fromInstant, toInstant);
         return ResponseEntity.ok(Map.of("items", items));
     }
 }
