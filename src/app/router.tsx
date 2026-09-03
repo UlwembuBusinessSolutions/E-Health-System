@@ -27,6 +27,7 @@ import { AddClinicScreen } from "@/platform/AddClinicScreen";
 import { UsersPage } from "@/platform/UsersPage";
 import { CreateOperatorScreen } from "@/platform/CreateOperatorScreen";
 import { AuditPage } from "@/platform/AuditPage";
+import { AuditLogPage } from "@/audit/AuditLogPage";
 
 export function AppRouter() {
   return (
@@ -66,6 +67,7 @@ export function AppRouter() {
         <Route path="patients/:id/edit" element={<EditPatientScreen />} />
         <Route path="queue" element={<QueuePage />} />
         <Route path="pharmacy" element={<PharmacyQueuePage />} />
+        <Route path="audit" element={<AuditLogPage />} />
       </Route>
 
       <Route path="/platform" element={<PlatformRoot />}>

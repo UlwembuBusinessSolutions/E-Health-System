@@ -28,6 +28,9 @@ export interface Patient {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
+  dateOfDeath: string | null;
+  deceased: boolean;
+  archivedAt: string | null;
   gender: Gender;
   citizenshipStatus: CitizenshipStatus;
 
@@ -39,6 +42,15 @@ export interface Patient {
   medicalAidProvider: string | null;
   medicalAidNumber: string | null;
   createdAt: string;
+}
+
+// export async function markPatientDeceased(id: string, dateOfDeath: string): Promise<Patient> {
+//   return apiClient.post<Patient>(`/api/v1/patients/${id}/deceased`, { dateOfDeath }, { headers: tenantAuthHeaders() });
+// }
+
+export async function markPatientDeceased(id: string, dateOfDeath: string, confirmDateOfBirth: string,): Promise<Patient> 
+{
+  return apiClient.post<Patient>(`/api/v1/patients/${id}/deceased`,{ dateOfDeath, confirmDateOfBirth },{ headers: tenantAuthHeaders() },);
 }
 
 export async function registerPatient(payload: RegisterPatientPayload): Promise<Patient> 

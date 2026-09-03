@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CreditCard, Hash, MapPin, Phone, User } from "lucide-react";
 
+//import { useAuth } from "@/auth/AuthContext";
+
 import {
   editPatientSchema,
   CLINICALLY_SIGNIFICANT_FIELDS,
@@ -42,6 +44,10 @@ export function EditPatientScreen() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [formError, setFormError] = useState<string | null>(null);
+  // const { user } = useAuth();
+
+  // const canEditPage =
+  //   user?.role === "ORG_ADMIN" || user?.role === "Admin Staff" || user?.role === "Queue Marshall";
 
   const patientQuery = useQuery({
     queryKey: ["patients", patientId],
@@ -151,6 +157,13 @@ export function EditPatientScreen() {
     }
     mutation.mutate(values);
   };
+
+  useEffect(() => {
+    if (patientQuery.data?.deceased) 
+    {
+      navigate(`/app/patients/${patientId}`, { replace: true });
+    }
+  }, [patientQuery.data, patientId, navigate]);
 
   const patient = patientQuery.data;
 
