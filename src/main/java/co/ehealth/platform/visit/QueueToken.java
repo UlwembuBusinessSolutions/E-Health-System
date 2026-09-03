@@ -89,6 +89,20 @@ public class QueueToken {
         this.issuedByUserId = issuedByUserId;
     }
 
+    // Boosting (or demoting) priority in place — deliberately does NOT touch
+    // issuedAt or status, unlike issuing a fresh manual token: bumping an
+    // already-waiting patient to PRIORITY should move them up the existing
+    // queue, not spawn a second row for the same visit sitting alongside
+    // the original. Blocked once the token is resolved (COMPLETED/
+    // CANCELLED) — nothing about a closed-out token's priority still
+    // matters.
+    public void updatePriority(TokenPriority priority) {
+        if (status == TokenStatus.COMPLETED || status == TokenStatus.CANCELLED) {
+            throw new InvalidTokenTransitionException(status);
+        }
+        this.priority = priority;
+    }
+
     // RECQ-US-004 — "Called" status + call time recorded.
     public void call(Instant at) {
         this.status = TokenStatus.CALLED;

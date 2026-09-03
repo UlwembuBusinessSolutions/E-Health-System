@@ -168,6 +168,25 @@ public class QueueService {
         return toView(next);
     }
 
+    // Boosting (or demoting) priority in place — the fix for a real bug:
+    // this used to be done by calling issueManualToken() again against the
+    // same visit, which issues a genuinely new token/token-number rather
+    // than changing the existing one. That left the original token sitting
+    // in today's list untouched, so boosting a waiting patient produced two
+    // visible rows for them instead of moving the one row up the queue.
+    // This mutates the existing token's priority only — no new token, no
+    // change to issuedAt or status.
+    @Transactional
+    public QueueEntryView updatePriority(UUID tokenId, TokenPriority priority, UUID staffUserId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        QueueToken token = findToken(tokenId);
+        token.updatePriority(priority);
+        queueTokenRepository.save(token);
+        auditLogService.append(staffUserId, token.getFacilityId(), "QUEUE_TOKEN_PRIORITY_UPDATED", "QueueToken",
+                token.getId().toString(), null, null);
+        return toView(token);
+    }
+
     // The out-and-back scenario, step one: a nurse/marshall flags a called
     // token as MISSED when the patient doesn't respond, instead of it
     // silently sitting as CALLED forever (queue-appointments-plan.md

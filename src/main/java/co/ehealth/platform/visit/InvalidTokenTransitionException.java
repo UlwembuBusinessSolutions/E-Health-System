@@ -9,4 +9,11 @@ public class InvalidTokenTransitionException extends RuntimeException {
     public InvalidTokenTransitionException(TokenStatus from, TokenStatus to) {
         super("Can't move a token from " + from + " to " + to + ".");
     }
+
+    // QueueToken.updatePriority() — the token itself isn't changing status,
+    // it's just too far along (COMPLETED/CANCELLED) for a priority change
+    // to mean anything.
+    public InvalidTokenTransitionException(TokenStatus current) {
+        super("Can't change priority on a token that's already " + current + ".");
+    }
 }
