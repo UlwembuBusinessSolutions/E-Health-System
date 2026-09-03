@@ -7,7 +7,10 @@ import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/PlatformOperatorController.java
 import org.springframework.web.bind.annotation.DeleteMapping;
+=======
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/PlatformOperatorController.java
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -79,6 +82,7 @@ public class PlatformOperatorController {
         return ResponseEntity.noContent().build();
     }
 
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/PlatformOperatorController.java
     // Distinct from enable()/disable() above — see PlatformOperatorService.unlock()'s
     // own why-note on why LOCKED needs its own lever rather than reusing
     // setEnabled().
@@ -99,6 +103,8 @@ public class PlatformOperatorController {
         return ResponseEntity.noContent().build();
     }
 
+=======
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/PlatformOperatorController.java
     // temporaryPassword returned exactly once — same discipline as
     // CreatedOperator above.
     public record ResetPasswordResponse(String temporaryPassword) {

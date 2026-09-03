@@ -91,9 +91,18 @@ public class PlatformJwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/core/security/PlatformJwtAuthenticationFilter.java
         // /platform/auth/login is how an operator gets a token in the
         // first place — can't require one to reach it.
         return !uri.startsWith("/platform/")
+=======
+        boolean platformProtectedRoute = uri.startsWith("/platform/") || uri.startsWith("/api/v1/tenants");
+        // /platform/auth/login and /platform/auth/register are the only
+        // platform-auth routes that should be reachable before a token
+        // exists; /api/v1/tenants is protected, but must still use the
+        // same platform header/token flow once the user is authenticated.
+        return !platformProtectedRoute
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/core/security/PlatformJwtAuthenticationFilter.java
             || "OPTIONS".equalsIgnoreCase(request.getMethod())
             || uri.equals("/platform/auth/login")
             || uri.equals("/platform/auth/register");

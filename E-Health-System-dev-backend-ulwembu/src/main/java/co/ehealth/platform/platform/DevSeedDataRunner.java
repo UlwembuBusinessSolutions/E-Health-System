@@ -14,8 +14,11 @@ import co.ehealth.platform.identity.Role;
 import co.ehealth.platform.identity.RoleRepository;
 import co.ehealth.platform.identity.StaffService;
 import co.ehealth.platform.identity.User;
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
 import co.ehealth.platform.identity.UserRepository;
 import co.ehealth.platform.patient.PatientRepository;
+=======
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
 import co.ehealth.platform.patient.PatientService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
@@ -58,8 +61,11 @@ public class DevSeedDataRunner implements ApplicationRunner {
     private final RoleRepository roleRepository;
     private final StaffService staffService;
     private final PatientService patientService;
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
         private final PatientRepository patientRepository;
         private final UserRepository userRepository;
+=======
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
     private final String bootstrapOperatorEmail;
 
     public DevSeedDataRunner(OrganizationRepository organizationRepository,
@@ -67,7 +73,10 @@ public class DevSeedDataRunner implements ApplicationRunner {
                               PlatformOperatorRepository platformOperatorRepository,
                               FacilityService facilityService, RoleRepository roleRepository,
                               StaffService staffService, PatientService patientService,
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
                               PatientRepository patientRepository, UserRepository userRepository,
+=======
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
                               @Value("${app.platform.bootstrap.email}") String bootstrapOperatorEmail) {
         this.organizationRepository = organizationRepository;
         this.provisioningService = provisioningService;
@@ -76,14 +85,18 @@ public class DevSeedDataRunner implements ApplicationRunner {
         this.roleRepository = roleRepository;
         this.staffService = staffService;
         this.patientService = patientService;
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
         this.patientRepository = patientRepository;
         this.userRepository = userRepository;
+=======
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
         this.bootstrapOperatorEmail = bootstrapOperatorEmail;
     }
 
     @Override
     public void run(ApplicationArguments args) {
         if (organizationRepository.existsBySlug(DEMO_SLUG)) {
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
             Organization organization = organizationRepository.findBySlug(DEMO_SLUG).orElseThrow();
             TenantContext.setCurrentTenant(organization.getSchemaName());
             try {
@@ -96,6 +109,8 @@ public class DevSeedDataRunner implements ApplicationRunner {
             } finally {
                 TenantContext.clear();
             }
+=======
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
             return;
         }
 
@@ -150,10 +165,13 @@ public class DevSeedDataRunner implements ApplicationRunner {
                 "EMP-1006", "8309305800088", "l.zulu@democlinic.example", "+27821234507",
                 Gender.FEMALE, LocalDate.of(1983, 9, 30), "Management", "Facility Manager", adminUserId);
 
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
         seedPatientData(adminUserId);
     }
 
     private void seedPatientData(UUID adminUserId) {
+=======
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
         // PatientService.register() is gated by PermissionService (PREG:MANAGE),
         // which reads the acting role straight off SecurityContextHolder —
         // there's no real HTTP request/JWT here to populate that, so a
@@ -194,7 +212,11 @@ public class DevSeedDataRunner implements ApplicationRunner {
                 firstName, lastName, employeeNumber, idNumber, email, contactNumber, gender, dateOfBirth,
                 LocalDate.now(), EmploymentType.PERMANENT, managerId, facilityId, List.of(),
                 department, designation, role.getId(), null, null, null, null, null, null,
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
                 "Emergency Contact", "Family", "+27831110000"), managerId);
+=======
+                "Emergency Contact", "Family", "+27831110000", "ChangeMe123!"), managerId);
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
         return user.getId();
     }
 
@@ -203,8 +225,12 @@ public class DevSeedDataRunner implements ApplicationRunner {
                                   String medicalAidNumber, UUID registeredByUserId) {
         String idNumber = southAfricanIdNumber(dateOfBirth, genderSequence);
         patientService.register(new PatientService.RegisterPatientCommand(
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
                 firstName, lastName, idNumber, address, contactNumber, medicalAidProvider, medicalAidNumber,
                 List.of()),
+=======
+                firstName, lastName, idNumber, address, contactNumber, medicalAidProvider, medicalAidNumber),
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/DevSeedDataRunner.java
                 registeredByUserId);
     }
 

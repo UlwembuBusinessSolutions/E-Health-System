@@ -65,7 +65,11 @@ public class StaffController {
                 request.sancNumber(), request.sancExpiryDate(), request.hpcsaNumber(), request.hpcsaExpiryDate(),
                 request.sapcNumber(), request.sapcExpiryDate(),
                 request.emergencyContactName(), request.emergencyContactRelationship(),
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/identity/StaffController.java
                 request.emergencyContactPhone());
+=======
+                request.emergencyContactPhone(), request.temporaryPassword());
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/identity/StaffController.java
         User created = staffService.createStaff(command, admin.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(StaffSummary.from(created));
     }
@@ -95,6 +99,7 @@ public class StaffController {
         return ResponseEntity.noContent().build();
     }
 
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/identity/StaffController.java
     // Distinct from enable() above: enable/disable toggle ACTIVE/DISABLED
     // (a deliberate admin decision), this reverses LOCKED (an automatic
     // consequence of failed login attempts) — the two statuses are never
@@ -105,6 +110,8 @@ public class StaffController {
         return ResponseEntity.noContent().build();
     }
 
+=======
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/identity/StaffController.java
     // temporaryPassword returned exactly once — same discipline as
     // StaffSummary's own creation-time counterpart never re-exposing it.
     public record ResetPasswordResponse(String temporaryPassword) {

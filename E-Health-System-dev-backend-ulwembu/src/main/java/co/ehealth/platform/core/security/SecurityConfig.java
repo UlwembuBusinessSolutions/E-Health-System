@@ -36,7 +36,11 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/core/security/SecurityConfig.java
             HttpSecurity http, JwtService jwtService, UserRepository userRepository,
+=======
+            HttpSecurity http, JwtService jwtService, UserRepository userRepository, AuditLogService auditLogService,
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/core/security/SecurityConfig.java
             PlatformJwtService platformJwtService, PlatformOperatorRepository platformOperatorRepository,
             SessionActivityStore activityStore, Clock clock,
             @Value("${app.idle-lock.timeout-minutes}") long idleTimeoutMinutes,
@@ -56,7 +60,15 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/password-reset/**",
                         "/actuator/health").permitAll()
                 // Getting a token in the first place can't require one.
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/core/security/SecurityConfig.java
                 .requestMatchers("/platform/auth/login", "/platform/auth/register", "/platform/auth/password-reset/**").permitAll()
+=======
+                .requestMatchers("/platform/auth/login", "/platform/auth/register").permitAll()
+                // SADM-US-005's register is deliberately under /api/v1 for
+                // the console contract, but remains platform-scoped rather
+                // than tenant-scoped.
+                .requestMatchers("/api/v1/tenants/**").hasRole("PLATFORM_OPERATOR")
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/core/security/SecurityConfig.java
                 // Everything else under /platform/** needs a real,
                 // ACTIVE, correctly-signed operator token — PlatformJwtAuthenticationFilter
                 // is what actually populates that Authentication; this

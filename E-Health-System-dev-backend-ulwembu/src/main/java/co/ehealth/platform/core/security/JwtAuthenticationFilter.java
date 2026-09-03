@@ -24,9 +24,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final UserRepository userRepository;
 
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/core/security/JwtAuthenticationFilter.java
     public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository) {
+=======
+    public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository, AuditLogService auditLogService) {
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/core/security/JwtAuthenticationFilter.java
         this.jwtService = jwtService;
         this.userRepository = userRepository;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return request.getRequestURI().startsWith("/platform/");
     }
 
     @Override
@@ -63,6 +72,32 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String tokenTenant = claims.get("tenant", String.class);
         if (!tokenTenant.equals(TenantContext.getCurrentTenant())) {
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/core/security/JwtAuthenticationFilter.java
+=======
+            if (isTenantAuditRequest(request)) {
+                // The request was routed by X-Tenant-ID to a different
+                // organisation, but this signed token names the caller's
+                // own schema. Switch only long enough to record the denied
+                // attempt there; the target schema is never queried.
+                String requestedTenant = TenantContext.getCurrentTenant();
+                try {
+                    TenantContext.setCurrentTenant(tokenTenant);
+                    UUID userId = UUID.fromString(claims.getSubject());
+                    auditLogService.append(userId, null, "AUDIT_ACCESS_DENIED", "AuditLog",
+                            requestedTenant == null ? "unknown" : requestedTenant, null,
+                            "{\"requestedTenant\":\"" + requestedTenant + "\"}");
+                } finally {
+                    if (requestedTenant == null) {
+                        TenantContext.clear();
+                    } else {
+                        TenantContext.setCurrentTenant(requestedTenant);
+                    }
+                }
+                FilterResponses.writeJsonError(response, HttpServletResponse.SC_FORBIDDEN,
+                        "You may only view your organization's audit events.");
+                return;
+            }
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/core/security/JwtAuthenticationFilter.java
             // A token minted for one client presented against another
             // client's subdomain — reject even though the signature itself
             // is valid, since every tenant currently shares one signing key.
@@ -96,5 +131,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         request.setAttribute("jti", claims.getId());
 
         chain.doFilter(request, response);
+    }
+
+    private boolean isTenantAuditRequest(HttpServletRequest request) {
+        return request.getRequestURI().equals("/api/v1/admin/audit");
     }
 }

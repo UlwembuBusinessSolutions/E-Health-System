@@ -121,6 +121,7 @@ public class PlatformOperatorService {
                 enabled ? "PLATFORM_OPERATOR_ENABLED" : "PLATFORM_OPERATOR_DISABLED", null, Instant.now()));
     }
 
+<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/PlatformOperatorService.java
     // Same "LOCKED is an automatic consequence, not the same lever as
     // enable/disable" reasoning as StaffService.unlockAccount() — a
     // locked-out operator has no self-service password reset, so another
@@ -169,6 +170,8 @@ public class PlatformOperatorService {
         platformOperatorRepository.delete(operator);
     }
 
+=======
+>>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/PlatformOperatorService.java
     public record CreateOperatorCommand(String firstName, String lastName, String email) {
     }
 
