@@ -27,8 +27,8 @@ public class QueueService {
     private final PermissionService permissionService;
 
     public QueueService(QueueTokenRepository queueTokenRepository, VisitRepository visitRepository,
-                         PatientService patientService, AuditLogService auditLogService, Clock clock,
-                         PermissionService permissionService) {
+            PatientService patientService, AuditLogService auditLogService, Clock clock,
+            PermissionService permissionService) {
         this.queueTokenRepository = queueTokenRepository;
         this.visitRepository = visitRepository;
         this.patientService = patientService;
@@ -106,14 +106,28 @@ public class QueueService {
         return queueTokenRepository.findActiveQueue(facilityId).stream().map(this::toView).toList();
     }
 
+    // private QueueEntryView toView(QueueToken token) {
+    // Visit visit =
+    // visitRepository.findById(token.getVisitId()).orElseThrow(VisitNotFoundException::new);
+    // Patient patient = patientService.get(visit.getPatientId());
+    // return new QueueEntryView(token, patient.getFirstName() + " " +
+    // patient.getLastName(),
+    // patient.getMpiNumber());
+    // }
+
+    // public record QueueEntryView(QueueToken token, String patientName, String
+    // patientMpi) {
+    // }
+
+    public record QueueEntryView(QueueToken token, String patientName, String patientMpi, ServiceStream serviceStream) {
+    }
+
     private QueueEntryView toView(QueueToken token) {
         Visit visit = visitRepository.findById(token.getVisitId()).orElseThrow(VisitNotFoundException::new);
         Patient patient = patientService.get(visit.getPatientId());
-        return new QueueEntryView(token, patient.getFirstName() + " " + patient.getLastName(),
-                patient.getMpiNumber());
-    }
 
-    public record QueueEntryView(QueueToken token, String patientName, String patientMpi) {
+        return new QueueEntryView(token, patient.getFirstName() + " " + patient.getLastName(),
+                patient.getMpiNumber(), visit.getServiceStream());
     }
 
     // RECQ-US-004 — "the highest-priority/longest-waiting token for the

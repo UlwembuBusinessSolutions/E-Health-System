@@ -13,14 +13,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
-// PREG-US-001's "PatientEmployee entity" — one row per person registered at
-// this tenant, living in that tenant's own schema like every other clinical
-// entity (patients belong to exactly one tenant, same isolation boundary as
-// users/staff). No update methods, no delete path anywhere in this class or
-// PatientRepository — PREG-US-017 ("patient records to be impossible to
-// delete through any interface") is enforced by omission, not a guard
-// clause; PREG-US-016 (update demographics) is a separate, later story this
-// slice doesn't build.
 @Entity
 @Table(name = "patients")
 public class Patient {
@@ -55,8 +47,13 @@ public class Patient {
     @Column(name = "citizenship_status", nullable = false, length = 20)
     private CitizenshipStatus citizenshipStatus;
 
-    @Column(name = "id_number", nullable = false, unique = true, length = 13)
+    @Column(name = "id_number", unique = true, length = 13)
     private String idNumber;
+
+    // nullable = false,
+
+    @Column(name = "passport_number", unique = true, length = 20)
+    private String passportNumber;
 
     @Column(nullable = false, length = 500)
     private String address;
@@ -78,12 +75,39 @@ public class Patient {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(nullable = false)
+    private boolean deceased = false;
+
+    @Column(name = "date_of_death")
+    private LocalDate dateOfDeath;
+
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
+    @Column(name = "archived_by_user_id")
+    private UUID archivedByUserId;
+
     protected Patient() {
     }
 
+    // The one place "is this record locked" is decided — PatientService.update()
+    // and any other write path checks this rather than re-deriving it.
+    public boolean isDeceased() {
+        return deceased;
+    }
+
+    public void markDeceased(LocalDate dateOfDeath, UUID archivedByUserId, Instant archivedAt) {
+        this.deceased = true;
+        this.dateOfDeath = dateOfDeath;
+        this.archivedByUserId = archivedByUserId;
+        this.archivedAt = archivedAt;
+    }
+
     public Patient(String mpiNumber, String firstName, String lastName, LocalDate dateOfBirth, Gender gender,
-                   CitizenshipStatus citizenshipStatus, String idNumber, String address, String contactNumber,
-                   String medicalAidProvider, String medicalAidNumber, UUID registeredByUserId, Instant createdAt) {
+            CitizenshipStatus citizenshipStatus, String idNumber, String passportNumber, String address,
+            String contactNumber, String medicalAidProvider, String medicalAidNumber, UUID registeredByUserId,
+            Instant createdAt) {
+
         this.mpiNumber = mpiNumber;
         this.firstName = firstName;
         this.lastName = lastName;
@@ -91,12 +115,57 @@ public class Patient {
         this.gender = gender;
         this.citizenshipStatus = citizenshipStatus;
         this.idNumber = idNumber;
+        this.passportNumber = passportNumber;
         this.address = address;
         this.contactNumber = contactNumber;
         this.medicalAidProvider = medicalAidProvider;
         this.medicalAidNumber = medicalAidNumber;
         this.registeredByUserId = registeredByUserId;
         this.createdAt = createdAt;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
+    }
+
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+
+    public void setGender(Gender gender) {
+        this.gender = gender;
+    }
+
+    public void setCitizenshipStatus(CitizenshipStatus citizenshipStatus) {
+        this.citizenshipStatus = citizenshipStatus;
+    }
+
+    public void setIdNumber(String idNumber) {
+        this.idNumber = idNumber;
+    }
+
+    public void setPassportNumber(String passportNumber) {
+        this.passportNumber = passportNumber;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public void setContactNumber(String contactNumber) {
+        this.contactNumber = contactNumber;
+    }
+
+    public void setMedicalAidProvider(String medicalAidProvider) {
+        this.medicalAidProvider = medicalAidProvider;
+    }
+
+    public void setMedicalAidNumber(String medicalAidNumber) {
+        this.medicalAidNumber = medicalAidNumber;
     }
 
     public UUID getId() {
@@ -129,6 +198,10 @@ public class Patient {
 
     public String getIdNumber() {
         return idNumber;
+    }
+
+    public String getPassportNumber() {
+        return passportNumber;
     }
 
     public String getAddress() {
