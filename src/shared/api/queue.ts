@@ -1,9 +1,10 @@
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
 
-// RECQ-US-001/002/004. Matches QueueController field-for-field.
+// RECQ-US-001/002/004/005 + the out-and-back recall flow. Matches
+// QueueController field-for-field.
 export type TokenPriority = "NORMAL" | "PRIORITY";
-export type TokenStatus = "ISSUED" | "CALLED";
+export type TokenStatus = "ISSUED" | "CALLED" | "MISSED" | "COMPLETED" | "CANCELLED";
 
 export interface QueueToken {
   id: string;
@@ -15,6 +16,10 @@ export interface QueueToken {
   manual: boolean;
   issuedAt: string;
   calledAt: string | null;
+  missedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
 }
 
 // The staff-facing queue view (patient name attached) — not the public
@@ -26,11 +31,15 @@ export interface QueueEntry {
   patientMpi: string;
 }
 
-export async function listQueue(facilityId: string): Promise<QueueEntry[]> {
-  const response = await apiClient.get<{ items: QueueEntry[] }>(
-    `/api/v1/queue?facilityId=${encodeURIComponent(facilityId)}`,
-    { headers: tenantAuthHeaders() },
-  );
+// RECQ-US-007 — `search` matches token number, patient name, or MPI, and is
+// applied server-side. Always scoped to today (queue-system-improvements.md
+// §1) — there is no "show me yesterday" mode, by design.
+export async function listQueue(facilityId: string, search?: string): Promise<QueueEntry[]> {
+  const params = new URLSearchParams({ facilityId });
+  if (search) params.set("search", search);
+  const response = await apiClient.get<{ items: QueueEntry[] }>(`/api/v1/queue?${params.toString()}`, {
+    headers: tenantAuthHeaders(),
+  });
   return response.items;
 }
 
@@ -47,6 +56,36 @@ export async function callNext(facilityId: string): Promise<QueueEntry> {
   return apiClient.post<QueueEntry>(
     `/api/v1/queue/call-next?facilityId=${encodeURIComponent(facilityId)}`,
     undefined,
+    { headers: tenantAuthHeaders() },
+  );
+}
+
+// The out-and-back scenario, step one — the patient didn't respond to the
+// call.
+export async function markMissed(tokenId: string): Promise<QueueEntry> {
+  return apiClient.post<QueueEntry>(`/api/v1/queue/tokens/${tokenId}/missed`, undefined, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+// Step two — the patient is back; re-inserted at their original priority
+// and place in line.
+export async function recallToken(tokenId: string): Promise<QueueEntry> {
+  return apiClient.post<QueueEntry>(`/api/v1/queue/tokens/${tokenId}/recall`, undefined, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export async function completeToken(tokenId: string): Promise<QueueEntry> {
+  return apiClient.post<QueueEntry>(`/api/v1/queue/tokens/${tokenId}/complete`, undefined, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export async function cancelToken(tokenId: string, reason: string): Promise<QueueEntry> {
+  return apiClient.post<QueueEntry>(
+    `/api/v1/queue/tokens/${tokenId}/cancel`,
+    { reason },
     { headers: tenantAuthHeaders() },
   );
 }
