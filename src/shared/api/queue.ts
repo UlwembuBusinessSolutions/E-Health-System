@@ -43,12 +43,23 @@ export async function listQueue(facilityId: string, search?: string): Promise<Qu
   return response.items;
 }
 
-// RECQ-US-002 — re-issues a token against a visit that already has one
-// (or previously had one), flagged manual for reporting. The queue page's
-// own "Boost to priority" action is this call with priority: "PRIORITY"
-// against an existing row's own visitId, not a separate visit lookup form.
+// RECQ-US-002 — issues a genuinely NEW token against a visit that doesn't
+// currently have an active one (a fresh walk-in intake, or a deliberate
+// from-scratch re-queue). Not for boosting an already-waiting patient's
+// priority — that's updateTokenPriority() below, which changes the
+// existing token in place instead of creating a second one.
 export async function issueManualToken(visitId: string, priority: TokenPriority): Promise<QueueToken> {
   return apiClient.post<QueueToken>("/api/v1/queue/tokens", { visitId, priority }, { headers: tenantAuthHeaders() });
+}
+
+// The queue page's "Boost to priority" action — changes an existing
+// token's priority in place, no new token/token-number involved.
+export async function updateTokenPriority(tokenId: string, priority: TokenPriority): Promise<QueueEntry> {
+  return apiClient.patch<QueueEntry>(
+    `/api/v1/queue/tokens/${tokenId}/priority`,
+    { priority },
+    { headers: tenantAuthHeaders() },
+  );
 }
 
 // RECQ-US-004 — refuses (409) on an empty queue.

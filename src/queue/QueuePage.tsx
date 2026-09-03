@@ -16,10 +16,10 @@ import {
   callNext,
   cancelToken,
   completeToken,
-  issueManualToken,
   listQueue,
   markMissed,
   recallToken,
+  updateTokenPriority,
   type QueueEntry,
   type TokenStatus,
 } from "@/shared/api/queue";
@@ -174,7 +174,7 @@ export function QueuePage() {
   });
 
   const boostMutation = useMutation({
-    mutationFn: (visitId: string) => issueManualToken(visitId, "PRIORITY"),
+    mutationFn: (tokenId: string) => updateTokenPriority(tokenId, "PRIORITY"),
     onMutate: () => setActionError(null),
     onSuccess: invalidateQueue,
     onError: (error) => {
@@ -417,8 +417,8 @@ export function QueuePage() {
                                 variant="secondary"
                                 size="md"
                                 icon={<ArrowUpCircle className="size-3.5" aria-hidden />}
-                                loading={boostMutation.isPending && boostMutation.variables === entry.token.visitId}
-                                onClick={() => boostMutation.mutate(entry.token.visitId)}
+                                loading={boostMutation.isPending && boostMutation.variables === entry.token.id}
+                                onClick={() => boostMutation.mutate(entry.token.id)}
                               >
                                 Boost
                               </Button>
