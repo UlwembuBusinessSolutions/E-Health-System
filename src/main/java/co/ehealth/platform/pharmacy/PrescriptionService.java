@@ -14,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -100,6 +102,19 @@ public class PrescriptionService {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
         return prescriptionRepository.findByFacilityIdAndStatusOrderByCreatedAtAsc(facilityId,
                 PrescriptionStatus.PENDING);
+    }
+
+    public List<Prescription> list() {
+        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        return prescriptionRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    public long countDispensedToday(UUID facilityId) {
+        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
+        Instant startedAt = today.atStartOfDay(ZoneOffset.UTC).toInstant();
+        return dispensingRecordRepository.countDispensedByFacilityBetween(facilityId, startedAt,
+                startedAt.plusSeconds(24 * 60 * 60));
     }
 
     // PHRM-US-009's other half — dispensing requires a current SAPC

@@ -67,7 +67,7 @@ class TriageAssessmentServiceTest {
         TriageAssessmentService service = new TriageAssessmentService(repository, visits, mock(AuditLogService.class),
                 mock(PermissionService.class), Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
 
-        TriageAssessmentService.CaptureResult result = service.capture(command(120, 80, 80, "37.0", 16, false),
+        TriageAssessmentService.CaptureResult result = service.capture(command(visitId, 120, 80, 80, "37.0", 16, false),
                 UUID.randomUUID());
 
         org.assertj.core.api.Assertions.assertThat(result.priorAssessment()).isSameAs(prior);
@@ -82,7 +82,13 @@ class TriageAssessmentServiceTest {
     private TriageAssessmentService.CaptureVitalsCommand command(int systolic, int diastolic, int heartRate,
                                                                     String temperature, int respiratoryRate,
                                                                     boolean confirmed) {
-        return new TriageAssessmentService.CaptureVitalsCommand(UUID.randomUUID(), systolic, diastolic, heartRate,
+                return command(UUID.randomUUID(), systolic, diastolic, heartRate, temperature, respiratoryRate, confirmed);
+        }
+
+        private TriageAssessmentService.CaptureVitalsCommand command(UUID visitId, int systolic, int diastolic,
+                                                                                                                                        int heartRate, String temperature,
+                                                                                                                                        int respiratoryRate, boolean confirmed) {
+                return new TriageAssessmentService.CaptureVitalsCommand(visitId, systolic, diastolic, heartRate,
                 new BigDecimal(temperature), respiratoryRate, AvpuLevel.ALERT, confirmed);
     }
 }

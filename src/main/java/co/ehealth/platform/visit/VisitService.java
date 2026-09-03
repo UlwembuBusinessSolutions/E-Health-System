@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -64,6 +65,11 @@ public class VisitService {
     public Visit get(UUID id) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
         return visitRepository.findById(id).orElseThrow(VisitNotFoundException::new);
+    }
+
+    public List<Visit> list() {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        return visitRepository.findAllByOrderByVisitDateTimeDesc();
     }
 
     public record CreateVisitCommand(UUID patientId, UUID facilityId, VisitType visitType,

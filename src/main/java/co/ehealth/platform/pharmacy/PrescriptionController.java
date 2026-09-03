@@ -55,6 +55,17 @@ public class PrescriptionController {
         return ResponseEntity.ok(Map.of("items", items));
     }
 
+    @GetMapping("/api/v1/prescriptions")
+    public ResponseEntity<Map<String, Object>> list() {
+        List<PrescriptionResponse> items = prescriptionService.list().stream().map(this::toResponse).toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    @GetMapping("/api/v1/prescriptions/stats")
+    public ResponseEntity<Map<String, Long>> stats(@RequestParam UUID facilityId) {
+        return ResponseEntity.ok(Map.of("dispensedToday", prescriptionService.countDispensedToday(facilityId)));
+    }
+
     @GetMapping("/api/v1/prescriptions/{id}")
     public ResponseEntity<PrescriptionResponse> get(@PathVariable UUID id) {
         return ResponseEntity.ok(toResponse(prescriptionService.get(id)));

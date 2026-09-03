@@ -19,4 +19,6 @@ public interface PrescriptionRepository extends JpaRepository<Prescription, UUID
     // (RECQ-US-010, Sprint 3), so this orders by issue time alone; revisit
     // once a real priority signal exists to sort by first.
     List<Prescription> findByFacilityIdAndStatusOrderByCreatedAtAsc(UUID facilityId, PrescriptionStatus status);
+
+    List<Prescription> findAllByOrderByCreatedAtDesc();
 }

@@ -73,10 +73,8 @@ class TenantRegisterServiceTest {
         Map<UUID, Integer> counts = service.clinicCounts(List.of(first, second));
 
         assertThat(counts).containsEntry(firstId, 0).containsEntry(secondId, 0);
-        verify(jdbcTemplate).query(org.mockito.ArgumentMatchers.argThat(sql ->
-                        sql.contains("\"first_clinic\".facilities")
-                                && sql.contains("\"second_clinic\".facilities")
-                                && sql.contains("UNION ALL")),
+        verify(jdbcTemplate).query(
+                org.mockito.ArgumentMatchers.matches("^(?=.*\"first_clinic\"\\.facilities)(?=.*\"second_clinic\"\\.facilities)(?=.*UNION ALL).*$"),
                 any(RowCallbackHandler.class));
     }
 }
