@@ -1,0 +1,35 @@
+/*
+  Scoped to .auth-fields, applied to the <form> in each auth screen
+  (LoginScreen, FindOrganizationScreen, ForgotPasswordScreen) — echoes the
+  eHealth Prototype's own .field label treatment (index.html: uppercase,
+  10px, weight 800) on top of this app's existing Input/PasswordInput/Select
+  components, which stay exactly as they are everywhere else those
+  components get used (staff creation, the platform console) rather than
+  changing their shared defaults for every screen in the app.
+
+  Tailwind v4 wraps its own utility classes in `@layer utilities`; this file
+  is deliberately not wrapped in any @layer, so per the CSS cascade-layers
+  spec these rules win over the Tailwind utilities Input.tsx/PasswordInput.tsx
+  already apply (border color, hint/error text size) regardless of selector
+  specificity — no !important needed.
+*/
+.auth-fields label {
+  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.auth-fields input {
+  border-color: var(--border-subtle);
+}
+
+.auth-fields input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.65;
+}
+
+.auth-fields p {
+  font-size: 11.5px;
+}
