@@ -1,8 +1,24 @@
-target/
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files
 .env
-*.local
-data/
+.env.*
+!.env.example
+
+# IDE
 .idea/
-*.iml
 .vscode/
+*.iml
+
+# OS
 .DS_Store
+
+# Backend
+target/
+
+# Local data
+data/
