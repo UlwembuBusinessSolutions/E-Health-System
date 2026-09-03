@@ -56,6 +56,21 @@ public class QueueToken {
     @Column(name = "called_at")
     private Instant calledAt;
 
+    @Column(name = "missed_at")
+    private Instant missedAt;
+
+    @Column(name = "completed_at")
+    private Instant completedAt;
+
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
+
+    @Column(name = "cancel_reason")
+    private String cancelReason;
+
+    @Column(name = "cancelled_by_user_id")
+    private UUID cancelledByUserId;
+
     @Column(name = "issued_by_user_id")
     private UUID issuedByUserId;
 
@@ -78,6 +93,52 @@ public class QueueToken {
     public void call(Instant at) {
         this.status = TokenStatus.CALLED;
         this.calledAt = at;
+    }
+
+    // The patient didn't respond to the call — a nurse/marshall flags it
+    // rather than the token silently sitting as CALLED forever. Only valid
+    // from CALLED: you can't miss a call that never happened.
+    public void markMissed(Instant at) {
+        requireStatus(TokenStatus.CALLED, TokenStatus.MISSED);
+        this.status = TokenStatus.MISSED;
+        this.missedAt = at;
+    }
+
+    // The out-and-back recall (queue-appointments-plan.md §3.8) — moves
+    // straight back to ISSUED without touching priority or issuedAt, so a
+    // patient who stepped out regains exactly the place they'd have had if
+    // they'd never missed the call. Only valid from MISSED.
+    public void recall() {
+        requireStatus(TokenStatus.MISSED, TokenStatus.ISSUED);
+        this.status = TokenStatus.ISSUED;
+    }
+
+    // RECQ-US-005 — service finished. Only valid from CALLED: a token has
+    // to have actually been called before it can be marked complete.
+    public void complete(Instant at) {
+        requireStatus(TokenStatus.CALLED, TokenStatus.COMPLETED);
+        this.status = TokenStatus.COMPLETED;
+        this.completedAt = at;
+    }
+
+    // RECQ-US-005 — cancellable from any non-terminal state (ISSUED,
+    // CALLED, or MISSED), always with a mandatory reason for the audit
+    // trail. COMPLETED/CANCELLED are terminal: reopening either would
+    // rewrite history rather than record a new fact.
+    public void cancel(Instant at, String reason, UUID cancelledByUserId) {
+        if (status == TokenStatus.COMPLETED || status == TokenStatus.CANCELLED) {
+            throw new InvalidTokenTransitionException(status, TokenStatus.CANCELLED);
+        }
+        this.status = TokenStatus.CANCELLED;
+        this.cancelledAt = at;
+        this.cancelReason = reason;
+        this.cancelledByUserId = cancelledByUserId;
+    }
+
+    private void requireStatus(TokenStatus required, TokenStatus target) {
+        if (status != required) {
+            throw new InvalidTokenTransitionException(status, target);
+        }
     }
 
     public UUID getId() {
@@ -114,6 +175,26 @@ public class QueueToken {
 
     public Instant getCalledAt() {
         return calledAt;
+    }
+
+    public Instant getMissedAt() {
+        return missedAt;
+    }
+
+    public Instant getCompletedAt() {
+        return completedAt;
+    }
+
+    public Instant getCancelledAt() {
+        return cancelledAt;
+    }
+
+    public String getCancelReason() {
+        return cancelReason;
+    }
+
+    public UUID getCancelledByUserId() {
+        return cancelledByUserId;
     }
 
     public UUID getIssuedByUserId() {

@@ -2,11 +2,13 @@ package co.ehealth.platform.visit;
 
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -31,10 +33,13 @@ public class QueueController {
         this.queueService = queueService;
     }
 
+    // RECQ-US-007 — `search` is optional and matches token number, patient
+    // name, or MPI (QueueService.matchesSearch()). Always scoped to today.
     @GetMapping("/api/v1/queue")
-    public ResponseEntity<Map<String, Object>> list(@RequestParam UUID facilityId) {
+    public ResponseEntity<Map<String, Object>> list(@RequestParam UUID facilityId,
+                                                       @RequestParam(required = false) String search) {
         List<QueueEntryResponse> items =
-                queueService.listActiveQueueView(facilityId).stream().map(QueueEntryResponse::from).toList();
+                queueService.listActiveQueueView(facilityId, search).stream().map(QueueEntryResponse::from).toList();
         return ResponseEntity.ok(Map.of("items", items));
     }
 
@@ -46,9 +51,9 @@ public class QueueController {
         return ResponseEntity.status(HttpStatus.CREATED).body(QueueTokenResponse.from(token));
     }
 
-    // RECQ-US-004 — calls whichever token findActiveQueue() already ranks
-    // first (highest priority, then longest-waiting); the caller doesn't
-    // pick which one.
+    // RECQ-US-004 — calls whichever token findCallableQueue() already
+    // ranks first (highest priority, then longest-waiting) among today's
+    // ISSUED tokens; the caller doesn't pick which one.
     @PostMapping("/api/v1/queue/call-next")
     public ResponseEntity<QueueEntryResponse> callNext(@RequestParam UUID facilityId,
                                                          @AuthenticationPrincipal AuthenticatedPrincipal staff) {
@@ -56,7 +61,38 @@ public class QueueController {
         return ResponseEntity.ok(QueueEntryResponse.from(called));
     }
 
+    // The out-and-back scenario, step one — the patient didn't respond to
+    // the call.
+    @PostMapping("/api/v1/queue/tokens/{id}/missed")
+    public ResponseEntity<QueueEntryResponse> markMissed(@PathVariable UUID id,
+                                                           @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return ResponseEntity.ok(QueueEntryResponse.from(queueService.markMissed(id, staff.userId())));
+    }
+
+    // Step two — the patient is back; re-inserted at their original place.
+    @PostMapping("/api/v1/queue/tokens/{id}/recall")
+    public ResponseEntity<QueueEntryResponse> recall(@PathVariable UUID id,
+                                                        @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return ResponseEntity.ok(QueueEntryResponse.from(queueService.recall(id, staff.userId())));
+    }
+
+    @PostMapping("/api/v1/queue/tokens/{id}/complete")
+    public ResponseEntity<QueueEntryResponse> complete(@PathVariable UUID id,
+                                                          @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return ResponseEntity.ok(QueueEntryResponse.from(queueService.complete(id, staff.userId())));
+    }
+
+    @PostMapping("/api/v1/queue/tokens/{id}/cancel")
+    public ResponseEntity<QueueEntryResponse> cancel(@PathVariable UUID id,
+                                                        @Valid @RequestBody CancelTokenRequest request,
+                                                        @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return ResponseEntity.ok(QueueEntryResponse.from(queueService.cancel(id, request.reason(), staff.userId())));
+    }
+
     public record IssueManualTokenRequest(@NotNull UUID visitId, @NotNull TokenPriority priority) {
+    }
+
+    public record CancelTokenRequest(@NotBlank String reason) {
     }
 
     public record QueueEntryResponse(QueueTokenResponse token, String patientName, String patientMpi) {

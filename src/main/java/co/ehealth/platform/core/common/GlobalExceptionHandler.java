@@ -26,6 +26,8 @@ import co.ehealth.platform.pharmacy.NotLicensedException;
 import co.ehealth.platform.pharmacy.PrescriptionAlreadyDispensedException;
 import co.ehealth.platform.pharmacy.PrescriptionNotFoundException;
 import co.ehealth.platform.visit.EmptyQueueException;
+import co.ehealth.platform.visit.InvalidTokenTransitionException;
+import co.ehealth.platform.visit.QueueTokenNotFoundException;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -280,6 +282,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // OrganizationSuspendedException above.
     @ExceptionHandler(EmptyQueueException.class)
     public ResponseEntity<ApiErrorResponse> handleEmptyQueue(EmptyQueueException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // QueueService's transition methods (markMissed/recall/complete/
+    // cancel) — the target tokenId doesn't exist. Same shape as
+    // VisitNotFoundException above.
+    @ExceptionHandler(QueueTokenNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleQueueTokenNotFound(QueueTokenNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // QueueToken's transition guards — e.g. recalling a token that was
+    // never MISSED, or completing one that was never CALLED. Same
+    // "conflicts with current state" shape as EmptyQueueException above.
+    @ExceptionHandler(InvalidTokenTransitionException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidTokenTransition(InvalidTokenTransitionException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
