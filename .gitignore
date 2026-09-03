@@ -1,4 +1,5 @@
 target/
+target-codex/
 .env
 *.local
 data/
@@ -9,5 +10,8 @@ data/
 
 # Local/build files
 .m2/
-target/
-.vscode/
+.m2-local/
+.tools/
+.tools-test/
+.tools-*.zip
+*.log

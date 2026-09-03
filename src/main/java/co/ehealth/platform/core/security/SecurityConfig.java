@@ -58,6 +58,10 @@ public class SecurityConfig {
                         "/actuator/health").permitAll()
                 // Getting a token in the first place can't require one.
                 .requestMatchers("/platform/auth/login", "/platform/auth/register").permitAll()
+                // SADM-US-005's register is deliberately under /api/v1 for
+                // the console contract, but remains platform-scoped rather
+                // than tenant-scoped.
+                .requestMatchers("/api/v1/tenants/**").hasRole("PLATFORM_OPERATOR")
                 // Everything else under /platform/** needs a real,
                 // ACTIVE, correctly-signed operator token — PlatformJwtAuthenticationFilter
                 // is what actually populates that Authentication; this

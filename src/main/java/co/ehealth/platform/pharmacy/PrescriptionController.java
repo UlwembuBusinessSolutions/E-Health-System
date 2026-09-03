@@ -55,6 +55,17 @@ public class PrescriptionController {
         return ResponseEntity.ok(Map.of("items", items));
     }
 
+    @GetMapping("/api/v1/prescriptions")
+    public ResponseEntity<Map<String, Object>> list() {
+        List<PrescriptionResponse> items = prescriptionService.list().stream().map(this::toResponse).toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    @GetMapping("/api/v1/prescriptions/stats")
+    public ResponseEntity<Map<String, Long>> stats(@RequestParam UUID facilityId) {
+        return ResponseEntity.ok(Map.of("dispensedToday", prescriptionService.countDispensedToday(facilityId)));
+    }
+
     @GetMapping("/api/v1/prescriptions/{id}")
     public ResponseEntity<PrescriptionResponse> get(@PathVariable UUID id) {
         return ResponseEntity.ok(toResponse(prescriptionService.get(id)));
@@ -65,6 +76,15 @@ public class PrescriptionController {
                                           @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         prescriptionService.dispense(id, staff.userId());
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/api/v1/prescriptions/manual-verification")
+    public ResponseEntity<Map<String, Object>> manualVerificationQueue() {
+        List<ManualVerificationCaseResponse> items = prescriptionService.listManualVerificationCases().stream()
+                .map(c -> new ManualVerificationCaseResponse(c.getId(), c.getPrescriptionId(), c.getPatientId(),
+                        c.getReason(), c.getCreatedAt()))
+                .toList();
+        return ResponseEntity.ok(Map.of("items", items));
     }
 
     // Enriched with the patient's name/MPI — same reasoning as
@@ -87,6 +107,10 @@ public class PrescriptionController {
     }
 
     public record PrescriptionItemResponse(String drugName, String dosage, int quantity) {
+    }
+
+    public record ManualVerificationCaseResponse(UUID id, UUID prescriptionId, UUID patientId, String reason,
+                                                  Instant createdAt) {
     }
 
     public record PrescriptionResponse(UUID id, String serialNumber, UUID visitId, UUID patientId,

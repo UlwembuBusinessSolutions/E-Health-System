@@ -22,20 +22,24 @@ public class AuthController {
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
     private final UserRepository userRepository;
+    private final StaffService staffService;
 
     public AuthController(AuthService authService, PasswordResetService passwordResetService,
-                           UserRepository userRepository) {
+                           UserRepository userRepository, StaffService staffService) {
         this.authService = authService;
         this.passwordResetService = passwordResetService;
         this.userRepository = userRepository;
+        this.staffService = staffService;
     }
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         JwtService.IssuedToken issued = authService.login(request.email(), request.password());
         User user = userRepository.findByEmail(request.email()).orElseThrow();
+        StaffService.LicenseStatus licenseStatus = staffService.getLicenseStatus(user.getId());
         return ResponseEntity.ok(new LoginResponse(issued.token(), issued.expiresAt().toString(),
-                new UserSummary(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName())));
+                new UserSummary(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName(),
+                        licenseStatus.canPrescribe(), licenseStatus.canDispense())));
     }
 
     @PostMapping("/logout")
@@ -70,7 +74,12 @@ public class AuthController {
     public record LoginResponse(String accessToken, String expiresAt, UserSummary user) {
     }
 
-    public record UserSummary(UUID id, String email, String firstName, String lastName) {
+    // The UI receives the current action capabilities explicitly, rather
+    // than reverse-engineering them from sensitive registration numbers.
+    // PrescriptionService independently enforces these same capabilities on
+    // every request, so a stale client response can never grant API access.
+    public record UserSummary(UUID id, String email, String firstName, String lastName,
+                              boolean canPrescribe, boolean canDispense) {
     }
 
     public record UnlockRequest(@NotBlank String password) {

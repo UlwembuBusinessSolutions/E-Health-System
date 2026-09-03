@@ -174,13 +174,14 @@ public class StaffService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
         LocalDate today = LocalDate.now(clock);
-        boolean hpcsaValid = user.getHpcsaNumber() != null && user.getHpcsaExpiryDate() != null
-                && !user.getHpcsaExpiryDate().isBefore(today);
-        boolean sancValid = user.getSancNumber() != null && user.getSancExpiryDate() != null
-                && !user.getSancExpiryDate().isBefore(today);
-        boolean sapcValid = user.getSapcNumber() != null && user.getSapcExpiryDate() != null
-                && !user.getSapcExpiryDate().isBefore(today);
+        boolean hpcsaValid = isCurrentLicense(user.getHpcsaNumber(), user.getHpcsaExpiryDate(), today);
+        boolean sancValid = isCurrentLicense(user.getSancNumber(), user.getSancExpiryDate(), today);
+        boolean sapcValid = isCurrentLicense(user.getSapcNumber(), user.getSapcExpiryDate(), today);
         return new LicenseStatus(hpcsaValid || sancValid, sapcValid);
+    }
+
+    private boolean isCurrentLicense(String number, LocalDate expiryDate, LocalDate today) {
+        return number != null && !number.isBlank() && expiryDate != null && !expiryDate.isBefore(today);
     }
 
     public record LicenseStatus(boolean canPrescribe, boolean canDispense) {

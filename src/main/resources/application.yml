@@ -13,9 +13,9 @@ spring:
     active: dev
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/ulwembu}
-    username: ${DB_USERNAME:ulwembu}
-    password: ${DB_PASSWORD:ulwembu_dev_local}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/ulwembus}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:Linhle@12}
     hikari:
       maximum-pool-size: 20
 

@@ -23,6 +23,14 @@ public class DispensingRecord {
     @Column(name = "prescription_id", nullable = false, unique = true)
     private UUID prescriptionId;
 
+    // A dispensing event must remain traceable to the same identified person
+    // as its prescription, even when it is read without joining prescriptions.
+    @Column(name = "patient_id", nullable = false)
+    private UUID patientId;
+
+    @Column(name = "patient_mpi", nullable = false, length = 20)
+    private String patientMpi;
+
     @Column(name = "dispensed_by_user_id", nullable = false)
     private UUID dispensedByUserId;
 
@@ -32,8 +40,11 @@ public class DispensingRecord {
     protected DispensingRecord() {
     }
 
-    public DispensingRecord(UUID prescriptionId, UUID dispensedByUserId, Instant dispensedAt) {
+    public DispensingRecord(UUID prescriptionId, UUID patientId, String patientMpi, UUID dispensedByUserId,
+                            Instant dispensedAt) {
         this.prescriptionId = prescriptionId;
+        this.patientId = patientId;
+        this.patientMpi = patientMpi;
         this.dispensedByUserId = dispensedByUserId;
         this.dispensedAt = dispensedAt;
     }
@@ -44,6 +55,14 @@ public class DispensingRecord {
 
     public UUID getPrescriptionId() {
         return prescriptionId;
+    }
+
+    public UUID getPatientId() {
+        return patientId;
+    }
+
+    public String getPatientMpi() {
+        return patientMpi;
     }
 
     public UUID getDispensedByUserId() {
