@@ -369,9 +369,7 @@ import { listAuditLog, type AuditModule } from "@/shared/api/audit";
 import { listStaff } from "@/shared/api/staff";
 import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
-import { Input } from "@/shared/components/Input";
 import { PageHeader } from "@/shared/components/PageHeader";
-import { StatusPill } from "@/shared/components/StatusPill";
 
 const AUDIT_ACTIONS = [
   "LOGIN",
@@ -661,12 +659,10 @@ export function AuditLogPage() {
                             so it needs to be visible without scrolling right. */}
                         {entry.privileged && (
                           <span title="This action was performed by a platform operator">
-                            <StatusPill tone="warning">
-                              <span className="inline-flex items-center gap-1">
-                                <ShieldCheck className="size-3" aria-hidden />
-                                Privileged
-                              </span>
-                            </StatusPill>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[12px] font-medium text-amber-600">
+                              <ShieldCheck className="size-3" aria-hidden />
+                              Privileged
+                            </span>
                           </span>
                         )}
                       </div>

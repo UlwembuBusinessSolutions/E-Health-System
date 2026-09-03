@@ -15,7 +15,11 @@ export type CitizenshipStatus = "SA_CITIZEN" | "PERMANENT_RESIDENT";
 export interface RegisterPatientPayload {
   firstName: string;
   lastName: string;
-  idNumber: string;
+  idNumber?: string;
+  passportNumber?: string;
+  dateOfBirth?: string;
+  gender?: Gender;
+  citizenshipStatus?: CitizenshipStatus;
   address: string;
   contactNumber: string;
   medicalAidProvider?: string;
@@ -39,6 +43,10 @@ export interface Patient {
   medicalAidProvider: string | null;
   medicalAidNumber: string | null;
   createdAt: string;
+  dateOfDeath: string | null;
+  deceased: boolean;
+  archivedAt: string | null;
+  passportNumber: string | null;
 }
 
 export async function registerPatient(payload: RegisterPatientPayload): Promise<Patient> {
@@ -60,4 +68,23 @@ export async function searchPatients(query: string): Promise<Patient[]> {
 
 export async function getPatient(id: string): Promise<Patient> {
   return apiClient.get<Patient>(`/api/v1/patients/${id}`, { headers: tenantAuthHeaders() });
+}
+
+export interface UpdatePatientPayload {
+  firstName: string;
+  lastName: string;
+  idNumber?: string;
+  passportNumber?: string;
+  dateOfBirth?: string;
+  gender?: Gender;
+  citizenshipStatus?: CitizenshipStatus;
+  address: string;
+  contactNumber: string;
+  medicalAidProvider?: string;
+  medicalAidNumber?: string;
+  reasonForChange?: string;
+}
+
+export async function updatePatient(id: string, payload: UpdatePatientPayload): Promise<Patient> {
+  return apiClient.patch<Patient>(`/api/v1/patients/${id}`, payload, { headers: tenantAuthHeaders() });
 }

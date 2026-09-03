@@ -106,8 +106,6 @@ export function EditPatientScreen() {
   const isPassport = /[A-Za-z]/.test((identityNumber ?? "").trim());
   const identityType = isSouthAfricanId ? "South African ID" : isPassport ? "Passport" : null;
 
-  const reasonForChange = watch("reasonForChange");
-
   const changedSignificantFields = useMemo(() => {
     if (!original) return [];
     const current = watch();
