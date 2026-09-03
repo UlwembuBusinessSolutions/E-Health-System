@@ -1,6 +1,7 @@
 package co.ehealth.platform.identity;
 
 import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.core.notification.EmailService;
 import co.ehealth.platform.core.security.DummyHash;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -23,14 +24,17 @@ public class PasswordResetService {
     private final PasswordEncoder passwordEncoder;
     private final AuditLogService auditLogService;
     private final Clock clock;
+    private final EmailService emailService;
 
     public PasswordResetService(UserRepository userRepository, PasswordResetTokenRepository tokenRepository,
-                                 PasswordEncoder passwordEncoder, AuditLogService auditLogService, Clock clock) {
+                                 PasswordEncoder passwordEncoder, AuditLogService auditLogService, Clock clock,
+                                 EmailService emailService) {
         this.userRepository = userRepository;
         this.tokenRepository = tokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.auditLogService = auditLogService;
         this.clock = clock;
+        this.emailService = emailService;
     }
 
     @Transactional
@@ -48,15 +52,17 @@ public class PasswordResetService {
         // only brute-force resistant if guessing it is slow AND rate
         // limited AND short-lived — this covers the "slow" leg without a
         // second hashing library.
-        PasswordResetToken token = new PasswordResetToken(maybeUser.get().getId(),
+        User user = maybeUser.get();
+        PasswordResetToken token = new PasswordResetToken(user.getId(),
                 passwordEncoder.encode(code), clock.instant().plus(CODE_TTL), requestIp);
         tokenRepository.save(token);
 
-        // TODO: EmailService (core/notification) only knows how to send one
-        // thing today, sendAdminAccountCreatedEmail(). The reset code still
-        // needs its own method there (or an SMS channel, per the original
-        // spec) once this is wired up; it's never stored anywhere the
-        // client can read it back from either way.
+        // The code is never stored anywhere the client can read it back
+        // from (only its bcrypt hash lives in password_reset_tokens) — this
+        // email is the one place it exists in plaintext, same "capture-to-file
+        // first, then attempt real SMTP" delivery path every other account
+        // email already goes through.
+        emailService.sendPasswordResetCodeEmail(user.getEmail(), user.getFirstName(), code, CODE_TTL.toMinutes());
     }
 
     // noRollbackFor is load-bearing — same reasoning as AuthService.login():
@@ -67,7 +73,7 @@ public class PasswordResetService {
     // unenforceable — a code could be guessed an unlimited number of
     // times instead of 5.
     @Transactional(noRollbackFor = InvalidResetCodeException.class)
-    public void confirmReset(String email, String code, String newPassword, String requestIp) {
+    public void confirmReset(String email, String code, String newPassword) {
         Optional<User> maybeUser = userRepository.findByEmail(email);
         Optional<PasswordResetToken> maybeToken = maybeUser
                 .flatMap(u -> tokenRepository.findTopByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc(u.getId()))
@@ -89,6 +95,6 @@ public class PasswordResetService {
         tokenRepository.invalidateOutstandingTokens(user.getId(), clock.instant());
 
         auditLogService.append(user.getId(), null, "PASSWORD_RESET", "User", user.getId().toString(),
-                null, null, requestIp);
+                null, null);
     }
 }

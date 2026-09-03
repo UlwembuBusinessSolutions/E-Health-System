@@ -276,15 +276,31 @@ public class User {
         this.lastLoginAt = at;
     }
 
-    // Bumping tokenVersion here — not just from the password-reset flow —
-    // means every path that changes a password invalidates existing JWTs
-    // for free. Also clears mustChangePassword: the only caller that sets
-    // an admin-chosen password is the constructor above, so any call here
-    // by definition represents the staff member setting their own.
+    // Bumping tokenVersion here — not just from the self-service password-
+    // reset flow — means every path that changes a password invalidates
+    // existing JWTs for free. Also clears mustChangePassword: every caller
+    // of this specific method (the constructor's own temp password aside)
+    // represents the staff member setting their own — adminResetPassword()
+    // below is the one path where that assumption doesn't hold, which is
+    // exactly why it exists as a separate method instead of a third
+    // call site to this one.
     public void setPasswordHash(String hash) {
         this.passwordHash = hash;
         this.tokenVersion++;
         this.mustChangePassword = false;
+    }
+
+    // StaffService.resetPassword()'s write — an admin generating a new
+    // password FOR this person, not them choosing their own, so
+    // mustChangePassword goes to true (not false, unlike setPasswordHash()
+    // above): the generated password should work exactly like a freshly
+    // created account's temporary one, forcing a real password choice on
+    // next login rather than quietly becoming a standing credential someone
+    // else picked.
+    public void adminResetPassword(String hash) {
+        this.passwordHash = hash;
+        this.tokenVersion++;
+        this.mustChangePassword = true;
     }
 
     public UUID getId() {
@@ -425,5 +441,9 @@ public class User {
 
     public int getTokenVersion() {
         return tokenVersion;
+    }
+
+    public Instant getLastLoginAt() {
+        return lastLoginAt;
     }
 }

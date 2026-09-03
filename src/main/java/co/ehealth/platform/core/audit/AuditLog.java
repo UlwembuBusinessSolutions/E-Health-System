@@ -45,6 +45,12 @@ public class AuditLog {
     @Column(name = "ip_address", length = 45)
     private String ipAddress;
 
+    // The FRS's own "device identifier" (Section 3.3's Audit Integration
+    // Contract) — the raw User-Agent header, not a parsed device/browser/OS
+    // breakdown (RequestMetadata.currentUserAgent()'s own why-note on why).
+    @Column(name = "device_signature", length = 500)
+    private String deviceSignature;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -52,7 +58,8 @@ public class AuditLog {
     }
 
     public AuditLog(UUID userId, UUID facilityId, String action, String entityType, String entityId,
-                     String beforeValue, String afterValue, String ipAddress, Instant createdAt) {
+                     String beforeValue, String afterValue, String ipAddress, String deviceSignature,
+                     Instant createdAt) {
         this.userId = userId;
         this.facilityId = facilityId;
         this.action = action;
@@ -61,6 +68,7 @@ public class AuditLog {
         this.beforeValue = beforeValue;
         this.afterValue = afterValue;
         this.ipAddress = ipAddress;
+        this.deviceSignature = deviceSignature;
         this.createdAt = createdAt;
     }
 
@@ -98,6 +106,10 @@ public class AuditLog {
 
     public String getIpAddress() {
         return ipAddress;
+    }
+
+    public String getDeviceSignature() {
+        return deviceSignature;
     }
 
     public Instant getCreatedAt() {

@@ -7,4 +7,8 @@ import java.util.Optional;
 // method names to change its own behavior.
 public interface OrganizationLookupService {
     Optional<Organization> findActiveBySlug(String slug);
+
+    // Regardless of status — see the why-note on OrganizationRepository.findBySlug()
+    // for why TenantFilter needs this distinct from findActiveBySlug() above.
+    Optional<Organization> findBySlug(String slug);
 }

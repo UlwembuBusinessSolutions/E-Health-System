@@ -8,33 +8,58 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-// Full paths per method, not a shared class-level @RequestMapping — the
-// two endpoints deliberately live under different security rules.
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+// The tenant-facing "my organization" read/write surface — what any
+// authenticated staff member (GET /api/v1/organization, its /modules
+// sibling) or ORG_ADMIN specifically (the logo POST) can see or change
+// about their own org, as opposed to PlatformController's equivalent for a
+// platform operator managing an arbitrary org by id. Full paths per method,
+// not a shared class-level @RequestMapping — the three endpoints
+// deliberately live under different security rules.
 // /api/v1/admin/organization/logo falls under SecurityConfig's
-// /api/v1/admin/** -> ORG_ADMIN matcher; /api/v1/organization does not, so
-// it falls through to .anyRequest().authenticated() instead — same split
-// FacilityController uses between its GET and POST, just expressed as two
-// different paths here instead of one path split by HTTP method, since
-// "view the org's logo" and "upload the org's logo" were never going to
-// share a path the way facility list/create do.
+// /api/v1/admin/** -> ORG_ADMIN matcher; the two GETs don't, so they fall
+// through to .anyRequest().authenticated() instead — same split
+// FacilityController uses between its GET and POST.
 @RestController
 public class OrganizationBrandingController {
 
     private final OrganizationBrandingService brandingService;
+    private final ModuleEntitlementQueryService moduleEntitlementQueryService;
 
-    public OrganizationBrandingController(OrganizationBrandingService brandingService) {
+    public OrganizationBrandingController(OrganizationBrandingService brandingService,
+                                           ModuleEntitlementQueryService moduleEntitlementQueryService) {
         this.brandingService = brandingService;
+        this.moduleEntitlementQueryService = moduleEntitlementQueryService;
     }
 
-    // Any authenticated staff member, not just ORG_ADMIN — a logo is meant
-    // to be seen by everyone in the org, same reasoning as
-    // GET /api/v1/facilities being open to any authenticated user while
-    // only its POST is admin-gated.
+    // Any authenticated staff member, not just ORG_ADMIN — every field here
+    // (name, status, sector, branding) is meant to be seen by everyone in
+    // the org, same reasoning as GET /api/v1/facilities being open to any
+    // authenticated user while only its POST is admin-gated. Started as
+    // branding-only (logoUrl/primaryColor/shortName); displayName/slug/
+    // status/sector were folded in once the real tenant dashboard needed
+    // them rather than adding a second near-identical endpoint.
     @GetMapping("/api/v1/organization")
-    public ResponseEntity<OrganizationBrandingResponse> getBranding() {
-        OrganizationBranding branding = brandingService.getBranding();
-        return ResponseEntity.ok(
-                new OrganizationBrandingResponse(branding.logoUrl(), branding.primaryColor(), branding.shortName()));
+    public ResponseEntity<OrganizationSelfResponse> getOrganization() {
+        Organization organization = brandingService.getOwnOrganization();
+        OrganizationBranding branding = organization.getBranding();
+        return ResponseEntity.ok(new OrganizationSelfResponse(
+                organization.getDisplayName(), organization.getSlug(), organization.getStatus(),
+                organization.getSector(), branding.logoUrl(), branding.primaryColor(), branding.shortName()));
+    }
+
+    // The tenant dashboard's "enabled modules" card (SADM-US-010, self-
+    // service half) — same 20-module shape and same query service
+    // PlatformController's platform-operator equivalent uses, just always
+    // resolved to the caller's own org rather than an {id} path variable.
+    @GetMapping("/api/v1/organization/modules")
+    public ResponseEntity<Map<String, Object>> getModules() {
+        UUID organizationId = brandingService.getOwnOrganization().getId();
+        List<ModuleEntitlementView> modules = moduleEntitlementQueryService.listForOrganization(organizationId);
+        return ResponseEntity.ok(Map.of("items", modules));
     }
 
     // Multipart, not JSON — same reasoning as StaffController.uploadPhoto():
@@ -52,6 +77,8 @@ public class OrganizationBrandingController {
     public record LogoUploadResponse(String logoUrl) {
     }
 
-    public record OrganizationBrandingResponse(String logoUrl, String primaryColor, String shortName) {
+    public record OrganizationSelfResponse(String displayName, String slug, OrganizationStatus status,
+                                            OrganizationSector sector, String logoUrl, String primaryColor,
+                                            String shortName) {
     }
 }

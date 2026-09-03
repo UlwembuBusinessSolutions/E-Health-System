@@ -7,9 +7,21 @@ import co.ehealth.platform.identity.InvalidCredentialsException;
 import co.ehealth.platform.identity.InvalidResetCodeException;
 import co.ehealth.platform.identity.LastRemainingAdminException;
 import co.ehealth.platform.identity.NotAnOrgAdminException;
+import co.ehealth.platform.identity.NotAuthorizedException;
 import co.ehealth.platform.identity.RateLimitExceededException;
+import co.ehealth.platform.platform.FoundationModuleException;
+import co.ehealth.platform.platform.LastActiveOperatorException;
 import co.ehealth.platform.platform.OrganizationNotFoundException;
 import co.ehealth.platform.platform.OrganizationSuspendedException;
+import co.ehealth.platform.platform.PlatformOperatorNotFoundException;
+import co.ehealth.platform.patient.InvalidIdNumberException;
+import co.ehealth.platform.patient.PatientNotFoundException;
+import co.ehealth.platform.facility.FacilityNotFoundException;
+import co.ehealth.platform.pharmacy.NotLicensedException;
+import co.ehealth.platform.pharmacy.PrescriptionAlreadyDispensedException;
+import co.ehealth.platform.pharmacy.PrescriptionNotFoundException;
+import co.ehealth.platform.visit.EmptyQueueException;
+import co.ehealth.platform.visit.VisitNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -176,9 +188,94 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
+    // SADM-US-010's Foundation-module protection — the module exists and
+    // the organization exists, the request is just structurally not
+    // allowed, same "conflicts with current state" shape as
+    // OrganizationSuspendedException above.
+    @ExceptionHandler(FoundationModuleException.class)
+    public ResponseEntity<ApiErrorResponse> handleFoundationModule(FoundationModuleException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     @ExceptionHandler(InvalidFileTypeException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidFileType(InvalidFileTypeException ex) {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // PlatformOperatorService.resetPassword()/setEnabled() — the target
+    // {id} doesn't exist. Same shape as OrganizationNotFoundException above.
+    @ExceptionHandler(PlatformOperatorNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handlePlatformOperatorNotFound(PlatformOperatorNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // PlatformOperatorService.setEnabled()'s own guard — disabling the last
+    // ACTIVE operator would lock every human out of the platform console
+    // with no recovery path. Same "conflicts with current state" reasoning
+    // as LastRemainingAdminException above.
+    @ExceptionHandler(LastActiveOperatorException.class)
+    public ResponseEntity<ApiErrorResponse> handleLastActiveOperator(LastActiveOperatorException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // SouthAfricanIdNumber.parse() — a well-formed 13-digit string that
+    // still fails its check digit or doesn't decode to a real calendar
+    // date. A client input problem, not a server error.
+    @ExceptionHandler(InvalidIdNumberException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidIdNumber(InvalidIdNumberException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PatientNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handlePatientNotFound(PatientNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(FacilityNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleFacilityNotFound(FacilityNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(VisitNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleVisitNotFound(VisitNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // QueueService.callNext() against an empty queue — the facility and
+    // request are both valid, the current state just has no one to call.
+    // Same "conflicts with current state" shape as LastRemainingAdminException/
+    // OrganizationSuspendedException above.
+    @ExceptionHandler(EmptyQueueException.class)
+    public ResponseEntity<ApiErrorResponse> handleEmptyQueue(EmptyQueueException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // PHRM-US-009 — the acting user lacks a current, non-expired
+    // professional registration for the action they're attempting. 403,
+    // not 409/401: they're correctly authenticated and the target resource
+    // is fine, they personally just aren't credentialed for this action.
+    @ExceptionHandler(NotLicensedException.class)
+    public ResponseEntity<ApiErrorResponse> handleNotLicensed(NotLicensedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // IAM-US-009 AC3 — a role/module combination marked no-access gets
+    // exactly this, never an empty list or a 404 (FRS Section 3.2's own
+    // distinction between NOT_AUTHORISED and NOT_FOUND).
+    @ExceptionHandler(NotAuthorizedException.class)
+    public ResponseEntity<ApiErrorResponse> handleNotAuthorized(NotAuthorizedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PrescriptionNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handlePrescriptionNotFound(PrescriptionNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PrescriptionAlreadyDispensedException.class)
+    public ResponseEntity<ApiErrorResponse> handlePrescriptionAlreadyDispensed(
+            PrescriptionAlreadyDispensedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     // StaffPhotoService.uploadPhoto() wraps a checked IOException from
@@ -190,69 +287,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(UncheckedIOException.class)
     public ResponseEntity<ApiErrorResponse> handleUncheckedIO(UncheckedIOException ex) {
         return ResponseEntity.badRequest().body(new ApiErrorResponse("Upload failed. Please try again.", null));
-    }
-
-    // Patient Record exceptions — BR-PREG-150 compliance: patient records
-    // cannot be deleted. All attempts are rejected with 403 FORBIDDEN and
-    // logged as audit events. Records can only be withdrawn from active use
-    // via archiving.
-
-    // Thrown by PatientRecordService.createRecord() when an MRN is already
-    // in use. Same shape as DuplicateFieldException (identity module),
-    // but for patient records instead of users.
-    @ExceptionHandler(co.ehealth.platform.facility.DuplicatePatientRecordException.class)
-    public ResponseEntity<ApiErrorResponse> handleDuplicatePatientRecord(
-            co.ehealth.platform.facility.DuplicatePatientRecordException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(
-                new ApiErrorResponse(ex.getMessage(),
-                        Map.of(ex.getField(), ex.getMessage())));
-    }
-
-    // Thrown by PatientRecordService.getRecord() when a record ID doesn't
-    // exist. Same as OrganizationNotFoundException or other resource-not-found
-    // cases.
-    @ExceptionHandler(co.ehealth.platform.facility.RecordNotFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleRecordNotFound(
-            co.ehealth.platform.facility.RecordNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
-    // Thrown by PatientRecordService.archiveRecord() when archiving an
-    // already-archived record. "Conflicts with current state" — the record
-    // exists and is well-formed, but is already in the target state.
-    @ExceptionHandler(co.ehealth.platform.facility.RecordAlreadyArchivedException.class)
-    public ResponseEntity<ApiErrorResponse> handleRecordAlreadyArchived(
-            co.ehealth.platform.facility.RecordAlreadyArchivedException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
-    // UnsupportedOperationException — catch deletion attempts. This exception
-    // is thrown by PatientRecordRepository when delete() is called (any variant)
-    // and by PatientRecordService.deleteRecord() if somehow called directly.
-    // Check the message to ensure it's a compliance-driven deletion block
-    // (contains "BR-PREG-150"), not some other UnsupportedOperationException
-    // from elsewhere in the application.
-    @ExceptionHandler(UnsupportedOperationException.class)
-    public ResponseEntity<ApiErrorResponse> handleUnsupportedOperation(
-            UnsupportedOperationException ex) {
-        // Check if this is a patient record deletion attempt
-        if (ex.getMessage() != null && ex.getMessage().contains("BR-PREG-150")) {
-            // This is a compliance-driven deletion block. Log it and return
-            // 403 FORBIDDEN. The caller already has their request details
-            // logged by their @AuthenticationPrincipal, but the attempt itself
-            // (the operation that was blocked) is worth noting.
-            log.warn("Deletion attempt blocked by compliance requirement BR-PREG-150: {}",
-                    ex.getMessage());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
-                    new ApiErrorResponse(
-                            "Patient records cannot be deleted. Use archiving to withdraw from active use.",
-                            null));
-        }
-        // Some other UnsupportedOperationException — let it fall through to
-        // the catch-all Exception handler below.
-        throw ex;
     }
 
     // Everything below overrides a protected hook ResponseEntityExceptionHandler

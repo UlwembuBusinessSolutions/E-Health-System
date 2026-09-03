@@ -1,6 +1,7 @@
 package co.ehealth.platform.core.security;
 
 import co.ehealth.platform.identity.UserRepository;
+import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.platform.PlatformOperatorRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -36,13 +37,13 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(
-            HttpSecurity http, JwtService jwtService, UserRepository userRepository,
+            HttpSecurity http, JwtService jwtService, UserRepository userRepository, AuditLogService auditLogService,
             PlatformJwtService platformJwtService, PlatformOperatorRepository platformOperatorRepository,
             SessionActivityStore activityStore, Clock clock,
             @Value("${app.idle-lock.timeout-minutes}") long idleTimeoutMinutes,
             CorsConfigurationSource corsConfigurationSource) throws Exception {
 
-        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository);
+        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository, auditLogService);
         IdleLockFilter idleLockFilter =
                 new IdleLockFilter(activityStore, Duration.ofMinutes(idleTimeoutMinutes), clock);
         PlatformJwtAuthenticationFilter platformJwtFilter =
@@ -56,7 +57,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/password-reset/**",
                         "/actuator/health").permitAll()
                 // Getting a token in the first place can't require one.
-                .requestMatchers("/platform/auth/login").permitAll()
+                .requestMatchers("/platform/auth/login", "/platform/auth/register").permitAll()
                 // Everything else under /platform/** needs a real,
                 // ACTIVE, correctly-signed operator token — PlatformJwtAuthenticationFilter
                 // is what actually populates that Authentication; this
@@ -89,7 +90,11 @@ public class SecurityConfig {
             @Value("#{'${app.cors.allowed-origins}'.split(',')}") List<String> allowedOrigins) {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(allowedOrigins); // explicit per-environment list, not "*"
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE"));
+        // PATCH added for PlatformController.updateDetails() — the first
+        // genuinely RESTful "edit this resource" endpoint in the app;
+        // without it here, a real browser's preflight for that call would
+        // reject PATCH before the request ever reached the filter chain.
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         // X-Platform-Key listed alongside the tenant headers — a header not
         // listed here gets stripped by the browser's CORS preflight before
         // it ever reaches PlatformJwtAuthenticationFilter, which would look

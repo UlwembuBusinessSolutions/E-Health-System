@@ -4,6 +4,7 @@ import co.ehealth.platform.core.security.DummyHash;
 import co.ehealth.platform.core.security.PlatformJwtService;
 import co.ehealth.platform.identity.AccountLockedException;
 import co.ehealth.platform.identity.InvalidCredentialsException;
+import co.ehealth.platform.identity.DuplicateFieldException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,14 +34,32 @@ public class PlatformAuthService {
     private final PasswordEncoder passwordEncoder;
     private final PlatformJwtService platformJwtService;
     private final Clock clock;
+    private final PlatformAuditLogRepository platformAuditLogRepository;
 
     public PlatformAuthService(PlatformOperatorRepository platformOperatorRepository,
                                 PasswordEncoder passwordEncoder, PlatformJwtService platformJwtService,
-                                Clock clock) {
+                                Clock clock, PlatformAuditLogRepository platformAuditLogRepository) {
         this.platformOperatorRepository = platformOperatorRepository;
         this.passwordEncoder = passwordEncoder;
         this.platformJwtService = platformJwtService;
         this.clock = clock;
+        this.platformAuditLogRepository = platformAuditLogRepository;
+    }
+
+    @Transactional
+    public RegisteredOperator register(String firstName, String lastName, String email, String rawPassword) {
+        if (platformOperatorRepository.existsByEmail(email)) {
+            throw new DuplicateFieldException("email", "A platform operator with this email already exists.");
+        }
+
+        PlatformOperator operator = new PlatformOperator(
+                email, firstName, lastName, passwordEncoder.encode(rawPassword));
+        platformOperatorRepository.save(operator);
+        platformAuditLogRepository.save(
+                new PlatformAuditLog(operator.getId(), "PLATFORM_OPERATOR_REGISTERED", null, clock.instant()));
+
+        PlatformJwtService.IssuedToken issued = platformJwtService.issue(operator.getId(), operator.getTokenVersion());
+        return new RegisteredOperator(operator, issued);
     }
 
     // noRollbackFor is load-bearing — same reasoning as identity.AuthService.
@@ -69,8 +88,21 @@ public class PlatformAuthService {
         }
 
         PlatformOperator operator = maybeOperator.get();
+        // Every other platform-operator action (provisioning, suspend,
+        // module toggles, operator creation) lands a platform_audit_log row
+        // — signing in itself never did, the one gap PLATFORM_OPERATOR_LOGIN
+        // below closes. detail follows this table's own established
+        // "field: old -> new" convention (ORGANIZATION_DETAILS_UPDATED,
+        // MODULE_TOGGLED), not a JSON blob — platform_audit_log.detail is a
+        // plain VARCHAR(500), unlike the tenant-side audit_log's jsonb
+        // before/after columns AuthService.login() writes to.
+        String detail = "lastLoginAt: %s -> %s; failedLoginCount: %d -> 0"
+                .formatted(operator.getLastLoginAt(), now, operator.getFailedLoginCount());
         operator.resetFailedAttempts();
         operator.setLastLoginAt(now);
+
+        platformAuditLogRepository.save(
+                new PlatformAuditLog(operator.getId(), "PLATFORM_OPERATOR_LOGIN", null, detail, now));
 
         return platformJwtService.issue(operator.getId(), operator.getTokenVersion());
     }
@@ -98,5 +130,8 @@ public class PlatformAuthService {
         if (operator.getFailedLoginCount() >= MAX_FAILED_ATTEMPTS) {
             operator.lock(now);
         }
+    }
+
+    public record RegisteredOperator(PlatformOperator operator, PlatformJwtService.IssuedToken token) {
     }
 }

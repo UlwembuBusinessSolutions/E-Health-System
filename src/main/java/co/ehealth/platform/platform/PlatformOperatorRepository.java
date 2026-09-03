@@ -9,4 +9,10 @@ public interface PlatformOperatorRepository extends JpaRepository<PlatformOperat
     Optional<PlatformOperator> findByEmail(String email);
 
     boolean existsByEmail(String email);
+
+    // PlatformOperatorService.setEnabled()'s own guard — disabling the last
+    // ACTIVE operator would lock every human out of the platform console
+    // with no recovery path (platform operators have no self-service
+    // password reset, unlike tenant staff's /api/v1/auth/password-reset/**).
+    long countByStatus(PlatformOperatorStatus status);
 }

@@ -39,13 +39,13 @@ public class FacilityController {
     @PostMapping("/api/v1/facilities")
     public ResponseEntity<FacilitySummary> create(@Valid @RequestBody CreateFacilityRequest request) {
         Facility facility = facilityService.create(request.name(), request.code(), request.type(),
-                request.address(), request.phone());
+                request.address(), request.phone(), request.operatingHours());
         return ResponseEntity.status(HttpStatus.CREATED).body(FacilitySummary.from(facility));
     }
 
     public record CreateFacilityRequest(
             @NotBlank String name, @NotBlank @Size(max = 20) String code,
-            @NotNull FacilityType type, String address, String phone) {
+            @NotNull FacilityType type, String address, String phone, String operatingHours) {
     }
 
     public record FacilitySummary(UUID id, String name, String code, FacilityType type) {

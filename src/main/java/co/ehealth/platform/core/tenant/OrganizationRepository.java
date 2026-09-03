@@ -19,6 +19,14 @@ public interface OrganizationRepository extends JpaRepository<Organization, UUID
         JpaSpecificationExecutor<Organization> {
     Optional<Organization> findBySlugAndStatus(String slug, OrganizationStatus status);
 
+    // TenantFilter's own lookup, regardless of status — it needs to tell
+    // "no such tenant" apart from "this tenant exists but is suspended" to
+    // give the latter a clear message (SADM-US-003's own acceptance
+    // criteria), which findBySlugAndStatus(slug, ACTIVE) can't do: a
+    // suspended tenant and a nonexistent one both come back empty from
+    // that one.
+    Optional<Organization> findBySlug(String slug);
+
     boolean existsBySlug(String slug);
 
     // OrganizationBrandingService's lookup key: a tenant-authenticated

@@ -5,6 +5,8 @@ import co.ehealth.platform.core.security.DummyHash;
 import co.ehealth.platform.core.security.JwtService;
 import co.ehealth.platform.core.security.SessionActivityStore;
 import co.ehealth.platform.core.tenant.TenantContext;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,15 +31,18 @@ public class AuthService {
     private final AuditLogService auditLogService;
     private final SessionActivityStore activityStore;
     private final Clock clock;
+    private final ObjectMapper objectMapper;
 
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService,
-                        AuditLogService auditLogService, SessionActivityStore activityStore, Clock clock) {
+                        AuditLogService auditLogService, SessionActivityStore activityStore, Clock clock,
+                        ObjectMapper objectMapper) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.auditLogService = auditLogService;
         this.activityStore = activityStore;
         this.clock = clock;
+        this.objectMapper = objectMapper;
     }
 
     // noRollbackFor is load-bearing, not defensive polish: this method
@@ -51,7 +56,7 @@ public class AuthService {
     // transaction that recorded why. Without this, failedLoginCount never
     // advances past 0 and the lockout policy never engages.
     @Transactional(noRollbackFor = {InvalidCredentialsException.class, AccountLockedException.class})
-    public JwtService.IssuedToken login(String email, String rawPassword, String ipAddress) {
+    public JwtService.IssuedToken login(String email, String rawPassword) {
         Instant now = clock.instant();
         Optional<User> maybeUser = userRepository.findByEmail(email);
         maybeUser.ifPresent(user -> autoUnlockIfExpired(user, now));
@@ -78,6 +83,19 @@ public class AuthService {
         }
 
         User user = maybeUser.get();
+        // Captured before either field changes below — lastLoginAt shows
+        // login history continuity (when this person was last here, not
+        // just that they're here now), and a nonzero failedLoginCount going
+        // to zero is itself a meaningful signal (this login followed one or
+        // more failed attempts, within FAILURE_WINDOW). Every other
+        // auditLogService.append() call site in this codebase still passes
+        // null for both — LOGIN is the first action where the state that
+        // actually changes is worth recording rather than just the fact
+        // that the action happened. ipAddress/device are no longer passed
+        // explicitly — append() derives both itself from the current
+        // request via RequestMetadata.
+        String beforeValue = serializeLoginState(user.getFailedLoginCount(), user.getLastLoginAt());
+
         user.resetFailedAttempts();
         user.setLastLoginAt(now);
 
@@ -86,9 +104,28 @@ public class AuthService {
                 user.getId(), TenantContext.getCurrentTenant(), roles, user.getTokenVersion());
 
         activityStore.recordActivity(issued.jti(), now);
-        auditLogService.append(user.getId(), null, "LOGIN", "User", user.getId().toString(), null, null, ipAddress);
+        String afterValue = serializeLoginState(user.getFailedLoginCount(), user.getLastLoginAt());
+        auditLogService.append(user.getId(), null, "LOGIN", "User", user.getId().toString(),
+                beforeValue, afterValue);
 
         return issued;
+    }
+
+    // AuditLog.beforeValue/afterValue are a raw JSON column (jsonb) — the
+    // caller supplies already-serialized text, nothing downstream converts
+    // a POJO for it. Swallows serialization failure the same way
+    // EmailService swallows a failed send: a malformed audit detail
+    // shouldn't be able to fail a successful login, and a two-field record
+    // has no real way to fail here anyway.
+    private String serializeLoginState(int failedLoginCount, Instant lastLoginAt) {
+        try {
+            return objectMapper.writeValueAsString(new LoginStateSnapshot(failedLoginCount, lastLoginAt));
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private record LoginStateSnapshot(int failedLoginCount, Instant lastLoginAt) {
     }
 
     public void logout(String jti) {

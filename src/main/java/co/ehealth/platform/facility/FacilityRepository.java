@@ -7,4 +7,6 @@ import java.util.UUID;
 
 public interface FacilityRepository extends JpaRepository<Facility, UUID> {
     List<Facility> findByActiveTrue();
+
+    boolean existsByCode(String code);
 }

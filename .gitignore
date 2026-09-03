@@ -6,3 +6,8 @@ data/
 *.iml
 .vscode/
 .DS_Store
+
+# Local/build files
+.m2/
+target/
+.vscode/

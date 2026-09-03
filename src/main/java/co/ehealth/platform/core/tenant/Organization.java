@@ -34,10 +34,9 @@ public class Organization {
     @Column(nullable = false, length = 20)
     private OrganizationStatus status;
 
-    // Added the field for sector type to the organization entity
     @Enumerated(EnumType.STRING)
-    @Column(name = "sector_type", nullable = false, length = 20)
-    private SectorType sectorType;
+    @Column(nullable = false, length = 20)
+    private OrganizationSector sector;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -56,12 +55,16 @@ public class Organization {
     // ACTIVE and createdAt are set here, not taken as constructor
     // parameters — every organization starts ACTIVE at the moment it's
     // provisioned; there's no real scenario for creating one pre-suspended.
-    public Organization(String slug, String schemaName, String displayName, SectorType sectorType) {
+    // sector IS a constructor parameter, unlike status — it has no fixed
+    // starting value the way status always starts ACTIVE, so the caller has
+    // to supply one (PlatformController's @NotNull is what actually
+    // enforces that nobody can omit it).
+    public Organization(String slug, String schemaName, String displayName, OrganizationSector sector) {
         this.slug = slug;
         this.schemaName = schemaName;
         this.displayName = displayName;
+        this.sector = sector;
         this.status = OrganizationStatus.ACTIVE;
-        this.sectorType = sectorType != null ? sectorType : SectorType.PRIVATE;
         this.createdAt = Instant.now();
     }
 
@@ -76,6 +79,24 @@ public class Organization {
 
     public void reactivate() {
         this.status = OrganizationStatus.ACTIVE;
+    }
+
+    // slug/schemaName are deliberately not settable anywhere in this class
+    // — schemaName is the literal Postgres schema this tenant's data lives
+    // in, and slug is what every login URL (/org/:tenantSlug/login) and
+    // X-Tenant-ID header value is built from. Renaming either is a real
+    // migration (rename the schema, or accept every existing bookmark/
+    // stored header breaking), not a field update; out of scope here.
+    public void rename(String displayName) {
+        this.displayName = displayName;
+    }
+
+    // SADM-US-002's own acceptance criteria: changing sector preserves
+    // existing module entitlements rather than reapplying sector defaults
+    // — this method only ever touches the sector field, on purpose,
+    // exactly so callers can't accidentally couple the two.
+    public void changeSector(OrganizationSector sector) {
+        this.sector = sector;
     }
 
     public UUID getId() {
@@ -98,9 +119,8 @@ public class Organization {
         return status;
     }
 
-    // This method is used to get the sector type of the organization
-    public SectorType getSectorType() {
-        return sectorType;
+    public OrganizationSector getSector() {
+        return sector;
     }
 
     public Instant getCreatedAt() {

@@ -31,10 +31,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request,
-                                                HttpServletRequest httpRequest) {
-        JwtService.IssuedToken issued =
-                authService.login(request.email(), request.password(), httpRequest.getRemoteAddr());
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        JwtService.IssuedToken issued = authService.login(request.email(), request.password());
         User user = userRepository.findByEmail(request.email()).orElseThrow();
         return ResponseEntity.ok(new LoginResponse(issued.token(), issued.expiresAt().toString(),
                 new UserSummary(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName())));
@@ -57,15 +55,13 @@ public class AuthController {
     public ResponseEntity<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequestBody request,
                                                        HttpServletRequest httpRequest) {
         passwordResetService.requestReset(request.email(), httpRequest.getRemoteAddr());
-        return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/password-reset/confirm")
-    public ResponseEntity<Void> confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmBody request,
-                                                       HttpServletRequest httpRequest) {
-        passwordResetService.confirmReset(request.email(), request.code(), request.newPassword(),
-                httpRequest.getRemoteAddr());
-        return ResponseEntity.ok().build();
+    public ResponseEntity<Void> confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmBody request) {
+        passwordResetService.confirmReset(request.email(), request.code(), request.newPassword());
+        return ResponseEntity.noContent().build();
     }
 
     public record LoginRequest(@NotBlank @Email String email, @NotBlank String password) {

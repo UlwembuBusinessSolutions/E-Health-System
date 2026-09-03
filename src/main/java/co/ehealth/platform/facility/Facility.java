@@ -10,11 +10,11 @@ import jakarta.persistence.Table;
 
 import java.util.UUID;
 
-// Full Facility CRUD belongs to Backend 1 per the Phase 1 dev brief's
-// ownership split — this slice only needs enough of the entity for staff
-// creation to reference a facility_id and for GET /api/v1/facilities to
-// list them. No update/deactivate methods here yet; add them alongside
-// real facility-management endpoints when that module gets built.
+// Originally minimal by design — full CRUD was deferred to Backend 1 per
+// the Phase 1 dev brief's ownership split, and this entity only needed
+// enough for staff creation to reference a facility_id. SADM-US-006 (Add a
+// clinic to a tenant) added the platform-operator create path; suspend/
+// remove (SADM-US-007/008) still aren't built.
 @Entity
 @Table(name = "facilities")
 public class Facility {
@@ -39,6 +39,9 @@ public class Facility {
     @Column(length = 20)
     private String phone;
 
+    @Column(name = "operating_hours", length = 200)
+    private String operatingHours;
+
     @Column(nullable = false, length = 50)
     private String timezone = "Africa/Johannesburg";
 
@@ -60,6 +63,10 @@ public class Facility {
 
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+
+    public void setOperatingHours(String operatingHours) {
+        this.operatingHours = operatingHours;
     }
 
     public UUID getId() {
@@ -84,6 +91,10 @@ public class Facility {
 
     public String getPhone() {
         return phone;
+    }
+
+    public String getOperatingHours() {
+        return operatingHours;
     }
 
     public String getTimezone() {

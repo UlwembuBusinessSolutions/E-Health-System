@@ -100,6 +100,107 @@ public class EmailService {
         send(toEmail, subject, body);
     }
 
+    // Fired once per operator PlatformOperatorService.createOperator()
+    // creates. Unlike the two emails above, there's no organization or
+    // employeeNumber to include — a platform operator isn't scoped to a
+    // tenant at all — and the sign-in link is /platform/login, not /login.
+    // Also doesn't promise a forced password change on first sign-in, unlike
+    // the other two: that's User.mustChangePassword, and PlatformOperator has
+    // no equivalent field or enforcement today, nor any self-service
+    // change-password endpoint yet — this account keeps the temporary
+    // password as its real one until someone deliberately gives it a new
+    // hash.
+    public void sendPlatformOperatorAccountCreatedEmail(String toEmail, String firstName,
+                                                          String temporaryPassword) {
+        String subject = "Your platform operator account is ready";
+        String body = """
+                Hi %s,
+
+                A platform operator account has been created for you.
+
+                Sign in at %s/platform/login with:
+                  Email: %s
+                  Temporary password: %s
+
+                Keep this password safe — there's no self-service way to change it yet, so \
+                treat it as a standing credential rather than a temporary one for now.
+                """.formatted(firstName, frontendBaseUrl, toEmail, temporaryPassword);
+        send(toEmail, subject, body);
+    }
+
+    // Fired once per PasswordResetService.requestReset() call — the piece
+    // that TODO used to flag as missing (this class only knew how to send
+    // account-created emails before): the code was being generated and
+    // hashed into password_reset_tokens with nowhere for the real value to
+    // go, making the whole flow undeliverable even once the frontend called
+    // the real endpoint instead of its mock. codeTtlMinutes is passed
+    // through rather than hardcoded here — PasswordResetService.CODE_TTL is
+    // the one source of truth for how long the code is actually valid.
+    public void sendPasswordResetCodeEmail(String toEmail, String firstName, String code, long codeTtlMinutes) {
+        String subject = "Your password reset code";
+        String body = """
+                Hi %s,
+
+                Someone requested a password reset for this account. If that was you, use \
+                this code to continue:
+
+                  %s
+
+                This code expires in %d minutes and can only be used once. If you didn't \
+                request this, you can ignore this email — your password hasn't changed.
+                """.formatted(firstName, code, codeTtlMinutes);
+        send(toEmail, subject, body);
+    }
+
+    // Fired once per PlatformOperatorService.resetPassword() call — the
+    // admin-triggered counterpart to sendPlatformOperatorAccountCreatedEmail
+    // above, for an operator who already has an account but needs a new
+    // password (platform operators have no self-service reset flow, unlike
+    // tenant staff's /api/v1/auth/password-reset/**).
+    public void sendPlatformOperatorPasswordResetEmail(String toEmail, String firstName,
+                                                         String temporaryPassword) {
+        String subject = "Your platform operator password has been reset";
+        String body = """
+                Hi %s,
+
+                Your platform operator password has been reset by another operator.
+
+                Sign in at %s/platform/login with:
+                  Email: %s
+                  Temporary password: %s
+
+                If you didn't expect this, contact your platform team right away.
+                """.formatted(firstName, frontendBaseUrl, toEmail, temporaryPassword);
+        send(toEmail, subject, body);
+    }
+
+    // Fired once per StaffService.resetPassword() call — the admin-triggered
+    // counterpart to sendStaffAccountCreatedEmail/sendAdminAccountCreatedEmail
+    // above, for a staff member (or org admin) who already has an account
+    // but needs a new password. Distinct from sendPasswordResetCodeEmail:
+    // that one is the self-service, user-initiated flow (a 6-digit code the
+    // recipient enters themselves); this one is an admin directly generating
+    // and handing over a new working password, same shape as account
+    // creation.
+    public void sendStaffPasswordResetEmail(String toEmail, String firstName, String organizationDisplayName,
+                                             String organizationSlug, String temporaryPassword) {
+        String subject = "Your password has been reset — " + organizationDisplayName;
+        String body = """
+                Hi %s,
+
+                Your account password on %s has been reset by an administrator.
+
+                Sign in at %s/org/%s/login with:
+                  Email: %s
+                  Temporary password: %s
+
+                You'll be asked to choose a new password the first time you sign in — this \
+                temporary one stops working once you do.
+                """.formatted(firstName, organizationDisplayName, frontendBaseUrl, organizationSlug, toEmail,
+                temporaryPassword);
+        send(toEmail, subject, body);
+    }
+
     private void send(String toEmail, String subject, String body) {
         // Written synchronously, before this method returns — this is the
         // verifiable "what would this email have said" record (see the

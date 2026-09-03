@@ -29,6 +29,8 @@ import java.util.UUID;
 public class PlatformJwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String PLATFORM_TOKEN_HEADER = "X-Platform-Key";
+    private static final String AUTHORIZATION_HEADER = "Authorization";
+    private static final String BEARER_PREFIX = "Bearer ";
     private static final String INVALID_TOKEN_MESSAGE = "Session expired. Please sign in again.";
 
     private final PlatformJwtService platformJwtService;
@@ -43,7 +45,7 @@ public class PlatformJwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        String token = request.getHeader(PLATFORM_TOKEN_HEADER);
+        String token = resolveToken(request);
         if (token == null) {
             FilterResponses.writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED, INVALID_TOKEN_MESSAGE);
             return;
@@ -91,6 +93,23 @@ public class PlatformJwtAuthenticationFilter extends OncePerRequestFilter {
         String uri = request.getRequestURI();
         // /platform/auth/login is how an operator gets a token in the
         // first place — can't require one to reach it.
-        return !uri.startsWith("/platform/") || uri.equals("/platform/auth/login");
+        return !uri.startsWith("/platform/")
+            || "OPTIONS".equalsIgnoreCase(request.getMethod())
+            || uri.equals("/platform/auth/login")
+            || uri.equals("/platform/auth/register");
+    }
+
+    private String resolveToken(HttpServletRequest request) {
+        String platformToken = request.getHeader(PLATFORM_TOKEN_HEADER);
+        if (platformToken != null && !platformToken.isBlank()) {
+            return platformToken;
+        }
+
+        String authorizationHeader = request.getHeader(AUTHORIZATION_HEADER);
+        if (authorizationHeader != null && authorizationHeader.startsWith(BEARER_PREFIX)) {
+            return authorizationHeader.substring(BEARER_PREFIX.length());
+        }
+
+        return null;
     }
 }

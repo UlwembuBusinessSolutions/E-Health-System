@@ -1,7 +1,6 @@
 package co.ehealth.platform.identity;
 
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -12,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,8 +19,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -34,12 +36,23 @@ public class StaffController {
         this.staffPhotoService = staffPhotoService;
     }
 
+    // The tenant app's staff roster — ORG_ADMIN-only, same
+    // /api/v1/admin/** matcher as creation. Not open to any authenticated
+    // staff member the way GET /api/v1/facilities or /api/v1/organization
+    // are: a full roster (contact details, roles, last login) is admin
+    // territory, not something every staff member needs to see about their
+    // colleagues.
+    @GetMapping("/api/v1/admin/staff")
+    public ResponseEntity<Map<String, Object>> list() {
+        List<StaffRosterEntry> items = staffService.listStaff().stream().map(StaffRosterEntry::from).toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
     // Covered by SecurityConfig's existing /api/v1/admin/** -> ORG_ADMIN
     // matcher — no security config change needed for this.
     @PostMapping("/api/v1/admin/staff")
     public ResponseEntity<StaffSummary> create(@Valid @RequestBody CreateStaffRequest request,
-                                                @AuthenticationPrincipal AuthenticatedPrincipal admin,
-                                                HttpServletRequest httpRequest) {
+                                                @AuthenticationPrincipal AuthenticatedPrincipal admin) {
         // additionalFacilityIds is optional in the request body — a caller
         // that omits it entirely gets treated the same as one that sends [].
         List<UUID> additionalFacilityIds =
@@ -53,8 +66,38 @@ public class StaffController {
                 request.sapcNumber(), request.sapcExpiryDate(),
                 request.emergencyContactName(), request.emergencyContactRelationship(),
                 request.emergencyContactPhone(), request.temporaryPassword());
-        User created = staffService.createStaff(command, admin.userId(), httpRequest.getRemoteAddr());
+        User created = staffService.createStaff(command, admin.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(StaffSummary.from(created));
+    }
+
+    // Same /api/v1/admin/** -> ORG_ADMIN matcher as create() above — any
+    // org admin can reset any staff member's password, including another
+    // admin's (the actual fix for "an admin is locked out and there's no
+    // other way back in" at the tenant level, same problem
+    // PlatformController's platform-side admin-reset endpoint solves for
+    // when there's nobody left inside the org at all).
+    @PostMapping("/api/v1/admin/staff/{id}/reset-password")
+    public ResponseEntity<ResetPasswordResponse> resetPassword(@PathVariable UUID id,
+                                                                 @AuthenticationPrincipal AuthenticatedPrincipal admin) {
+        String temporaryPassword = staffService.resetPassword(id, admin.userId());
+        return ResponseEntity.ok(new ResetPasswordResponse(temporaryPassword));
+    }
+
+    @PostMapping("/api/v1/admin/staff/{id}/enable")
+    public ResponseEntity<Void> enable(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedPrincipal admin) {
+        staffService.setEnabled(id, true, admin.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/api/v1/admin/staff/{id}/disable")
+    public ResponseEntity<Void> disable(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedPrincipal admin) {
+        staffService.setEnabled(id, false, admin.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    // temporaryPassword returned exactly once — same discipline as
+    // StaffSummary's own creation-time counterpart never re-exposing it.
+    public record ResetPasswordResponse(String temporaryPassword) {
     }
 
     // A staff member leaving is its own operation, not an update to the
@@ -62,9 +105,8 @@ public class StaffController {
     // why employmentEndDate isn't part of CreateStaffRequest.
     @PostMapping("/api/v1/admin/staff/{id}/offboard")
     public ResponseEntity<Void> offboard(@PathVariable UUID id, @Valid @RequestBody OffboardStaffRequest request,
-                                          @AuthenticationPrincipal AuthenticatedPrincipal admin,
-                                          HttpServletRequest httpRequest) {
-        staffService.offboardStaff(id, request.employmentEndDate(), admin.userId(), httpRequest.getRemoteAddr());
+                                          @AuthenticationPrincipal AuthenticatedPrincipal admin) {
+        staffService.offboardStaff(id, request.employmentEndDate(), admin.userId());
         return ResponseEntity.noContent().build();
     }
 
@@ -76,12 +118,11 @@ public class StaffController {
     @PostMapping("/api/v1/admin/staff/{id}/compliance")
     public ResponseEntity<Void> recordCompliance(@PathVariable UUID id,
                                                    @Valid @RequestBody RecordComplianceRequest request,
-                                                   @AuthenticationPrincipal AuthenticatedPrincipal admin,
-                                                   HttpServletRequest httpRequest) {
+                                                   @AuthenticationPrincipal AuthenticatedPrincipal admin) {
         var command = new StaffService.RecordComplianceCommand(request.race(), request.disabilityStatus(),
                 request.backgroundCheckDate(), request.backgroundCheckStatus(),
                 request.occupationalHealthClearanceDate());
-        staffService.recordComplianceDetails(id, command, admin.userId(), httpRequest.getRemoteAddr());
+        staffService.recordComplianceDetails(id, command, admin.userId());
         return ResponseEntity.noContent().build();
     }
 
@@ -139,6 +180,19 @@ public class StaffController {
         static StaffSummary from(User u) {
             return new StaffSummary(u.getId(), u.getEmployeeNumber(), u.getEmail(), u.getFirstName(),
                     u.getLastName(), u.getFacilityId(), u.isMustChangePassword());
+        }
+    }
+
+    // The roster's own row shape — roles is a list because user_roles has
+    // no cardinality constraint (StaffService.StaffRosterEntry's own
+    // why-note), even though a typical staff member holds exactly one today.
+    public record StaffRosterEntry(UUID id, String employeeNumber, String firstName, String lastName, String email,
+                                    String contactNumber, List<String> roles, UUID facilityId, String status,
+                                    Instant lastLoginAt) {
+        static StaffRosterEntry from(StaffService.StaffRosterEntry entry) {
+            return new StaffRosterEntry(entry.id(), entry.employeeNumber(), entry.firstName(), entry.lastName(),
+                    entry.email(), entry.contactNumber(), entry.roles(), entry.facilityId(),
+                    entry.status().name(), entry.lastLoginAt());
         }
     }
 }

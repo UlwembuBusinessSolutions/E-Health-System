@@ -2,6 +2,7 @@ package co.ehealth.platform.identity;
 
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.notification.EmailService;
+import co.ehealth.platform.core.security.TemporaryPasswordGenerator;
 import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
 import co.ehealth.platform.core.tenant.TenantContext;
@@ -9,9 +10,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class StaffService {
@@ -27,11 +33,14 @@ public class StaffService {
     // elsewhere in this package, e.g. AuthService, StaffPhotoService).
     private final OrganizationRepository organizationRepository;
     private final EmailService emailService;
+    private final TemporaryPasswordGenerator temporaryPasswordGenerator;
+    private final Clock clock;
 
     public StaffService(UserRepository userRepository, RoleRepository roleRepository,
                          UserComplianceDetailsRepository complianceDetailsRepository,
                          PasswordEncoder passwordEncoder, AuditLogService auditLogService,
-                         OrganizationRepository organizationRepository, EmailService emailService) {
+                         OrganizationRepository organizationRepository, EmailService emailService,
+                         TemporaryPasswordGenerator temporaryPasswordGenerator, Clock clock) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.complianceDetailsRepository = complianceDetailsRepository;
@@ -39,6 +48,8 @@ public class StaffService {
         this.auditLogService = auditLogService;
         this.organizationRepository = organizationRepository;
         this.emailService = emailService;
+        this.temporaryPasswordGenerator = temporaryPasswordGenerator;
+        this.clock = clock;
     }
 
     // Called only by OrganizationProvisioningService (the platform module)
@@ -77,6 +88,17 @@ public class StaffService {
                 .toList();
     }
 
+    // OrganizationProvisioningService.listTenantAuditLog()'s name lookup —
+    // audit_log rows only ever store a bare userId (AuditLog.getUserId()),
+    // and that module has no business reaching into UserRepository
+    // directly to turn ids into names, per the same module-boundary rule
+    // every other cross-module read here already follows. One bulk lookup,
+    // not one query per audit row.
+    public Map<UUID, String> resolveUserNames(Set<UUID> userIds) {
+        return userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u.getFirstName() + " " + u.getLastName()));
+    }
+
     // The write half of OrganizationProvisioningService.removeAdmin() — the
     // actual fix for "an admin is locked out or has left, and nobody else
     // has platform access to remove them." Revokes the role only; doesn't
@@ -108,10 +130,60 @@ public class StaffService {
         userRepository.removeRole(userId, orgAdminRole.getId());
     }
 
-    public record AdminSummary(UUID userId, String email, String firstName, String lastName) {
+    public record AdminSummary(UUID userId, String email, String firstName, String lastName, UserStatus status) {
         static AdminSummary from(User u) {
-            return new AdminSummary(u.getId(), u.getEmail(), u.getFirstName(), u.getLastName());
+            return new AdminSummary(u.getId(), u.getEmail(), u.getFirstName(), u.getLastName(), u.getStatus());
         }
+    }
+
+    // The tenant app's own staff roster — the read half this org has never
+    // had (createStaff() below is the only staff endpoint that existed
+    // before the real app shell needed a list to show). One findRoleNames()
+    // call per user rather than a bulk join: a tenant's own staff count is
+    // realistically dozens, not thousands, and there's no existing bulk
+    // variant of that native query to reuse without adding one purely for
+    // this. Revisit if a real org's roster ever grows large enough for that
+    // to matter.
+    public List<StaffRosterEntry> listStaff() {
+        return userRepository.findAll().stream()
+                .map(u -> new StaffRosterEntry(u.getId(), u.getEmployeeNumber(), u.getFirstName(), u.getLastName(),
+                        u.getEmail(), u.getContactNumber(), userRepository.findRoleNames(u.getId()),
+                        u.getFacilityId(), u.getStatus(), u.getLastLoginAt()))
+                .toList();
+    }
+
+    public record StaffRosterEntry(UUID id, String employeeNumber, String firstName, String lastName, String email,
+                                    String contactNumber, List<String> roles, UUID facilityId, UserStatus status,
+                                    Instant lastLoginAt) {
+    }
+
+    // PHRM-US-009: "Restrict prescribing/dispensing to licensed users ...
+    // expired licence auto-suspends capability." This codebase's only
+    // professional-registration data is the three number/expiry pairs
+    // AddStaffScreen already collects (sanc/hpcsa/sapc, V7__staff_hr_and_compliance.sql) —
+    // no separate "role permits this action" table exists, so "licensed"
+    // here means exactly "holds a present, non-expired registration of the
+    // right kind," checked fresh on every call rather than cached: a
+    // licence expiring between logins should take effect immediately, not
+    // wait for the next login's JWT to reflect it. hpcsaNumber and
+    // sancNumber are treated as equally valid prescribing credentials
+    // (doctors register under HPCSA, many nurses under SANC) — this
+    // codebase has no finer-grained "which profession prescribes what"
+    // rule to enforce beyond "some real, current registration exists."
+    public LicenseStatus getLicenseStatus(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
+        LocalDate today = LocalDate.now(clock);
+        boolean hpcsaValid = user.getHpcsaNumber() != null && user.getHpcsaExpiryDate() != null
+                && !user.getHpcsaExpiryDate().isBefore(today);
+        boolean sancValid = user.getSancNumber() != null && user.getSancExpiryDate() != null
+                && !user.getSancExpiryDate().isBefore(today);
+        boolean sapcValid = user.getSapcNumber() != null && user.getSapcExpiryDate() != null
+                && !user.getSapcExpiryDate().isBefore(today);
+        return new LicenseStatus(hpcsaValid || sancValid, sapcValid);
+    }
+
+    public record LicenseStatus(boolean canPrescribe, boolean canDispense) {
     }
 
     // Direct creation, not request-and-approve: an org admin fills every
@@ -121,7 +193,7 @@ public class StaffService {
     // types can't become a standing credential without the staff member
     // replacing it first.
     @Transactional
-    public User createStaff(CreateStaffCommand cmd, UUID creatingAdminId, String ipAddress) {
+    public User createStaff(CreateStaffCommand cmd, UUID creatingAdminId) {
         requireUnique("employeeNumber", userRepository.existsByEmployeeNumber(cmd.employeeNumber()));
         requireUnique("email", userRepository.existsByEmail(cmd.email()));
         requireUnique("contactNumber", userRepository.existsByContactNumber(cmd.contactNumber()));
@@ -175,7 +247,7 @@ public class StaffService {
         }
 
         auditLogService.append(creatingAdminId, cmd.facilityId(), "STAFF_CREATED",
-                "User", user.getId().toString(), null, null, ipAddress);
+                "User", user.getId().toString(), null, null);
 
         // Previously nothing notified a new staff member at all — only
         // org-admin accounts (OrganizationProvisioningService) sent an
@@ -198,14 +270,69 @@ public class StaffService {
     // window where the account is disabled but the record doesn't yet say
     // why, or vice versa.
     @Transactional
-    public void offboardStaff(UUID userId, LocalDate employmentEndDate, UUID actingAdminId, String ipAddress) {
+    public void offboardStaff(UUID userId, LocalDate employmentEndDate, UUID actingAdminId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
         user.setEmploymentEndDate(employmentEndDate);
         user.setStatus(UserStatus.DISABLED);
         userRepository.save(user);
         auditLogService.append(actingAdminId, user.getFacilityId(), "STAFF_OFFBOARDED",
-                "User", userId.toString(), null, null, ipAddress);
+                "User", userId.toString(), null, null);
+    }
+
+    // Admin-triggered, unlike the self-service /api/v1/auth/password-reset/**
+    // flow (PasswordResetService) — this is "an admin generates and hands
+    // over a new working password" for someone who's locked out or simply
+    // needs a reset done for them, not "I forgot my password and can prove
+    // it's me via a 6-digit code sent to my own address." Uses
+    // adminResetPassword() rather than setPasswordHash() specifically so
+    // mustChangePassword ends up true — see User.adminResetPassword()'s own
+    // why-note. Same "capture-to-file, then attempt real SMTP" delivery
+    // path as every other account email.
+    @Transactional
+    public String resetPassword(UUID userId, UUID actingAdminId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
+        String temporaryPassword = temporaryPasswordGenerator.generate();
+        user.adminResetPassword(passwordEncoder.encode(temporaryPassword));
+        userRepository.save(user);
+
+        auditLogService.append(actingAdminId, user.getFacilityId(), "STAFF_PASSWORD_RESET",
+                "User", userId.toString(), null, null);
+
+        organizationRepository.findBySchemaName(TenantContext.getCurrentTenant())
+                .ifPresent(organization -> emailService.sendStaffPasswordResetEmail(
+                        user.getEmail(), user.getFirstName(), organization.getDisplayName(),
+                        organization.getSlug(), temporaryPassword));
+
+        return temporaryPassword;
+    }
+
+    // The write half of "ability to disable the user" — a plain suspend/
+    // reactivate lever, deliberately kept separate from offboardStaff()
+    // above: that one means "this person left the organization" (stamps
+    // employmentEndDate, a real HR fact that shouldn't be implied by a
+    // reversible admin action) — this means "this account can't sign in
+    // right now," full stop, and never touches employmentEndDate either
+    // way. Guards against disabling an organization's last remaining
+    // ORG_ADMIN, same check and same reasoning as revokeOrgAdminRole()'s
+    // own guard — every path back to having one requires already being one.
+    @Transactional
+    public void setEnabled(UUID userId, boolean enabled, UUID actingAdminId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
+        if (!enabled && userRepository.findRoleNames(userId).contains("ORG_ADMIN")) {
+            List<User> currentAdmins = userRepository.findByRoleName("ORG_ADMIN");
+            if (currentAdmins.size() <= 1) {
+                throw new LastRemainingAdminException("Cannot disable the organization's last remaining admin.");
+            }
+        }
+
+        user.setStatus(enabled ? UserStatus.ACTIVE : UserStatus.DISABLED);
+        userRepository.save(user);
+
+        auditLogService.append(actingAdminId, user.getFacilityId(),
+                enabled ? "STAFF_ENABLED" : "STAFF_DISABLED", "User", userId.toString(), null, null);
     }
 
     // Separate from createStaff() on purpose. A background check result
@@ -217,8 +344,7 @@ public class StaffService {
     // that only carries a background-check result doesn't null out
     // race/disability data a previous call already recorded.
     @Transactional
-    public void recordComplianceDetails(UUID userId, RecordComplianceCommand cmd, UUID recordingAdminId,
-                                         String ipAddress) {
+    public void recordComplianceDetails(UUID userId, RecordComplianceCommand cmd, UUID recordingAdminId) {
         if (!userRepository.existsById(userId)) {
             throw new IllegalArgumentException("Unknown staff member");
         }
@@ -241,7 +367,7 @@ public class StaffService {
         }
         complianceDetailsRepository.save(details);
         auditLogService.append(recordingAdminId, null, "STAFF_COMPLIANCE_RECORDED",
-                "UserComplianceDetails", userId.toString(), null, null, ipAddress);
+                "UserComplianceDetails", userId.toString(), null, null);
     }
 
     private void requireUnique(String field, boolean alreadyTaken) {

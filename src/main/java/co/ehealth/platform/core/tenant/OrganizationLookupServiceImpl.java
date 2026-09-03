@@ -17,4 +17,9 @@ class OrganizationLookupServiceImpl implements OrganizationLookupService {
     public Optional<Organization> findActiveBySlug(String slug) {
         return organizationRepository.findBySlugAndStatus(slug, OrganizationStatus.ACTIVE);
     }
+
+    @Override
+    public Optional<Organization> findBySlug(String slug) {
+        return organizationRepository.findBySlug(slug);
+    }
 }
