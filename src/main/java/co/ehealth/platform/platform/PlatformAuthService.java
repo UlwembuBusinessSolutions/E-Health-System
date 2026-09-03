@@ -4,7 +4,6 @@ import co.ehealth.platform.core.security.DummyHash;
 import co.ehealth.platform.core.security.PlatformJwtService;
 import co.ehealth.platform.identity.AccountLockedException;
 import co.ehealth.platform.identity.InvalidCredentialsException;
-import co.ehealth.platform.identity.DuplicateFieldException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,22 +43,6 @@ public class PlatformAuthService {
         this.platformJwtService = platformJwtService;
         this.clock = clock;
         this.platformAuditLogRepository = platformAuditLogRepository;
-    }
-
-    @Transactional
-    public RegisteredOperator register(String firstName, String lastName, String email, String rawPassword) {
-        if (platformOperatorRepository.existsByEmail(email)) {
-            throw new DuplicateFieldException("email", "A platform operator with this email already exists.");
-        }
-
-        PlatformOperator operator = new PlatformOperator(
-                email, firstName, lastName, passwordEncoder.encode(rawPassword));
-        platformOperatorRepository.save(operator);
-        platformAuditLogRepository.save(
-                new PlatformAuditLog(operator.getId(), "PLATFORM_OPERATOR_REGISTERED", null, clock.instant()));
-
-        PlatformJwtService.IssuedToken issued = platformJwtService.issue(operator.getId(), operator.getTokenVersion());
-        return new RegisteredOperator(operator, issued);
     }
 
     // noRollbackFor is load-bearing — same reasoning as identity.AuthService.
@@ -130,8 +113,5 @@ public class PlatformAuthService {
         if (operator.getFailedLoginCount() >= MAX_FAILED_ATTEMPTS) {
             operator.lock(now);
         }
-    }
-
-    public record RegisteredOperator(PlatformOperator operator, PlatformJwtService.IssuedToken token) {
     }
 }

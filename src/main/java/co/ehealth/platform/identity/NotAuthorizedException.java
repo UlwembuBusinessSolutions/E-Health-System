@@ -12,4 +12,8 @@ public class NotAuthorizedException extends RuntimeException {
         super("Your role doesn't have %s access to %s.".formatted(
                 required == PermissionLevel.MANAGE ? "manage" : "view", module.getDisplayName()));
     }
+
+    public NotAuthorizedException(String message) {
+        super(message);
+    }
 }

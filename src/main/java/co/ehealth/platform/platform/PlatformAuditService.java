@@ -29,15 +29,83 @@ public class PlatformAuditService {
     private final OrganizationRepository organizationRepository;
 
     public PlatformAuditService(PlatformAuditLogRepository platformAuditLogRepository,
-                                 PlatformOperatorRepository platformOperatorRepository,
-                                 OrganizationRepository organizationRepository) {
+            PlatformOperatorRepository platformOperatorRepository,
+            OrganizationRepository organizationRepository) {
         this.platformAuditLogRepository = platformAuditLogRepository;
         this.platformOperatorRepository = platformOperatorRepository;
         this.organizationRepository = organizationRepository;
     }
 
-    public List<PlatformAuditEntryView> list(String action, UUID organizationId, Instant from, Instant to) {
+    // public List<PlatformAuditEntryView> list(String action, UUID organizationId,
+    // Instant from, Instant to) {
+    // Specification<PlatformAuditLog> spec = Specification.where(null);
+    // if (action != null && !action.isBlank()) {
+    // spec = spec.and((root, cq, cb) -> cb.equal(root.get("action"), action));
+    // }
+    // if (organizationId != null) {
+    // spec = spec.and((root, cq, cb) -> cb.equal(root.get("organizationId"),
+    // organizationId));
+    // }
+    // if (from != null) {
+    // spec = spec.and((root, cq, cb) ->
+    // cb.greaterThanOrEqualTo(root.get("createdAt"), from));
+    // }
+    // if (to != null) {
+    // spec = spec.and((root, cq, cb) -> cb.lessThanOrEqualTo(root.get("createdAt"),
+    // to));
+    // }
+
+    // List<PlatformAuditLog> rows =
+    // platformAuditLogRepository.findAll(spec, Sort.by(Sort.Direction.DESC,
+    // "createdAt"));
+
+    // // Two bulk lookups rather than one query per row — every audit
+    // // screen this feeds shows potentially dozens of rows at once, and
+    // // operator/org identities repeat heavily (the same handful of
+    // // operators and orgs account for most activity).
+    // Set<UUID> operatorIds =
+    // rows.stream().map(PlatformAuditLog::getPlatformOperatorId).collect(Collectors.toSet());
+    // Map<UUID, PlatformOperator> operatorsById =
+    // platformOperatorRepository.findAllById(operatorIds).stream()
+    // .collect(Collectors.toMap(PlatformOperator::getId, o -> o));
+
+    // Set<UUID> organizationIds =
+    // rows.stream().map(PlatformAuditLog::getOrganizationId)
+    // .filter(Objects::nonNull).collect(Collectors.toSet());
+    // Map<UUID, Organization> organizationsById =
+    // organizationRepository.findAllById(organizationIds).stream()
+    // .collect(Collectors.toMap(Organization::getId, o -> o));
+
+    // return rows.stream().map(row -> {
+    // PlatformOperator operator = operatorsById.get(row.getPlatformOperatorId());
+    // Organization organization = row.getOrganizationId() != null
+    // ? organizationsById.get(row.getOrganizationId()) : null;
+    // return new PlatformAuditEntryView(
+    // row.getId(),
+    // row.getAction(),
+    // row.getDetail(),
+    // row.getCreatedAt(),
+    // operator != null ? operator.getFirstName() + " " + operator.getLastName() :
+    // "Unknown operator",
+    // operator != null ? operator.getEmail() : null,
+    // row.getOrganizationId(),
+    // organization != null ? organization.getDisplayName() : null,
+    // row.getIpAddress(),
+    // row.getDeviceSignature());
+    // }).toList();
+    // }
+
+    // public record PlatformAuditEntryView(
+    // UUID id, String action, String detail, Instant createdAt,
+    // String operatorName, String operatorEmail, UUID organizationId, String
+    // organizationName,
+    // String ipAddress, String deviceSignature) {
+    // }
+
+    public List<PlatformAuditEntryView> list(String action, UUID organizationId, Instant from, Instant to,
+            Boolean privileged) {
         Specification<PlatformAuditLog> spec = Specification.where(null);
+
         if (action != null && !action.isBlank()) {
             spec = spec.and((root, cq, cb) -> cb.equal(root.get("action"), action));
         }
@@ -50,15 +118,18 @@ public class PlatformAuditService {
         if (to != null) {
             spec = spec.and((root, cq, cb) -> cb.lessThanOrEqualTo(root.get("createdAt"), to));
         }
+        if (privileged != null) {
+            spec = spec.and((root, cq, cb) -> cb.equal(root.get("privileged"), privileged));
+        }
 
-        List<PlatformAuditLog> rows =
-                platformAuditLogRepository.findAll(spec, Sort.by(Sort.Direction.DESC, "createdAt"));
-
-        // Two bulk lookups rather than one query per row — every audit
-        // screen this feeds shows potentially dozens of rows at once, and
-        // operator/org identities repeat heavily (the same handful of
-        // operators and orgs account for most activity).
-        Set<UUID> operatorIds = rows.stream().map(PlatformAuditLog::getPlatformOperatorId).collect(Collectors.toSet());
+        List<PlatformAuditLog> rows = platformAuditLogRepository.findAll(spec,
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+        // .filter(Objects::nonNull) is the required fix here — platformOperatorId
+        // is nullable now (CROSS_TENANT_ACCESS may have none). Spring Data
+        // JPA's findAllById() throws if the id collection contains a null
+        // element, so this can't be skipped the way it safely could before.
+        Set<UUID> operatorIds = rows.stream().map(PlatformAuditLog::getPlatformOperatorId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
         Map<UUID, PlatformOperator> operatorsById = platformOperatorRepository.findAllById(operatorIds).stream()
                 .collect(Collectors.toMap(PlatformOperator::getId, o -> o));
 
@@ -70,24 +141,20 @@ public class PlatformAuditService {
         return rows.stream().map(row -> {
             PlatformOperator operator = operatorsById.get(row.getPlatformOperatorId());
             Organization organization = row.getOrganizationId() != null
-                    ? organizationsById.get(row.getOrganizationId()) : null;
+                    ? organizationsById.get(row.getOrganizationId())
+                    : null;
             return new PlatformAuditEntryView(
-                    row.getId(),
-                    row.getAction(),
-                    row.getDetail(),
-                    row.getCreatedAt(),
+                    row.getId(), row.getAction(), row.getDetail(), row.getCreatedAt(),
                     operator != null ? operator.getFirstName() + " " + operator.getLastName() : "Unknown operator",
                     operator != null ? operator.getEmail() : null,
-                    row.getOrganizationId(),
-                    organization != null ? organization.getDisplayName() : null,
-                    row.getIpAddress(),
-                    row.getDeviceSignature());
+                    row.getOrganizationId(), organization != null ? organization.getDisplayName() : null,
+                    row.isPrivileged(), row.getIpAddress(), row.getDeviceSignature());
         }).toList();
     }
 
     public record PlatformAuditEntryView(
             UUID id, String action, String detail, Instant createdAt,
             String operatorName, String operatorEmail, UUID organizationId, String organizationName,
-            String ipAddress, String deviceSignature) {
+            boolean privileged, String ipAddress, String deviceSignature) {
     }
 }

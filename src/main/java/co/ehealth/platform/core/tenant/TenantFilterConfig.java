@@ -24,4 +24,15 @@ public class TenantFilterConfig {
         registration.addUrlPatterns("/*");
         return registration;
     }
+
+    // FilterRegistrationBean<TenantFilter> registration = new
+    // FilterRegistrationBean<>(
+    // new TenantFilter(organizationLookupService, corsConfigurationSource));
+    // // One below CrossTenantAccessFilter (platform.platform) — its own
+    // // TenantAccessTracker.reset() has to run before this filter's first
+    // // TenantContext.setCurrentTenant() call, and TenantAccessTracker's
+    // // touched-schema check has to run after this filter's last one.
+    // registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
+    // registration.addUrlPatterns("/*");
+    // }
 }

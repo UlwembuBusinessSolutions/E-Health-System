@@ -6,8 +6,9 @@ data/
 *.iml
 .vscode/
 .DS_Store
-
-# Local/build files
-.m2/
-target/
-.vscode/
+src/main/resources/application.yml
+powershell.ps1
+seed-demo-tenant.ps1
+docker-error.txt
+powershell.ps1
+seed-demo-tenant.ps1
