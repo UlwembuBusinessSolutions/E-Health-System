@@ -11,6 +11,8 @@ import java.util.UUID;
 
 // The pharmacy slice has no inventory-balance aggregate yet, but every
 // dispense still needs an immutable movement trail tied to a named patient.
+
+//Pay attention how oyu guys do the merge
 @Entity
 @Table(name = "stock_movements")
 public class StockMovement {
@@ -41,7 +43,7 @@ public class StockMovement {
     }
 
     public StockMovement(UUID prescriptionId, UUID patientId, String patientMpi, String drugName, int quantity,
-                         Instant movedAt) {
+            Instant movedAt) {
         this.prescriptionId = prescriptionId;
         this.patientId = patientId;
         this.patientMpi = patientMpi;
@@ -50,11 +52,31 @@ public class StockMovement {
         this.movedAt = movedAt;
     }
 
-    public UUID getId() { return id; }
-    public UUID getPrescriptionId() { return prescriptionId; }
-    public UUID getPatientId() { return patientId; }
-    public String getPatientMpi() { return patientMpi; }
-    public String getDrugName() { return drugName; }
-    public int getQuantity() { return quantity; }
-    public Instant getMovedAt() { return movedAt; }
+    public UUID getId() {
+        return id;
+    }
+
+    public UUID getPrescriptionId() {
+        return prescriptionId;
+    }
+
+    public UUID getPatientId() {
+        return patientId;
+    }
+
+    public String getPatientMpi() {
+        return patientMpi;
+    }
+
+    public String getDrugName() {
+        return drugName;
+    }
+
+    public int getQuantity() {
+        return quantity;
+    }
+
+    public Instant getMovedAt() {
+        return movedAt;
+    }
 }
