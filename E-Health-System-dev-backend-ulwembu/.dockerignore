@@ -1,7 +1,0 @@
-target/
-data/
-.env
-.git
-.idea/
-*.iml
-.DS_Store
