@@ -120,10 +120,6 @@ public class TenantFilter extends OncePerRequestFilter {
         // preflight request, not found by reading the filter in isolation.
         String uri = request.getRequestURI();
         return uri.startsWith("/actuator/health") || uri.startsWith("/platform/")
-                // The tenant register is a platform-operator view. It has no
-                // tenant header by design, so attempting tenant resolution
-                // here would reject it before its own security rule runs.
-                || uri.startsWith("/api/v1/tenants")
                 || "OPTIONS".equalsIgnoreCase(request.getMethod());
     }
 }

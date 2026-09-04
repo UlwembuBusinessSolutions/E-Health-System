@@ -5,10 +5,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/PlatformAuthController.java
 import jakarta.validation.constraints.NotBlank;
-=======
->>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/PlatformAuthController.java
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -57,7 +54,6 @@ public class PlatformAuthController {
     public record LoginRequest(@NotBlank @Email String email, @NotBlank String password) {
     }
 
-<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/java/co/ehealth/platform/platform/PlatformAuthController.java
     @PostMapping("/password-reset/request")
     public ResponseEntity<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
         platformAuthService.requestPasswordReset(request.email());
@@ -70,8 +66,6 @@ public class PlatformAuthController {
         return ResponseEntity.noContent().build();
     }
 
-=======
->>>>>>> origin/dev-backend-ulwembu:src/main/java/co/ehealth/platform/platform/PlatformAuthController.java
             public record RegisterRequest(@NotBlank String firstName, @NotBlank String lastName,
                           @NotBlank @Email String email, @NotBlank @Size(min = 8) String password) {
             }
