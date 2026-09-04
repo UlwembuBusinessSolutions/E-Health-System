@@ -13,7 +13,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/ulwembu}
     username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:mpho}
+    password: ${DB_PASSWORD:2019}
     hikari:
       maximum-pool-size: 20
   jpa:
