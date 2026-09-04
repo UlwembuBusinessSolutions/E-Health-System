@@ -124,6 +124,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.Immutable;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -132,6 +133,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "audit_log")
+@Immutable
 public class AuditLog {
 
     @Id
@@ -169,6 +171,15 @@ public class AuditLog {
 
     @Column(nullable = false)
     private boolean privileged;
+
+    @Column(name = "audit_sequence", nullable = false, updatable = false, insertable = false)
+    private Long auditSequence;
+
+    @Column(name = "previous_hash", nullable = false, updatable = false, insertable = false, length = 64)
+    private String previousHash;
+
+    @Column(name = "integrity_hash", nullable = false, updatable = false, insertable = false, length = 64)
+    private String integrityHash;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -234,6 +245,18 @@ public class AuditLog {
 
     public boolean isPrivileged() {
         return privileged;
+    }
+
+    public Long getAuditSequence() {
+        return auditSequence;
+    }
+
+    public String getPreviousHash() {
+        return previousHash;
+    }
+
+    public String getIntegrityHash() {
+        return integrityHash;
     }
 
     public Instant getCreatedAt() {
