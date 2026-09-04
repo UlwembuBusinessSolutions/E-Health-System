@@ -3,7 +3,6 @@ package co.ehealth.platform.identity;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.notification.EmailService;
 import co.ehealth.platform.core.security.TemporaryPasswordGenerator;
-import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
 import co.ehealth.platform.core.tenant.TenantContext;
 import org.springframework.security.crypto.password.PasswordEncoder;

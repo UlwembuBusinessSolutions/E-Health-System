@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -88,16 +87,10 @@ public class TenantAuditController {
             @RequestParam(required = false) UUID userId,
             @RequestParam(required = false) String action,
             @RequestParam(required = false) ModuleCode module,
-            @RequestParam(required = false) String entityId,
-            @RequestParam(required = false) Boolean privileged) {
+            @RequestParam(required = false) String entityId) {
         permissionService.requireAccess(ModuleCode.AUDT, PermissionLevel.VIEW);
 
-        Instant fromInstant = from != null ? from.atStartOfDay(ZoneOffset.UTC).toInstant() : null;
-        Instant toInstant = to != null ? to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant() : null;
-
-        List<AuditLog> rows = auditLogService.search(
-                new AuditLogService.AuditLogSearchCriteria(fromInstant, toInstant, userId, action, module, entityId,
-                        privileged));
+        List<AuditLog> rows = auditLogService.listAll();
 
         Set<UUID> userIds = rows.stream().map(AuditLog::getUserId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<UUID, String> namesByUserId = staffService.resolveUserNames(userIds);
@@ -109,11 +102,11 @@ public class TenantAuditController {
     }
 
     public record AuditEntryResponse(UUID id, String action, String entityType, String entityId, Instant createdAt,
-            UUID userId, String userName, UUID facilityId, boolean privileged,
+                UUID userId, String userName, UUID facilityId,
             String beforeValue, String afterValue, String ipAddress, String deviceSignature) {
         static AuditEntryResponse from(AuditLog row, String userName) {
             return new AuditEntryResponse(row.getId(), row.getAction(), row.getEntityType(), row.getEntityId(),
-                    row.getCreatedAt(), row.getUserId(), userName, row.getFacilityId(), row.isPrivileged(),
+                    row.getCreatedAt(), row.getUserId(), userName, row.getFacilityId(),
                     row.getBeforeValue(), row.getAfterValue(), row.getIpAddress(), row.getDeviceSignature());
         }
     }
