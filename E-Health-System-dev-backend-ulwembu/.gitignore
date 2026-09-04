@@ -1,5 +1,4 @@
 target/
-target-codex/
 .env
 *.local
 data/
@@ -7,11 +6,3 @@ data/
 *.iml
 .vscode/
 .DS_Store
-
-# Local/build files
-.m2/
-.m2-local/
-.tools/
-.tools-test/
-.tools-*.zip
-*.log
