@@ -5,4 +5,4 @@ target/
 *.iml
 .vscode/
 .DS_Store
-.md
+*.md
