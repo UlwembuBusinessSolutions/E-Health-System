@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.Immutable;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -15,6 +16,7 @@ import java.util.UUID;
 // platform operator isn't a row in any tenant's users table.
 @Entity
 @Table(name = "platform_audit_log", schema = "control")
+@Immutable
 public class PlatformAuditLog {
 
     @Id
