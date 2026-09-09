@@ -419,6 +419,12 @@ export interface PlatformAuditEntry {
   operatorEmail: string;
   organizationId: string | null;
   organizationName: string | null;
+
+  // BR-AUDT-030 AC1 — explicit privileged classification.
+  // CROSS_TENANT_ACCESS may have no operator and is therefore not inferred
+  // from operatorName.
+  privileged: boolean;
+
   ipAddress: string | null;
   deviceSignature: string | null;
 }
@@ -428,23 +434,31 @@ export interface ListPlatformAuditParams {
   organizationId?: string;
   from?: string;
   to?: string;
+  privileged?: boolean;
 }
 
-export async function listPlatformAudit(params: ListPlatformAuditParams = {}): Promise<PlatformAuditEntry[]> {
+export async function listPlatformAudit(
+  params: ListPlatformAuditParams = {},
+): Promise<PlatformAuditEntry[]> {
   const search = new URLSearchParams();
+
   if (params.action) search.set("action", params.action);
   if (params.organizationId) search.set("organizationId", params.organizationId);
   if (params.from) search.set("from", params.from);
   if (params.to) search.set("to", params.to);
-  if (params.privileged !== undefined) search.set("privileged", String(params.privileged));
+  if (params.privileged !== undefined) {
+    search.set("privileged", String(params.privileged));
+  }
+
   const queryString = search.toString();
+
   const response = await apiClient.get<{ items: PlatformAuditEntry[] }>(
     `/platform/audit${queryString ? `?${queryString}` : ""}`,
     { headers: authHeaders() },
   );
+
   return response.items;
 }
-
 // export async function listPlatformAudit(params: ListPlatformAuditParams = {}): Promise<PlatformAuditEntry[]> {
 //   const search = new URLSearchParams();
 //   if (params.action) search.set("action", params.action);
@@ -488,26 +502,6 @@ export async function listOrganizationAudit(organizationId: string): Promise<Ten
   return response.items;
 }
 
-
-// PlatformAuditEntry — add one field:
-export interface PlatformAuditEntry {
-  id: string;
-  action: string;
-  detail: string | null;
-  createdAt: string;
-  operatorName: string;
-  operatorEmail: string;
-  organizationId: string | null;
-  organizationName: string | null;
-  // BR-AUDT-030 AC1 — every row here already implies a platform operator
-  // by this table's own nature EXCEPT CROSS_TENANT_ACCESS (AC2), which can
-  // have none. Explicit rather than inferred from operatorName being
-  // "Unknown operator", since that string is also what a since-deleted
-  // real operator would show as.
-  privileged: boolean;
-  ipAddress: string | null;
-  deviceSignature: string | null;
-}
 
 export interface ListPlatformAuditParams {
   action?: string;
