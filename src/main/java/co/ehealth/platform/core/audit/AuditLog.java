@@ -25,6 +25,12 @@ public class AuditLog {
     @Column(name = "facility_id")
     private UUID facilityId;
 
+    @Column(name = "clinic_context_id")
+    private UUID clinicContextId;
+
+    public UUID getClinicContextId() { return clinicContextId; }
+    public void setClinicContextId(UUID clinicContextId) { this.clinicContextId = clinicContextId; }
+
     @Column(nullable = false, length = 100)
     private String action;
 

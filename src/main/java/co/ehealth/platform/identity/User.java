@@ -343,6 +343,10 @@ public class User {
         return facilityId;
     }
 
+    public void setFacilityId(UUID facilityId) {
+        this.facilityId = facilityId;
+    }
+
     public LocalDate getEmploymentStartDate() {
         return employmentStartDate;
     }

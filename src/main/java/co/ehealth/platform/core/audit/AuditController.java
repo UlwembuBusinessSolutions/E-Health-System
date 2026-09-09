@@ -33,11 +33,11 @@ public class AuditController {
         return ResponseEntity.ok(Map.of("items", items));
     }
 
-    public record AuditEntry(UUID id, UUID userId, UUID facilityId, String action, String entityType,
+    public record AuditEntry(UUID id, UUID userId, UUID facilityId, UUID clinicContextId, String action, String entityType,
                              String entityId, String beforeValue, String afterValue, String ipAddress,
                              String deviceSignature, Instant createdAt) {
         static AuditEntry from(AuditLog row) {
-            return new AuditEntry(row.getId(), row.getUserId(), row.getFacilityId(), row.getAction(),
+            return new AuditEntry(row.getId(), row.getUserId(), row.getFacilityId(), row.getClinicContextId(), row.getAction(),
                     row.getEntityType(), row.getEntityId(), row.getBeforeValue(), row.getAfterValue(),
                     row.getIpAddress(), row.getDeviceSignature(), row.getCreatedAt());
         }

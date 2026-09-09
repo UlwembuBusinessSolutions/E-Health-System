@@ -11,20 +11,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-// IAM-US-009's permission-evaluation service: "is the module entitled for
-// this tenant -> does this role hold this permission -> is the record
-// within the user's clinic scope" (FRS Section 3.4) — this covers the
-// middle step only. Module entitlement is OrganizationProvisioningService's
-// own concern (SADM-US-010) and is checked separately; clinic-scope
-// filtering is IAM-US-011 (Scope a user to specific clinics), not yet
-// built. A caller wanting all three still calls each layer itself — there
-// is no single method that chains all three here.
-//
-// Reads role names straight off the JWT's own authorities
-// (JwtAuthenticationFilter already resolves role_id -> role name into
-// ROLE_<name> GrantedAuthority at login) rather than re-querying
-// user_roles, so this never needs the caller's userId at all — just
-// whatever's on SecurityContextHolder for the current request.
+// Evaluates module permissions using the current request's authorities.
+// ClinicContextFilter refreshes those roles from clinic-scoped assignments;
+// clinical repositories separately constrain records to the active clinic.
 @Service
 public class PermissionService {
 

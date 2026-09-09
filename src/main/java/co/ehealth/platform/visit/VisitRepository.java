@@ -7,5 +7,7 @@ import java.util.UUID;
 
 public interface VisitRepository extends JpaRepository<Visit, UUID> {
 
-	List<Visit> findAllByOrderByVisitDateTimeDesc();
+    List<Visit> findByFacilityIdOrderByVisitDateTimeDesc(UUID facilityId);
+
+    java.util.Optional<Visit> findByIdAndFacilityId(UUID id, UUID facilityId);
 }

@@ -27,6 +27,14 @@ import static org.mockito.Mockito.when;
 
 class PrescriptionServicePatientIdentityTest {
 
+    private static final UUID CLINIC_ID = UUID.randomUUID();
+
+    @org.junit.jupiter.api.BeforeEach
+    void selectClinic() { co.ehealth.platform.core.clinic.ClinicContext.set(CLINIC_ID); }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearClinic() { co.ehealth.platform.core.clinic.ClinicContext.clear(); }
+
     @Test
     void refuses_to_create_a_prescription_when_the_visit_patient_has_no_valid_mpi() {
         UUID patientId = UUID.randomUUID();
@@ -67,7 +75,7 @@ class PrescriptionServicePatientIdentityTest {
         when(prescription.getPatientId()).thenReturn(patientId);
         when(prescription.getStatus()).thenReturn(PrescriptionStatus.PENDING);
         when(patient.getMpiNumber()).thenReturn(null);
-        when(prescriptions.findById(prescriptionId)).thenReturn(Optional.of(prescription));
+        when(prescriptions.findByIdAndFacilityId(prescriptionId, CLINIC_ID)).thenReturn(Optional.of(prescription));
         when(patients.get(patientId)).thenReturn(patient);
         PrescriptionService service = service(prescriptions, mock(VisitService.class), patients,
                 licensedStaff(true, true), records, stockMovements, manualVerification);
@@ -94,7 +102,7 @@ class PrescriptionServicePatientIdentityTest {
         when(prescription.getPatientId()).thenReturn(patientId);
         when(prescription.getFacilityId()).thenReturn(UUID.randomUUID());
         when(prescription.getStatus()).thenReturn(PrescriptionStatus.PENDING);
-        when(prescriptions.findById(prescriptionId)).thenReturn(Optional.of(prescription));
+        when(prescriptions.findByIdAndFacilityId(prescriptionId, CLINIC_ID)).thenReturn(Optional.of(prescription));
         when(patient.getId()).thenReturn(patientId);
         when(patient.getMpiNumber()).thenReturn("MPI-0000001");
         when(patients.get(patientId)).thenReturn(patient);

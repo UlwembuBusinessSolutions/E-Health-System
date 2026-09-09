@@ -11,6 +11,31 @@ import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id = :userId")
+    Optional<User> findByIdForClinicUpdate(@Param("userId") UUID userId);
+
+    @Query(value = "select distinct r.name from user_roles ur join roles r on r.id = ur.role_id "
+            + "where ur.user_id = :userId and (ur.facility_id is null or ur.facility_id = :clinicId)", nativeQuery = true)
+    List<String> findRoleNamesInClinic(@Param("userId") UUID userId, @Param("clinicId") UUID clinicId);
+
+    @Query(value = "select f.id from facilities f where f.active = true and (exists "
+            + "(select 1 from user_facilities uf where uf.user_id = :userId and uf.facility_id = f.id) "
+            + "or exists (select 1 from user_roles ur where ur.user_id = :userId and ur.facility_id is null)) "
+            + "order by f.name, f.id", nativeQuery = true)
+    List<UUID> findAccessibleClinicIds(@Param("userId") UUID userId);
+
+    @Query(value = "select facility_id from user_facilities where user_id = :userId order by facility_id", nativeQuery = true)
+    List<UUID> findAssignedClinicIds(@Param("userId") UUID userId);
+
+    @Modifying
+    @Query(value = "delete from user_facilities where user_id = :userId", nativeQuery = true)
+    void removeFacilities(@Param("userId") UUID userId);
+
+    @Modifying
+    @Query(value = "delete from user_roles where user_id = :userId and facility_id is not null", nativeQuery = true)
+    void removeClinicRoles(@Param("userId") UUID userId);
+
     // The login lookup — email is the sole login identifier. employee_number
     // remains a real column but isn't queried for authentication anywhere.
     Optional<User> findByEmail(String email);
@@ -31,7 +56,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsBySapcNumber(String sapcNumber);
 
-    @Query(value = "select r.name from roles r, user_roles ur where ur.role_id = r.id and ur.user_id = :userId",
+    @Query(value = "select distinct r.name from roles r, user_roles ur where ur.role_id = r.id and ur.user_id = :userId",
            nativeQuery = true)
     List<String> findRoleNames(@Param("userId") UUID userId);
 
@@ -39,7 +64,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     // every user currently holding a given role, ORG_ADMIN in practice
     // today. Native, same reasoning as findRoleNames above: this is a join
     // across three tables with no natural Spring Data derived-query shape.
-    @Query(value = "select u.* from users u "
+    @Query(value = "select distinct u.* from users u "
             + "join user_roles ur on ur.user_id = u.id "
             + "join roles r on r.id = ur.role_id "
             + "where r.name = :roleName", nativeQuery = true)

@@ -1,6 +1,7 @@
 package co.ehealth.platform.pharmacy;
 
 import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.core.clinic.ClinicContext;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
@@ -90,27 +91,30 @@ public class PrescriptionService {
 
     public Prescription get(UUID id) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
-        return prescriptionRepository.findById(id).orElseThrow(PrescriptionNotFoundException::new);
+        return prescriptionRepository.findByIdAndFacilityId(id, ClinicContext.require()).orElseThrow(PrescriptionNotFoundException::new);
     }
 
     public List<PrescriptionItem> getItems(UUID prescriptionId) {
+        get(prescriptionId);
         return prescriptionItemRepository.findByPrescriptionId(prescriptionId);
     }
 
     // PHRM-US-001 — the dispensing queue for one facility.
     public List<Prescription> listQueue(UUID facilityId) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        ClinicContext.requireFacility(facilityId);
         return prescriptionRepository.findByFacilityIdAndStatusOrderByCreatedAtAsc(facilityId,
                 PrescriptionStatus.PENDING);
     }
 
     public List<Prescription> list() {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
-        return prescriptionRepository.findAllByOrderByCreatedAtDesc();
+        return prescriptionRepository.findByFacilityIdOrderByCreatedAtDesc(ClinicContext.require());
     }
 
     public long countDispensedToday(UUID facilityId) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        ClinicContext.requireFacility(facilityId);
         LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
         Instant startedAt = today.atStartOfDay(ZoneOffset.UTC).toInstant();
         return dispensingRecordRepository.countDispensedByFacilityBetween(facilityId, startedAt,
@@ -159,7 +163,7 @@ public class PrescriptionService {
 
     public List<ManualVerificationCase> listManualVerificationCases() {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
-        return manualVerificationCases.findAllByOrderByCreatedAtAsc();
+        return manualVerificationCases.findInClinic(ClinicContext.require());
     }
 
     private Patient requireValidMpi(UUID patientId) {

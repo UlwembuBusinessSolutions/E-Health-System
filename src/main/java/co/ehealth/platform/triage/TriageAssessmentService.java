@@ -34,13 +34,29 @@ public class TriageAssessmentService {
         this.clock = clock;
     }
 
+    @Transactional(readOnly = true)
+    public java.util.List<TriageAssessment> list() {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        return assessments.findAllInClinic(co.ehealth.platform.core.clinic.ClinicContext.require());
+    }
+
+    @Transactional(readOnly = true)
+    public CaptureResult get(UUID id) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        UUID clinicId = co.ehealth.platform.core.clinic.ClinicContext.require();
+        TriageAssessment assessment = assessments.findInClinic(id, clinicId)
+                .orElseThrow(TriageAssessmentNotFoundException::new);
+        return new CaptureResult(assessment, assessments.findPriorInClinic(assessment.getPatientId(), clinicId,
+                assessment.getCapturedAt()).orElse(null));
+    }
+
     @Transactional
     public CaptureResult capture(CaptureVitalsCommand command, UUID clinicianId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
         validate(command);
         Visit visit = visitService.get(command.visitId());
         Instant capturedAt = clock.instant();
-        Optional<TriageAssessment> prior = assessments.findFirstByPatientIdOrderByCapturedAtDesc(visit.getPatientId());
+        Optional<TriageAssessment> prior = assessments.findLatestInClinic(visit.getPatientId(), visit.getFacilityId());
         TriageAssessment assessment = assessments.save(new TriageAssessment(visit.getId(), visit.getPatientId(),
                 command.systolicBloodPressure(), command.diastolicBloodPressure(), command.heartRate(),
                 command.temperatureCelsius(), command.respiratoryRate(), command.avpu(), capturedAt, clinicianId));

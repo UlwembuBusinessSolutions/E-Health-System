@@ -1,6 +1,5 @@
 package co.ehealth.platform.pharmacy;
 
-import co.ehealth.platform.core.audit.AuditLogService;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;

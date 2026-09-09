@@ -21,7 +21,26 @@ import java.util.UUID;
 @RestController
 public class TriageAssessmentController {
     private final TriageAssessmentService triageAssessmentService;
-    public TriageAssessmentController(TriageAssessmentService triageAssessmentService) { this.triageAssessmentService = triageAssessmentService; }
+    private final co.ehealth.platform.patient.PatientService patients;
+    public TriageAssessmentController(TriageAssessmentService triageAssessmentService, co.ehealth.platform.patient.PatientService patients) {
+        this.triageAssessmentService = triageAssessmentService;
+        this.patients = patients;
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/api/v1/triage-assessments")
+    public java.util.Map<String, Object> list() {
+        return java.util.Map.of("items", triageAssessmentService.list().stream().map(a -> {
+            var patient = patients.get(a.getPatientId());
+            return new AssessmentSummary(VitalSignsResponse.from(a), patient.getFirstName() + " " + patient.getLastName(), patient.getMpiNumber());
+        }).toList());
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/api/v1/triage-assessments/{id}")
+    public CaptureVitalsResponse get(@PathVariable UUID id) {
+        return CaptureVitalsResponse.from(triageAssessmentService.get(id));
+    }
+
+    public record AssessmentSummary(VitalSignsResponse assessment, String patientName, String patientMpi) { }
 
     @PostMapping("/api/v1/visits/{visitId}/triage-assessments")
     public ResponseEntity<CaptureVitalsResponse> capture(@PathVariable UUID visitId, @Valid @RequestBody CaptureVitalsRequest request,

@@ -31,6 +31,11 @@ public class AuditLogService {
         return auditLogRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
     }
 
+    public List<AuditLog> listInClinic() {
+        return auditLogRepository.findByClinicContextIdOrderByCreatedAtDesc(
+                co.ehealth.platform.core.clinic.ClinicContext.require());
+    }
+
     // The single write path for audit rows — every module calls this
     // rather than constructing AuditLog entities directly. ipAddress and
     // deviceSignature are no longer caller-supplied parameters — they're
@@ -42,8 +47,10 @@ public class AuditLogService {
     // treats as legitimate.
     public void append(UUID userId, UUID facilityId, String action, String entityType, String entityId,
                         String beforeValue, String afterValue) {
-        auditLogRepository.save(new AuditLog(userId, facilityId, action, entityType, entityId,
+        AuditLog entry = new AuditLog(userId, facilityId, action, entityType, entityId,
                 beforeValue, afterValue, RequestMetadata.currentIpAddress(), RequestMetadata.currentUserAgent(),
-                clock.instant()));
+                clock.instant());
+        entry.setClinicContextId(co.ehealth.platform.core.clinic.ClinicContext.get());
+        auditLogRepository.save(entry);
     }
 }

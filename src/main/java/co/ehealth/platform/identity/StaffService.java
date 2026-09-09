@@ -3,7 +3,6 @@ package co.ehealth.platform.identity;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.notification.EmailService;
 import co.ehealth.platform.core.security.TemporaryPasswordGenerator;
-import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
 import co.ehealth.platform.core.tenant.TenantContext;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -243,8 +242,11 @@ public class StaffService {
         // works at. cmd.additionalFacilityIds() is never null — the
         // controller defaults it to an empty list, not omits it.
         userRepository.assignFacility(user.getId(), cmd.facilityId());
-        for (UUID additionalFacilityId : cmd.additionalFacilityIds()) {
+        for (UUID additionalFacilityId : cmd.additionalFacilityIds().stream().distinct().toList()) {
             userRepository.assignFacility(user.getId(), additionalFacilityId);
+            if (!additionalFacilityId.equals(cmd.facilityId())) {
+                userRepository.assignRole(user.getId(), cmd.roleId(), additionalFacilityId);
+            }
         }
 
         auditLogService.append(creatingAdminId, cmd.facilityId(), "STAFF_CREATED",

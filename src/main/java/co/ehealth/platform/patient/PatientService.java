@@ -1,6 +1,7 @@
 package co.ehealth.platform.patient;
 
 import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.core.clinic.ClinicContext;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.identity.DuplicateFieldException;
 import co.ehealth.platform.identity.PermissionLevel;
@@ -42,6 +43,7 @@ public class PatientService {
     @Transactional
     public Patient register(RegisterPatientCommand cmd, UUID registeredByUserId) {
         permissionService.requireAccess(ModuleCode.PREG, PermissionLevel.MANAGE);
+        UUID clinicId = ClinicContext.require();
         if (patientRepository.existsByIdNumber(cmd.idNumber())) {
             throw new DuplicateFieldException("idNumber", "A patient with this ID number is already registered.");
         }
@@ -51,6 +53,7 @@ public class PatientService {
         Patient patient = new Patient(mpiNumber, cmd.firstName(), cmd.lastName(), parsed.dateOfBirth(),
                 parsed.gender(), parsed.citizenshipStatus(), cmd.idNumber(), cmd.address(), cmd.contactNumber(),
                 cmd.medicalAidProvider(), cmd.medicalAidNumber(), registeredByUserId, clock.instant());
+        patient.assignClinic(clinicId);
         patientRepository.save(patient);
 
         auditLogService.append(registeredByUserId, null, "PATIENT_REGISTERED", "Patient",
@@ -61,7 +64,7 @@ public class PatientService {
 
     public Patient get(UUID id) {
         permissionService.requireAccess(ModuleCode.PREG, PermissionLevel.VIEW);
-        return patientRepository.findById(id).orElseThrow(PatientNotFoundException::new);
+        return patientRepository.findByIdAndFacilityId(id, ClinicContext.require()).orElseThrow(PatientNotFoundException::new);
     }
 
     // PREG-US-009's edit transition must not turn the pre-populated form
@@ -71,7 +74,7 @@ public class PatientService {
     @Transactional
     public Patient updateDemographics(UUID id, UpdatePatientCommand cmd, UUID updatedByUserId) {
         permissionService.requireAccess(ModuleCode.PREG, PermissionLevel.MANAGE);
-        Patient patient = patientRepository.findById(id).orElseThrow(PatientNotFoundException::new);
+        Patient patient = patientRepository.findByIdAndFacilityId(id, ClinicContext.require()).orElseThrow(PatientNotFoundException::new);
         if (!patient.getIdNumber().equals(cmd.idNumber())
                 && patientRepository.existsByIdNumberAndIdNot(cmd.idNumber(), id)) {
             throw new DuplicateFieldException("idNumber", "A patient with this ID number is already registered.");
@@ -101,7 +104,7 @@ public class PatientService {
         if (trimmed.isEmpty()) {
             return List.of();
         }
-        return patientRepository.search(trimmed);
+        return patientRepository.search(trimmed, ClinicContext.require());
     }
 
     public record RegisterPatientCommand(String firstName, String lastName, String idNumber, String address,

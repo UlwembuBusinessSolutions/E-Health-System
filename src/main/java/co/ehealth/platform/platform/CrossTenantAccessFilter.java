@@ -1,6 +1,5 @@
 package co.ehealth.platform.platform;
 
-import co.ehealth.platform.core.common.RequestMetadata;
 import co.ehealth.platform.core.tenant.TenantAccessTracker;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -59,10 +58,7 @@ public class CrossTenantAccessFilter extends OncePerRequestFilter {
 
         UUID operatorId = currentPlatformOperatorId(request);
         String detail = "path=%s; schemas=%s".formatted(request.getRequestURI(), String.join(",", touchedSchemas));
-        // The explicit-ip/device constructor, not the auto-deriving one —
-        // see PlatformAuditLog's own why-note on why.
         platformAuditLogRepository.save(new PlatformAuditLog(operatorId, "CROSS_TENANT_ACCESS", null, detail,
-                RequestMetadata.currentIpAddress(request), RequestMetadata.currentUserAgent(request),
                 clock.instant()));
     }
 

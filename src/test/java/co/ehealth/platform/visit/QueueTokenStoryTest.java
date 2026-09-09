@@ -25,6 +25,12 @@ import static org.mockito.Mockito.when;
 
 class QueueTokenStoryTest {
 
+    @org.junit.jupiter.api.BeforeEach
+    void selectClinic() { co.ehealth.platform.core.clinic.ClinicContext.set(FACILITY_ID); }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearClinic() { co.ehealth.platform.core.clinic.ClinicContext.clear(); }
+
     private static final UUID PATIENT_ID = UUID.fromString("8e9da3d4-3ee3-420a-a4df-5ed0e4cc7f4f");
     private static final UUID FACILITY_ID = UUID.fromString("62a2f7b2-069e-4ba2-bf1a-81c8d5791199");
     private static final UUID STAFF_ID = UUID.fromString("56dd6bf3-ed47-4246-a98f-89d9be89d6b7");

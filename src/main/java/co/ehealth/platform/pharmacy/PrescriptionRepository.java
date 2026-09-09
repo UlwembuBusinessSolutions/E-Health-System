@@ -2,7 +2,6 @@ package co.ehealth.platform.pharmacy;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.UUID;
@@ -20,5 +19,7 @@ public interface PrescriptionRepository extends JpaRepository<Prescription, UUID
     // once a real priority signal exists to sort by first.
     List<Prescription> findByFacilityIdAndStatusOrderByCreatedAtAsc(UUID facilityId, PrescriptionStatus status);
 
-    List<Prescription> findAllByOrderByCreatedAtDesc();
+    List<Prescription> findByFacilityIdOrderByCreatedAtDesc(UUID facilityId);
+
+    java.util.Optional<Prescription> findByIdAndFacilityId(UUID id, UUID facilityId);
 }

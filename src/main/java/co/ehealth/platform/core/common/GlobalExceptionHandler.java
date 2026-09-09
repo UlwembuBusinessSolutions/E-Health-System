@@ -86,6 +86,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    @ExceptionHandler(co.ehealth.platform.core.clinic.InvalidClinicScopeException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidClinicScope(
+            co.ehealth.platform.core.clinic.InvalidClinicScopeException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(co.ehealth.platform.core.clinic.ClinicAccessDeniedException.class)
+    public ResponseEntity<ApiErrorResponse> handleClinicAccessDenied(
+            co.ehealth.platform.core.clinic.ClinicAccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex) {
         // Identical message whether the email is unknown or the password is
@@ -234,6 +246,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(FacilityNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleFacilityNotFound(FacilityNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(co.ehealth.platform.triage.ClinicalRangeException.class)
+    public ResponseEntity<ApiErrorResponse> handleClinicalRange(co.ehealth.platform.triage.ClinicalRangeException ex) {
+        return ResponseEntity.unprocessableEntity().body(new ApiErrorResponse(ex.getMessage(), ex.getFieldErrors()));
+    }
+
+    @ExceptionHandler(co.ehealth.platform.triage.TriageAssessmentNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleTriageNotFound(co.ehealth.platform.triage.TriageAssessmentNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 

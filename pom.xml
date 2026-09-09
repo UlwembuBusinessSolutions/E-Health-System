@@ -18,7 +18,10 @@
   <description>Ulwembu multi-tenant e-health platform API — Phase 1 identity, tenancy and platform-provisioning slice</description>
 
   <properties>
-    <java.version>25</java.version>
+    <!-- Compiled bytecode targets 21, not the JDK 25 used to build/run: Spring 6.1.x's -->
+    <!-- bundled ASM (used for classpath scanning and by spring-boot-maven-plugin) can't -->
+    <!-- parse class file major version 69 (Java 25) yet. -->
+    <java.version>21</java.version>
   </properties>
 
   <dependencies>
@@ -93,24 +96,6 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-core</artifactId>
-      <version>5.20.0</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>net.bytebuddy</groupId>
-      <artifactId>byte-buddy</artifactId>
-      <version>1.17.7</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>net.bytebuddy</groupId>
-      <artifactId>byte-buddy-agent</artifactId>
-      <version>1.17.7</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.springframework.security</groupId>
       <artifactId>spring-security-test</artifactId>
       <scope>test</scope>
@@ -120,6 +105,21 @@
   <build>
     <finalName>platform</finalName>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <fork>true</fork>
+        </configuration>
+      </plugin>
+      <!-- The local JDK is newer than the Byte Buddy version managed by Boot 3.3.4. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>

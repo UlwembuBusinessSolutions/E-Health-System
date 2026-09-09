@@ -29,6 +29,12 @@ public class Patient {
     @GeneratedValue
     private UUID id;
 
+    @Column(name = "facility_id")
+    private UUID facilityId;
+
+    public UUID getFacilityId() { return facilityId; }
+    void assignClinic(UUID facilityId) { this.facilityId = facilityId; }
+
     // Assigned once, at construction, from PatientService's own sequence —
     // never settable again. See PatientService.register()'s own why-note on
     // how uniqueness is guaranteed under concurrent registrations.

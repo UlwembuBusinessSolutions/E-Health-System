@@ -31,8 +31,9 @@ public class FacilityController {
     }
 
     @GetMapping("/api/v1/facilities")
-    public Map<String, Object> list() {
-        return Map.of("items", facilityRepository.findByActiveTrue().stream()
+    public Map<String, Object> list(@org.springframework.security.core.annotation.AuthenticationPrincipal
+                                   co.ehealth.platform.core.security.AuthenticatedPrincipal principal) {
+        return Map.of("items", facilityRepository.findAccessible(principal.userId()).stream()
                 .map(f -> Map.of("id", f.getId(), "name", f.getName())).toList());
     }
 

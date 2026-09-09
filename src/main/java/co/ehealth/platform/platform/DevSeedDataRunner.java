@@ -142,6 +142,7 @@ public class DevSeedDataRunner implements ApplicationRunner {
         var authentication = new UsernamePasswordAuthenticationToken(
                 principal, null, List.of(new SimpleGrantedAuthority("ROLE_ORG_ADMIN")));
         SecurityContextHolder.getContext().setAuthentication(authentication);
+        co.ehealth.platform.core.clinic.ClinicContext.set(mainClinic.getId());
         try {
             // genderSequence alone determines the parsed-back gender
             // (SouthAfricanIdNumber.parse(): <5000 female, >=5000 male) —
@@ -158,6 +159,7 @@ public class DevSeedDataRunner implements ApplicationRunner {
                     "31 Chris Hani Road, Johannesburg", "+27831112205", "Momentum Health", "MH-556723", adminUserId);
         } finally {
             SecurityContextHolder.clearContext();
+            co.ehealth.platform.core.clinic.ClinicContext.clear();
         }
     }
 

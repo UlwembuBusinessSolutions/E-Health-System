@@ -12,6 +12,8 @@ import java.util.UUID;
 // class-level comment) on why that's enforced by omission.
 public interface PatientRepository extends JpaRepository<Patient, UUID> {
 
+    java.util.Optional<Patient> findByIdAndFacilityId(UUID id, UUID facilityId);
+
     boolean existsByIdNumber(String idNumber);
 
     boolean existsByIdNumberAndIdNot(String idNumber, UUID id);
@@ -30,10 +32,10 @@ public interface PatientRepository extends JpaRepository<Patient, UUID> {
     // an exact MPI/ID number match (typed off a card or ID document, never
     // partial). ILIKE over LIKE + lower() so idx_patients_name's expression
     // index actually gets used for the name branch.
-    @Query("SELECT p FROM Patient p WHERE "
+    @Query("SELECT p FROM Patient p WHERE p.facilityId = :clinicId AND ("
             + "LOWER(p.firstName) LIKE LOWER(CONCAT('%', :query, '%')) "
             + "OR LOWER(p.lastName) LIKE LOWER(CONCAT('%', :query, '%')) "
-            + "OR p.mpiNumber = :query OR p.idNumber = :query "
+            + "OR p.mpiNumber = :query OR p.idNumber = :query) "
             + "ORDER BY p.lastName, p.firstName")
-    List<Patient> search(@Param("query") String query);
+    List<Patient> search(@Param("query") String query, @Param("clinicId") UUID clinicId);
 }

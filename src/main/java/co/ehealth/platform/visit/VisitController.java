@@ -53,8 +53,8 @@ public class VisitController {
     }
 
     @GetMapping("/api/v1/visits/{id}")
-    public ResponseEntity<VisitResponse> get(@PathVariable UUID id) {
-        return ResponseEntity.ok(VisitResponse.from(visitService.get(id)));
+    public ResponseEntity<VisitListResponse> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(toListResponse(visitService.get(id)));
     }
 
     public record CreateVisitRequest(@NotNull UUID patientId, @NotNull UUID facilityId,
