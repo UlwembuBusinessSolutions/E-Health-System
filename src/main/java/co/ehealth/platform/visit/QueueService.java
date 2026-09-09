@@ -6,6 +6,8 @@ import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.patient.Patient;
 import co.ehealth.platform.patient.PatientService;
+import co.ehealth.platform.facility.Station;
+import co.ehealth.platform.facility.StationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,16 +27,19 @@ public class QueueService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
+    private final StationService stationService;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public QueueService(QueueTokenRepository queueTokenRepository, VisitRepository visitRepository,
                          PatientService patientService, AuditLogService auditLogService, Clock clock,
-                         PermissionService permissionService) {
+                         PermissionService permissionService, StationService stationService) {
         this.queueTokenRepository = queueTokenRepository;
         this.visitRepository = visitRepository;
         this.patientService = patientService;
         this.auditLogService = auditLogService;
         this.clock = clock;
         this.permissionService = permissionService;
+        this.stationService = stationService;
     }
 
     // RECQ-US-001's automatic path — VisitService.createVisit() calls this
@@ -102,8 +107,15 @@ public class QueueService {
     // fetch: an active queue at a single facility is realistically a
     // handful of people, not a scale where N+1 here matters yet.
     public List<QueueEntryView> listActiveQueueView(UUID facilityId) {
+        return listActiveQueueView(facilityId, null);
+    }
+
+    public List<QueueEntryView> listActiveQueueView(UUID facilityId, UUID stationId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
-        return queueTokenRepository.findActiveQueue(facilityId).stream().map(this::toView).toList();
+        List<QueueToken> queue = stationId == null
+                ? queueTokenRepository.findActiveQueue(facilityId)
+                : queueTokenRepository.findActiveQueueByFacilityAndStation(facilityId, stationId);
+        return queue.stream().map(this::toView).toList();
     }
 
     private QueueEntryView toView(QueueToken token) {
@@ -132,5 +144,34 @@ public class QueueService {
         auditLogService.append(calledByUserId, facilityId, "QUEUE_TOKEN_CALLED", "QueueToken",
                 next.getId().toString(), null, null);
         return toView(next);
+    }
+
+    // RECQ-US-006 — transfer an active token to another station within its
+    // current clinic or hospital while
+    // keeping the original issue timestamp intact for waiting-time reporting.
+    @Transactional
+    public QueueToken transferToken(UUID tokenId, UUID targetStationId, UUID actedByUserId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        QueueToken token = queueTokenRepository.findById(tokenId).orElseThrow(QueueTokenNotFoundException::new);
+        Station targetStation = stationService.getOperationalStation(targetStationId);
+        UUID sourceFacilityId = token.getFacilityId();
+        UUID sourceStationId = token.getStationId();
+        UUID targetFacilityId = targetStation.getFacility().getId();
+        if (!sourceFacilityId.equals(targetFacilityId)) {
+            throw new IllegalArgumentException("A token can only be transferred between stations in the same clinic or hospital.");
+        }
+        if (targetStationId.equals(token.getStationId())) {
+            return token;
+        }
+
+        token.transferTo(targetFacilityId, targetStationId);
+        queueTokenRepository.save(token);
+        auditLogService.append(actedByUserId, targetFacilityId, "QUEUE_TOKEN_TRANSFERRED", "QueueToken",
+                token.getId().toString(),
+                "{\"sourceFacilityId\":\"" + sourceFacilityId + "\",\"sourceStationId\":\""
+                + sourceStationId + "\"}",
+                "{\"targetFacilityId\":\"" + targetFacilityId + "\",\"targetStationId\":\""
+                        + targetStationId + "\",\"issuedAt\":\"" + token.getIssuedAt() + "\"}");
+        return token;
     }
 }

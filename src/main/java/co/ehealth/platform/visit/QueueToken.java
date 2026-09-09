@@ -33,6 +33,9 @@ public class QueueToken {
     @Column(name = "facility_id", nullable = false)
     private UUID facilityId;
 
+    @Column(name = "station_id")
+    private UUID stationId;
+
     @Column(name = "token_number", nullable = false)
     private int tokenNumber;
 
@@ -80,6 +83,23 @@ public class QueueToken {
         this.calledAt = at;
     }
 
+    // RECQ-US-006 — transfer an active token to another station in the same facility.
+    // The original issue timestamp remains intact: it represents when the
+    // patient was first issued the token, even when the queue is rerouted.
+    public void transferTo(UUID targetFacilityId, UUID targetStationId) {
+        if (this.status != TokenStatus.ISSUED) {
+            throw new IllegalStateException("Only issued tokens can be transferred.");
+        }
+        this.facilityId = targetFacilityId;
+        this.stationId = targetStationId;
+        this.calledAt = null;
+        this.status = TokenStatus.ISSUED;
+    }
+
+    public void transferTo(UUID targetFacilityId) {
+        transferTo(targetFacilityId, null);
+    }
+
     public UUID getId() {
         return id;
     }
@@ -90,6 +110,14 @@ public class QueueToken {
 
     public UUID getFacilityId() {
         return facilityId;
+    }
+
+    public UUID getStationId() {
+        return stationId;
+    }
+
+    public void setStationId(UUID stationId) {
+        this.stationId = stationId;
     }
 
     public int getTokenNumber() {

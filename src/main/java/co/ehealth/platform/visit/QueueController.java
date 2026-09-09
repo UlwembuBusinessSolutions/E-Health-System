@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -32,9 +33,10 @@ public class QueueController {
     }
 
     @GetMapping("/api/v1/queue")
-    public ResponseEntity<Map<String, Object>> list(@RequestParam UUID facilityId) {
+    public ResponseEntity<Map<String, Object>> list(@RequestParam UUID facilityId,
+                                                     @RequestParam(required = false) UUID stationId) {
         List<QueueEntryResponse> items =
-                queueService.listActiveQueueView(facilityId).stream().map(QueueEntryResponse::from).toList();
+                queueService.listActiveQueueView(facilityId, stationId).stream().map(QueueEntryResponse::from).toList();
         return ResponseEntity.ok(Map.of("items", items));
     }
 
@@ -56,7 +58,24 @@ public class QueueController {
         return ResponseEntity.ok(QueueEntryResponse.from(called));
     }
 
+    // RECQ-US-006 — transfer an active token to another station in the same
+    // clinic or hospital without
+    // resetting its original issue time.
+    @PostMapping("/api/v1/queue/tokens/{tokenId}/transfer")
+    public ResponseEntity<QueueTokenResponse> transferToken(@PathVariable UUID tokenId,
+            @RequestBody(required = false) TransferTokenRequest request,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        if (request == null || request.targetStationId() == null) {
+            throw new IllegalArgumentException("targetStationId is required");
+        }
+        QueueToken token = queueService.transferToken(tokenId, request.targetStationId(), staff.userId());
+        return ResponseEntity.ok(QueueTokenResponse.from(token));
+    }
+
     public record IssueManualTokenRequest(@NotNull UUID visitId, @NotNull TokenPriority priority) {
+    }
+
+    public record TransferTokenRequest(@NotNull UUID targetStationId) {
     }
 
     public record QueueEntryResponse(QueueTokenResponse token, String patientName, String patientMpi) {

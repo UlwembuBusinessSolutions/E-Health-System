@@ -5,9 +5,11 @@ import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
 import co.ehealth.platform.core.tenant.OrganizationSector;
 import co.ehealth.platform.core.tenant.TenantContext;
+import co.ehealth.platform.facility.CareService;
 import co.ehealth.platform.facility.Facility;
 import co.ehealth.platform.facility.FacilityService;
 import co.ehealth.platform.facility.FacilityType;
+import co.ehealth.platform.facility.StationService;
 import co.ehealth.platform.identity.EmploymentType;
 import co.ehealth.platform.identity.Gender;
 import co.ehealth.platform.identity.Role;
@@ -53,6 +55,7 @@ public class DevSeedDataRunner implements ApplicationRunner {
     private final OrganizationProvisioningService provisioningService;
     private final PlatformOperatorRepository platformOperatorRepository;
     private final FacilityService facilityService;
+    private final StationService stationService;
     private final RoleRepository roleRepository;
     private final StaffService staffService;
     private final PatientService patientService;
@@ -61,13 +64,15 @@ public class DevSeedDataRunner implements ApplicationRunner {
     public DevSeedDataRunner(OrganizationRepository organizationRepository,
                               OrganizationProvisioningService provisioningService,
                               PlatformOperatorRepository platformOperatorRepository,
-                              FacilityService facilityService, RoleRepository roleRepository,
-                              StaffService staffService, PatientService patientService,
+                              FacilityService facilityService, StationService stationService,
+                              RoleRepository roleRepository, StaffService staffService,
+                              PatientService patientService,
                               @Value("${app.platform.bootstrap.email}") String bootstrapOperatorEmail) {
         this.organizationRepository = organizationRepository;
         this.provisioningService = provisioningService;
         this.platformOperatorRepository = platformOperatorRepository;
         this.facilityService = facilityService;
+        this.stationService = stationService;
         this.roleRepository = roleRepository;
         this.staffService = staffService;
         this.patientService = patientService;
@@ -76,31 +81,39 @@ public class DevSeedDataRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (organizationRepository.existsBySlug(DEMO_SLUG)) {
+        Organization organization = organizationRepository.findBySlug(DEMO_SLUG).orElse(null);
+
+        if (organization == null) {
+            // PlatformOperatorBootstrap (@Order(1)) has already run by this
+            // point and guarantees this row exists — same assumption
+            // provisionOrganization()'s own actingOperatorId param makes for
+            // every real platform-operator-initiated call.
+            UUID operatorId = platformOperatorRepository.findByEmail(bootstrapOperatorEmail)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Platform bootstrap operator missing — PlatformOperatorBootstrap didn't run"))
+                    .getId();
+
+            var provisioned = provisioningService.provisionOrganization(
+                    new OrganizationProvisioningService.ProvisionOrganizationCommand(
+                            DEMO_SLUG, "Demo Community Clinic", OrganizationSector.PUBLIC,
+                            List.of(new OrganizationProvisioningService.AdminInput(
+                                    "Naledi", "Dlamini", "EMP-0001", "admin@democlinic.example",
+                                    "+27821234501", Gender.FEMALE))),
+                    operatorId);
+
+            organization = organizationRepository.findById(provisioned.organizationId()).orElseThrow();
+            TenantContext.setCurrentTenant(organization.getSchemaName());
+            try {
+                seedTenantData(provisioned.admins().get(0).userId());
+            } finally {
+                TenantContext.clear();
+            }
             return;
         }
 
-        // PlatformOperatorBootstrap (@Order(1)) has already run by this
-        // point and guarantees this row exists — same assumption
-        // provisionOrganization()'s own actingOperatorId param makes for
-        // every real platform-operator-initiated call.
-        UUID operatorId = platformOperatorRepository.findByEmail(bootstrapOperatorEmail)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Platform bootstrap operator missing — PlatformOperatorBootstrap didn't run"))
-                .getId();
-
-        var provisioned = provisioningService.provisionOrganization(
-                new OrganizationProvisioningService.ProvisionOrganizationCommand(
-                        DEMO_SLUG, "Demo Community Clinic", OrganizationSector.PUBLIC,
-                        List.of(new OrganizationProvisioningService.AdminInput(
-                                "Naledi", "Dlamini", "EMP-0001", "admin@democlinic.example",
-                                "+27821234501", Gender.FEMALE))),
-                operatorId);
-
-        Organization organization = organizationRepository.findById(provisioned.organizationId()).orElseThrow();
         TenantContext.setCurrentTenant(organization.getSchemaName());
         try {
-            seedTenantData(provisioned.admins().get(0).userId());
+            ensureDemoStations();
         } finally {
             TenantContext.clear();
         }
@@ -111,6 +124,9 @@ public class DevSeedDataRunner implements ApplicationRunner {
                 "12 Cradle Street, Johannesburg", "+27115550101", "Mon-Fri 07:00-17:00");
         Facility satelliteClinic = facilityService.create("Demo Satellite Clinic", "DEMO-02", FacilityType.CLINIC,
                 "44 Baobab Avenue, Soweto", "+27115550102", "Mon-Fri 08:00-16:00");
+
+        seedStations(mainClinic);
+        seedStations(satelliteClinic);
 
         UUID doctorId = createStaffMember(mainClinic.getId(), "Doctor", "Sipho", "Mahlangu",
                 "EMP-1001", "8501015800083", "s.mahlangu@democlinic.example", "+27821234502",
@@ -158,6 +174,31 @@ public class DevSeedDataRunner implements ApplicationRunner {
                     "31 Chris Hani Road, Johannesburg", "+27831112205", "Momentum Health", "MH-556723", adminUserId);
         } finally {
             SecurityContextHolder.clearContext();
+        }
+    }
+
+    private void ensureDemoStations() {
+        facilityService.list().stream()
+                .filter(facility -> facility.getType() != FacilityType.STORE)
+                .forEach(this::seedStations);
+    }
+
+    private void seedStations(Facility facility) {
+        var existingCodes = stationService.listByFacility(facility.getId()).stream()
+                .map(station -> station.getCode())
+                .collect(java.util.stream.Collectors.toSet());
+
+        if (!existingCodes.contains(facility.getCode() + "-MED-01")) {
+            stationService.create(facility.getId(), "Medical Station", facility.getCode() + "-MED-01", CareService.MEDICAL);
+        }
+        if (!existingCodes.contains(facility.getCode() + "-SUR-01")) {
+            stationService.create(facility.getId(), "Surgical Station", facility.getCode() + "-SUR-01", CareService.SURGICAL);
+        }
+        if (!existingCodes.contains(facility.getCode() + "-DIAG-01")) {
+            stationService.create(facility.getId(), "Diagnostic Station", facility.getCode() + "-DIAG-01", CareService.DIAGNOSTIC);
+        }
+        if (!existingCodes.contains(facility.getCode() + "-LTC-01")) {
+            stationService.create(facility.getId(), "Long-term Care Station", facility.getCode() + "-LTC-01", CareService.LONG_TERM_CARE);
         }
     }
 

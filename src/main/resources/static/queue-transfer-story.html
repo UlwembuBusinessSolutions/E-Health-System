@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Queue Transfer Story</title>
+    <style>
+      :root {
+        --bg: #f3f4f6;
+        --panel: #f9f9f9;
+        --line: #d8d8d8;
+        --text: #1f1f1f;
+        --muted: #5f6368;
+        --primary: #1b2a4d;
+        --red: #d15b5b;
+        --red-soft: #f5d9d8;
+        --green: #6b9a5d;
+        --green-soft: #dfeee0;
+        --link: #3a69d0;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        font-family: "Segoe UI", Tahoma, sans-serif;
+        color: var(--text);
+      }
+
+      .page {
+        width: 100%;
+        min-height: 100vh;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 14px 26px 40px;
+      }
+
+      .story-shell {
+        width: 100%;
+        max-width: 1280px;
+      }
+
+      .topbar {
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 0 12px;
+        font-size: 22px;
+        color: #333;
+      }
+
+      .topbar .icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        opacity: 0.9;
+      }
+
+      .story-card {
+        background: rgba(255,255,255,0.2);
+        border-radius: 10px;
+        padding: 6px 18px 0;
+      }
+
+      .title-row {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 8px 0 10px;
+      }
+
+      .check {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 3px solid #2a2a2a;
+        display: inline-block;
+        background: transparent;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.6rem, 2vw, 3rem);
+        font-weight: 500;
+        letter-spacing: -0.03em;
+      }
+
+      .owner-row {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        padding: 8px 0 14px 4px;
+      }
+
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--red);
+        color: white;
+        font-size: 13px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .owner-name {
+        font-size: 1.05rem;
+        font-weight: 400;
+      }
+
+      .tags {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 8px 0 20px 4px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        border-radius: 8px;
+        padding: 8px 12px 8px 10px;
+        font-weight: 500;
+        font-size: 1.05rem;
+        line-height: 1;
+        border: 1px solid transparent;
+      }
+
+      .tag .x {
+        font-size: 1.2rem;
+        font-weight: 300;
+        opacity: 0.8;
+      }
+
+      .tag.must {
+        background: var(--red-soft);
+        border-color: #e7b3b4;
+        color: #a14040;
+      }
+
+      .tag.module {
+        background: var(--green-soft);
+        border-color: #bfd8b9;
+        color: #3e6c42;
+      }
+
+      .tag .icon {
+        width: 14px;
+        height: 14px;
+        border: 2px solid currentColor;
+        border-radius: 3px;
+        display: inline-block;
+        position: relative;
+        opacity: 0.9;
+      }
+
+      .story-box {
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.15);
+        padding: 18px 26px 16px;
+        margin-top: 8px;
+      }
+
+      .story-box p {
+        margin: 0;
+        font-size: clamp(1.1rem, 1.6vw, 2.1rem);
+        line-height: 1.5;
+        letter-spacing: -0.02em;
+      }
+
+      .story-box .acceptance {
+        display: block;
+        margin-top: 8px;
+        margin-bottom: 12px;
+        font-size: clamp(1.1rem, 1.6vw, 2.1rem);
+      }
+
+      .story-box ul {
+        margin: 0;
+        padding-left: 42px;
+        font-size: clamp(1.08rem, 1.5vw, 1.9rem);
+        line-height: 1.45;
+        list-style: disc;
+      }
+
+      .story-meta {
+        margin-top: 18px;
+        font-size: clamp(1rem, 1.3vw, 1.5rem);
+        line-height: 1.6;
+        color: var(--text);
+      }
+
+      .story-meta strong {
+        font-weight: 600;
+      }
+
+      .show-less {
+        display: inline-block;
+        margin-top: 18px;
+        color: var(--link);
+        text-decoration: none;
+        font-size: 1.05rem;
+        font-weight: 600;
+      }
+
+      .checklist {
+        margin-top: 30px;
+        padding-top: 10px;
+      }
+
+      .checklist-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: clamp(1.8rem, 2.2vw, 2.8rem);
+        font-weight: 400;
+        margin-bottom: 18px;
+      }
+
+      .checklist-title .count {
+        font-weight: 500;
+      }
+
+      .checklist-title .checkmark {
+        font-size: 1.25em;
+        transform: translateY(-1px);
+      }
+
+      .checklist-items {
+        margin-left: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .check-item {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: clamp(1.1rem, 1.4vw, 1.8rem);
+        color: #1f1f1f;
+      }
+
+      .check-item .circle {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid rgba(0,0,0,0.75);
+        display: inline-block;
+      }
+
+      .transfer-panel {
+        margin-top: 34px;
+        border: 1px solid var(--line);
+        background: #fff;
+        padding: 22px 26px 26px;
+      }
+
+      .transfer-panel h2 {
+        margin: 0 0 18px;
+        font-size: 1.35rem;
+        font-weight: 600;
+      }
+
+      .transfer-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .field { display: flex; flex-direction: column; gap: 7px; }
+      .field label { font-size: .9rem; font-weight: 600; color: var(--muted); }
+      .field input, .field select {
+        min-height: 42px;
+        border: 1px solid #bfc3c8;
+        border-radius: 5px;
+        padding: 8px 10px;
+        font: inherit;
+        background: #fff;
+      }
+
+      .service-summary {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .service-chip {
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--green);
+        background: #f7faf7;
+        padding: 10px 12px;
+        font-size: .9rem;
+        font-weight: 600;
+      }
+
+      .service-chip span {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: .78rem;
+        font-weight: 400;
+      }
+
+      .transfer-actions { display: flex; align-items: center; gap: 14px; margin-top: 20px; }
+      .transfer-actions button {
+        min-height: 42px;
+        border: 0;
+        border-radius: 5px;
+        padding: 0 18px;
+        background: var(--primary);
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .transfer-actions button:disabled { opacity: .55; cursor: wait; }
+      .transfer-status { min-height: 22px; font-size: .95rem; color: var(--muted); }
+      .transfer-status.success { color: #3e6c42; }
+      .transfer-status.error { color: #a14040; }
+      .result { margin-top: 18px; padding: 14px; background: #f4f7f4; border-left: 4px solid var(--green); }
+      .result[hidden] { display: none; }
+
+      @media (max-width: 720px) {
+        .transfer-grid { grid-template-columns: 1fr; }
+        .service-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .transfer-panel { padding: 18px 16px; }
+        .transfer-actions { align-items: stretch; flex-direction: column; }
+      }
+
+      @media (max-width: 720px) {
+        .story-shell { max-width: 100%; }
+        .story-card { padding: 0 10px; }
+        .title-row { gap: 12px; }
+        .check { width: 24px; height: 24px; }
+        h1 { font-size: 1.8rem; }
+        .story-box { padding: 14px 16px; }
+        .tags { flex-wrap: wrap; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="story-shell">
+        <div class="topbar">
+          <span class="icon">⋮</span>
+          <span class="icon" style="margin-left: 18px;">×</span>
+        </div>
+
+        <div class="story-card">
+          <div class="title-row">
+            <span class="check"></span>
+            <h1>[RECQ-US-006] Transfer a token to another station</h1>
+          </div>
+
+          <div class="owner-row">
+            <div class="avatar">CV</div>
+            <div class="owner-name">Clifford Vuma</div>
+          </div>
+
+          <div class="tags">
+            <span class="tag must"><span class="icon"></span> MUST <span class="x">×</span></span>
+            <span class="tag module"><span class="icon"></span> Module <span class="x">×</span></span>
+          </div>
+
+          <div class="story-box">
+            <p>
+              As a Professional Nurse, I want to transfer a patient's token to a different service station,
+              so that patients requiring a different service are routed without re-queuing from scratch.
+            </p>
+
+            <div class="acceptance">ACCEPTANCE CRITERIA</div>
+            <ul>
+              <li>Given a token is active, when I transfer it, then it joins the target station's queue retaining its original issue time for waiting-time purposes</li>
+              <li>Given a transfer occurs, then it is audit-logged with source and target station</li>
+            </ul>
+
+            <div class="story-meta">
+              <div><strong>Story Points:</strong> 3 | <strong>Priority:</strong> Must | <strong>Squad:</strong> Module</div>
+              <div><strong>Epic:</strong> EP-05-REQC | <strong>Feature:</strong> REQQ-F01 Queue Token Management</div>
+              <div><strong>Phase:</strong> MVPO</div>
+              <div><strong>BRD Trace:</strong> BR-REQQ-020</div>
+            </div>
+
+            <a class="show-less" href="#">Show less</a>
+          </div>
+
+          <div class="checklist">
+            <div class="checklist-title">
+              <span class="checkmark">✓</span>
+              <span>Checklist <span class="count">0 / 4</span></span>
+            </div>
+
+            <div class="checklist-items">
+              <div class="check-item"><span class="circle"></span><span>Transfer endpoint;</span></div>
+              <div class="check-item"><span class="circle"></span><span>Original-issue-time retention;</span></div>
+              <div class="check-item"><span class="circle"></span><span>Audit hook;</span></div>
+              <div class="check-item"><span class="circle"></span><span>Frontend confirmation copy;</span></div>
+            </div>
+          </div>
+
+          <section class="transfer-panel" aria-labelledby="transfer-title">
+            <h2 id="transfer-title">Transfer an active token</h2>
+            <form id="transfer-form">
+              <div class="transfer-grid">
+                <div class="service-summary" aria-label="Available care services">
+                  <div class="service-chip">Medical<span>General clinical care</span></div>
+                  <div class="service-chip">Surgical<span>Procedures and theatre</span></div>
+                  <div class="service-chip">Diagnostic<span>Testing and imaging</span></div>
+                  <div class="service-chip">Long-term care<span>Ongoing support</span></div>
+                </div>
+                <div class="field">
+                  <label for="api-base">API base URL</label>
+                  <input id="api-base" value="http://localhost:8081" autocomplete="url" />
+                </div>
+                <div class="field">
+                  <label for="access-token">Access token</label>
+                  <input id="access-token" type="password" placeholder="Bearer token" autocomplete="off" />
+                </div>
+                <div class="field">
+                  <label for="token-id">Queue token ID</label>
+                  <input id="token-id" required placeholder="UUID of the active token" />
+                </div>
+                <div class="field">
+                  <label for="current-facility">Current clinic or hospital</label>
+                  <select id="current-facility" required>
+                    <option value="">Loading facilities...</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="target-station">Destination station in this facility</label>
+                  <select id="target-station" required disabled>
+                    <option value="">Select a facility first</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="care-service">Care service</label>
+                  <select id="care-service" required disabled>
+                    <option value="">Select a facility first</option>
+                    <option value="MEDICAL">Medical</option>
+                    <option value="SURGICAL">Surgical</option>
+                    <option value="DIAGNOSTIC">Diagnostic</option>
+                    <option value="LONG_TERM_CARE">Long-term care</option>
+                  </select>
+                </div>
+              </div>
+              <div class="transfer-actions">
+                <button id="transfer-button" type="submit">Transfer token</button>
+                <span id="transfer-status" class="transfer-status" role="status"></span>
+              </div>
+              <div id="transfer-result" class="result" hidden></div>
+            </form>
+          </section>
+        </div>
+      </div>
+    </div>
+    <script>
+      const apiBase = document.getElementById('api-base');
+      const accessToken = document.getElementById('access-token');
+      const facilitySelect = document.getElementById('current-facility');
+      const stationSelect = document.getElementById('target-station');
+      const serviceSelect = document.getElementById('care-service');
+      const transferForm = document.getElementById('transfer-form');
+      const transferButton = document.getElementById('transfer-button');
+      const status = document.getElementById('transfer-status');
+      const result = document.getElementById('transfer-result');
+      let stations = [];
+
+      function setStatus(message, kind) {
+        status.textContent = message;
+        status.className = `transfer-status ${kind || ''}`;
+      }
+
+      function headers() {
+        const value = accessToken.value.trim();
+        return value ? { Authorization: `Bearer ${value}` } : {};
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(`${apiBase.value.replace(/\/$/, '')}${path}`, {
+          ...options,
+          headers: { Accept: 'application/json', ...headers(), ...(options.headers || {}) }
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.message || `Request failed (${response.status})`);
+        return body;
+      }
+
+      async function loadFacilities() {
+        try {
+          const body = await api('/api/v1/facilities');
+          facilitySelect.innerHTML = '<option value="">Choose a facility</option>';
+          body.items.filter(facility => facility.type !== 'STORE').forEach(facility => {
+            const option = document.createElement('option');
+            option.value = facility.id;
+            option.textContent = facility.name;
+            facilitySelect.appendChild(option);
+          });
+          setStatus('Facilities loaded. Choose a destination station.');
+        } catch (error) {
+          setStatus(error.message, 'error');
+        }
+      }
+
+      async function loadStations() {
+        stationSelect.disabled = true;
+        serviceSelect.disabled = true;
+        stationSelect.innerHTML = '<option value="">Loading stations...</option>';
+        if (!facilitySelect.value) {
+          stationSelect.innerHTML = '<option value="">Select a facility first</option>';
+          return;
+        }
+        try {
+          const body = await api(`/api/v1/facilities/${facilitySelect.value}/stations`);
+          stations = body.items;
+          serviceSelect.disabled = stations.length === 0;
+          serviceSelect.value = '';
+          renderStations();
+          setStatus(stations.length ? 'Choose a care service, then select its station.' : 'No active stations found for this facility.', stations.length ? '' : 'error');
+        } catch (error) {
+          stationSelect.innerHTML = '<option value="">Unable to load stations</option>';
+          setStatus(error.message, 'error');
+        }
+      }
+
+      function renderStations() {
+        const selectedService = serviceSelect.value;
+        const visibleStations = selectedService
+          ? stations.filter(station => station.careService === selectedService)
+          : [];
+        stationSelect.innerHTML = '<option value="">Choose a station</option>';
+        visibleStations.forEach(station => {
+          const option = document.createElement('option');
+          option.value = station.id;
+          option.textContent = `${station.name} (${station.code})`;
+          stationSelect.appendChild(option);
+        });
+        stationSelect.disabled = visibleStations.length === 0;
+        if (selectedService && visibleStations.length === 0) {
+          stationSelect.innerHTML = '<option value="">No stations for this service</option>';
+        }
+      }
+
+      facilitySelect.addEventListener('change', loadStations);
+      serviceSelect.addEventListener('change', renderStations);
+      transferForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        transferButton.disabled = true;
+        result.hidden = true;
+        setStatus('Transferring token...');
+        try {
+          const token = await api(`/api/v1/queue/tokens/${document.getElementById('token-id').value.trim()}/transfer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetStationId: stationSelect.value })
+          });
+          result.textContent = `Token transferred to the selected station. Original issue time: ${new Date(token.issuedAt).toLocaleString()}.`;
+          result.hidden = false;
+          setStatus('Transfer complete.', 'success');
+        } catch (error) {
+          setStatus(error.message, 'error');
+        } finally {
+          transferButton.disabled = false;
+        }
+      });
+
+      loadFacilities();
+    </script>
+  </body>
+</html>

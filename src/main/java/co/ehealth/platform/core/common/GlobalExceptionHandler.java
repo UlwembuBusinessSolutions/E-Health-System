@@ -22,6 +22,7 @@ import co.ehealth.platform.pharmacy.PrescriptionAlreadyDispensedException;
 import co.ehealth.platform.pharmacy.PrescriptionNotFoundException;
 import co.ehealth.platform.pharmacy.PatientIdentityNotVerifiedException;
 import co.ehealth.platform.visit.EmptyQueueException;
+import co.ehealth.platform.visit.QueueTokenNotFoundException;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -239,6 +240,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(VisitNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleVisitNotFound(VisitNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(QueueTokenNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleQueueTokenNotFound(QueueTokenNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 

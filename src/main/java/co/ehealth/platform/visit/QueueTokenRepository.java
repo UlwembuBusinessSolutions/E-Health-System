@@ -23,4 +23,13 @@ public interface QueueTokenRepository extends JpaRepository<QueueToken, UUID> {
     @Query("SELECT qt FROM QueueToken qt WHERE qt.facilityId = :facilityId AND qt.status = 'ISSUED' "
             + "ORDER BY CASE WHEN qt.priority = 'PRIORITY' THEN 0 ELSE 1 END, qt.issuedAt ASC")
     List<QueueToken> findActiveQueue(@Param("facilityId") UUID facilityId);
+
+    @Query("SELECT qt FROM QueueToken qt WHERE qt.facilityId = :facilityId AND qt.stationId = :stationId "
+            + "AND qt.status = 'ISSUED' ORDER BY CASE WHEN qt.priority = 'PRIORITY' THEN 0 ELSE 1 END, "
+            + "qt.issuedAt ASC")
+    List<QueueToken> findActiveQueueByFacilityAndStation(@Param("facilityId") UUID facilityId,
+            @Param("stationId") UUID stationId);
+
+    long countByFacilityIdAndStationIdAndIssuedAtBetween(UUID facilityId, UUID stationId, Instant startOfDay,
+            Instant endOfDay);
 }

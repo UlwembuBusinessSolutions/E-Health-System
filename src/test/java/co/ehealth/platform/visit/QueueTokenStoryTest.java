@@ -1,7 +1,11 @@
 package co.ehealth.platform.visit;
 
 import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.facility.Facility;
+import co.ehealth.platform.facility.FacilityType;
 import co.ehealth.platform.facility.FacilityService;
+import co.ehealth.platform.facility.Station;
+import co.ehealth.platform.facility.StationService;
 import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.patient.PatientNotFoundException;
 import co.ehealth.platform.patient.PatientService;
@@ -99,9 +103,48 @@ class QueueTokenStoryTest {
         assertThat(nextDay.getIssuedAt()).isEqualTo(Instant.parse("2026-08-26T00:00:00Z"));
     }
 
+    @Test
+    void transferringActiveTokenMovesItToAnotherStationAndRetainsOriginalIssueTime() {
+        UUID currentStationId = UUID.fromString("7a5a10d0-c77d-4f5c-9254-061b7a2bd7b3");
+        UUID targetStationId = UUID.fromString("9e80f3cb-9b43-4d22-bd22-f6d0c9d15430");
+        UUID tokenId = UUID.fromString("9a5a10d0-c77d-4f5c-9254-061b7a2bd7b3");
+        QueueTokenRepository tokens = mock(QueueTokenRepository.class);
+        QueueToken token = new QueueToken(VISIT_ID, FACILITY_ID, 7, TokenPriority.NORMAL, false,
+                Instant.parse("2026-08-25T09:15:00Z"), STAFF_ID);
+        token.setStationId(currentStationId);
+        ReflectionTestUtils.setField(token, "id", tokenId);
+        when(tokens.findById(tokenId)).thenReturn(java.util.Optional.of(token));
+        when(tokens.save(any(QueueToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        AuditLogService audit = mock(AuditLogService.class);
+        Facility facility = new Facility("Test Clinic", "TEST-01", FacilityType.CLINIC);
+        ReflectionTestUtils.setField(facility, "id", FACILITY_ID);
+        Station targetStation = new Station(facility, "Consultation", "CONS-01");
+        ReflectionTestUtils.setField(targetStation, "id", targetStationId);
+        StationService stations = mock(StationService.class);
+        when(stations.getOperationalStation(targetStationId)).thenReturn(targetStation);
+
+        QueueToken transferred = queueService(tokens, audit, Instant.parse("2026-08-25T09:30:00Z"), stations)
+                .transferToken(tokenId, targetStationId, STAFF_ID);
+
+        assertThat(transferred.getFacilityId()).isEqualTo(FACILITY_ID);
+        assertThat(transferred.getStationId()).isEqualTo(targetStationId);
+        assertThat(transferred.getIssuedAt()).isEqualTo(Instant.parse("2026-08-25T09:15:00Z"));
+        assertThat(transferred.getStatus()).isEqualTo(TokenStatus.ISSUED);
+        verify(audit).append(eq(STAFF_ID), eq(FACILITY_ID), eq("QUEUE_TOKEN_TRANSFERRED"), eq("QueueToken"),
+                eq(tokenId.toString()), eq("{\"sourceFacilityId\":\"" + FACILITY_ID + "\",\"sourceStationId\":\""
+                        + currentStationId + "\"}"),
+                eq("{\"targetFacilityId\":\"" + FACILITY_ID + "\",\"targetStationId\":\"" + targetStationId
+                        + "\",\"issuedAt\":\"2026-08-25T09:15:00Z\"}"));
+    }
+
     private QueueService queueService(QueueTokenRepository tokens, AuditLogService audit, Instant now) {
+        return queueService(tokens, audit, now, mock(StationService.class));
+    }
+
+    private QueueService queueService(QueueTokenRepository tokens, AuditLogService audit, Instant now,
+                                      StationService stations) {
         return new QueueService(tokens, mock(VisitRepository.class), mock(PatientService.class), audit,
-                Clock.fixed(now, ZoneOffset.UTC), mock(PermissionService.class));
+                Clock.fixed(now, ZoneOffset.UTC), mock(PermissionService.class), stations);
     }
 
     private Visit visit(UUID patientId, UUID facilityId) {

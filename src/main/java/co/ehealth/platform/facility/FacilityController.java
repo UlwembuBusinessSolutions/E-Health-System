@@ -24,16 +24,27 @@ public class FacilityController {
 
     private final FacilityRepository facilityRepository;
     private final FacilityService facilityService;
+    private final StationService stationService;
 
-    public FacilityController(FacilityRepository facilityRepository, FacilityService facilityService) {
+    public FacilityController(FacilityRepository facilityRepository, FacilityService facilityService,
+                             StationService stationService) {
         this.facilityRepository = facilityRepository;
         this.facilityService = facilityService;
+        this.stationService = stationService;
     }
 
     @GetMapping("/api/v1/facilities")
     public Map<String, Object> list() {
         return Map.of("items", facilityRepository.findByActiveTrue().stream()
-                .map(f -> Map.of("id", f.getId(), "name", f.getName())).toList());
+                .map(f -> Map.of("id", f.getId(), "name", f.getName(), "type", f.getType())).toList());
+    }
+
+    @GetMapping("/api/v1/facilities/{facilityId}/stations")
+    public Map<String, Object> listStations(@org.springframework.web.bind.annotation.PathVariable UUID facilityId) {
+        return Map.of("items", stationService.listByFacility(facilityId).stream()
+            .map(station -> Map.of("id", station.getId(), "name", station.getName(), "code", station.getCode(),
+                "careService", station.getCareService()))
+                .toList());
     }
 
     @PostMapping("/api/v1/facilities")
