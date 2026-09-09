@@ -1,8 +1,9 @@
+// Lihle | 2026-09-09 | Load statistics for the active clinic and show loading, error, and retry states so incomplete requests do not appear as empty results.
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getDispensedTodayCount, listDispensingQueue, listManualVerificationCases } from "@/shared/api/pharmacy";
-import { getFacilities } from "@/shared/api/facilities";
+import { useClinic } from "@/app/ClinicProvider";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
 import { PageHeader } from "@/shared/components/PageHeader";
@@ -17,13 +18,7 @@ interface QueueStats {
 export function PharmacyDashboard() {
   const navigate = useNavigate();
 
-  const facilitiesQuery = useQuery({
-    queryKey: ["facilities"],
-    queryFn: getFacilities,
-  });
-
-  const facilities = facilitiesQuery.data ?? [];
-  const primaryFacilityId = facilities.length > 0 ? facilities[0].id : "";
+  const primaryFacilityId = useClinic().activeClinicId ?? "";
 
   const queueQuery = useQuery({
     queryKey: ["pharmacy", "queue", primaryFacilityId],
@@ -51,9 +46,13 @@ export function PharmacyDashboard() {
     verificationCases: verificationCases.length,
   };
 
+  const error = queueQuery.error ?? verificationQuery.error ?? dispensedTodayQuery.error;
+  if (error) return <div><PageHeader title="Pharmacy" /><p role="alert" className="text-danger-600">{error.message}</p><Button variant="secondary" onClick={() => { void queueQuery.refetch(); void verificationQuery.refetch(); void dispensedTodayQuery.refetch(); }}>Retry</Button></div>;
+  if (queueQuery.isPending || verificationQuery.isPending || dispensedTodayQuery.isPending) return <p>Loading pharmacy...</p>;
+
   return (
     <div>
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <PageHeader
           title="Pharmacy"
           description="Prescription management and dispensing"

@@ -1,3 +1,4 @@
+// Lihle | 2026-09-09 | Persist the active clinic for this session, send its request header, and reset clinic and user state during authentication changes to avoid stale context.
 import type { AuthenticatedUser } from "./types";
 import { apiClient } from "./client";
 
@@ -8,6 +9,13 @@ import { apiClient } from "./client";
 
 const TENANT_TOKEN_KEY = "ulwembu.tenantToken";
 const TENANT_SLUG_KEY = "ulwembu.tenantSlug";
+const CLINIC_KEY = "ulwembu.activeClinic";
+
+export function getActiveClinicId(): string | null { return sessionStorage.getItem(CLINIC_KEY); }
+export function setActiveClinicId(id: string | null): void {
+  if (id) sessionStorage.setItem(CLINIC_KEY, id);
+  else sessionStorage.removeItem(CLINIC_KEY);
+}
 
 // sessionStorage, not localStorage — same reasoning as the platform token
 // store (shared/api/platform.ts): clears when the tab closes rather than
@@ -42,6 +50,8 @@ function setTenantSlug(slug: string): void {
 // which org signs in next, so nothing goes stale.
 export function clearTenantAuth(): void {
   sessionStorage.removeItem(TENANT_TOKEN_KEY);
+  sessionStorage.removeItem("ulwembu.user");
+  setActiveClinicId(null);
 }
 
 // Every other tenant-scoped module (staff.ts, organization.ts) sends these
@@ -57,6 +67,7 @@ export function tenantAuthHeaders(): HeadersInit {
   return {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(slug ? { "X-Tenant-ID": slug } : {}),
+    ...(getActiveClinicId() ? { "X-Clinic-ID": getActiveClinicId()! } : {}),
   };
 }
 
@@ -97,6 +108,7 @@ export async function login(payload: LoginPayload): Promise<AuthenticatedUser> {
     { headers: { "X-Tenant-ID": payload.tenantSlug } },
   );
   setTenantToken(response.accessToken);
+  setActiveClinicId(null);
 
   const roles = decodeRolesFromToken(response.accessToken);
   return {

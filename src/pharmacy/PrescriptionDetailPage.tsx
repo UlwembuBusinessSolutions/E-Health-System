@@ -1,7 +1,8 @@
+// Lihle | 2026-09-09 | Add dispensing with pharmacy cache refresh and error feedback, and keep query hooks before conditional returns so prescription status updates reliably.
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CheckCircle2, Clock } from "lucide-react";
-import { getPrescription } from "@/shared/api/pharmacy";
+import { dispensePrescription, getPrescription } from "@/shared/api/pharmacy";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
 import { PageHeader } from "@/shared/components/PageHeader";
@@ -20,6 +21,16 @@ function formatDateTime(iso: string): string {
 export function PrescriptionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const cache = useQueryClient();
+  const prescriptionQuery = useQuery({
+    queryKey: ["pharmacy", "prescription", id],
+    queryFn: () => getPrescription(id!),
+    enabled: !!id,
+  });
+  const dispense = useMutation({
+    mutationFn: () => dispensePrescription(id!),
+    onSettled: () => cache.invalidateQueries({ queryKey: ["pharmacy"] }),
+  });
 
   if (!id) {
     return (
@@ -28,11 +39,6 @@ export function PrescriptionDetailPage() {
       </div>
     );
   }
-
-  const prescriptionQuery = useQuery({
-    queryKey: ["prescription", id],
-    queryFn: () => getPrescription(id),
-  });
 
   const prescription = prescriptionQuery.data;
 
@@ -52,7 +58,7 @@ export function PrescriptionDetailPage() {
         />
       </div>
 
-      {prescriptionQuery.isLoading ? (
+      {prescriptionQuery.isError ? <p role="alert" className="text-danger-600">{prescriptionQuery.error.message}</p> : prescriptionQuery.isLoading ? (
         <Card className="p-10 text-center">
           <p className="text-text-secondary">Loading prescription…</p>
         </Card>
@@ -142,6 +148,9 @@ export function PrescriptionDetailPage() {
               )}
             </div>
           </Card>
+
+          {dispense.isError && <p role="alert" className="text-danger-600">{dispense.error.message}</p>}
+          {prescription.status === "PENDING" && <Button icon={<CheckCircle2 size={16} />} loading={dispense.isPending} onClick={() => dispense.mutate()}>Dispense prescription</Button>}
 
           {/* Summary */}
           <Card className="p-6 bg-info-50 border border-info-200">

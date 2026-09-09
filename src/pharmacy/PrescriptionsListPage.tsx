@@ -1,3 +1,4 @@
+// Lihle | 2026-09-09 | Connect the clinic filter to shared clinic selection and expose load errors so prescription browsing follows the active context.
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -9,10 +10,8 @@ import { PageHeader } from "@/shared/components/PageHeader";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { getFacilities } from "@/shared/api/facilities";
 import { listPrescriptions } from "@/shared/api/pharmacy";
+import { useClinic } from "@/app/ClinicProvider";
 
-// TODO: Implement a listPrescriptions API endpoint that supports filtering
-// For now, we'll use mock data structure. Backend needs:
-// GET /api/v1/prescriptions?facilityId=X&status=Y&patientMpi=Z&limit=20&offset=0
 interface PrescriptionListFilters {
   facilityId: string;
   status: "ALL" | "PENDING" | "DISPENSED";
@@ -21,6 +20,7 @@ interface PrescriptionListFilters {
 
 export function PrescriptionsListPage() {
   const navigate = useNavigate();
+  const { activeClinicId, switchClinic } = useClinic();
   const [filters, setFilters] = useState<PrescriptionListFilters>({
     facilityId: "",
     status: "ALL",
@@ -56,7 +56,7 @@ export function PrescriptionsListPage() {
 
   return (
     <div>
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <PageHeader
           title="Prescriptions"
           description="Browse and manage prescriptions"
@@ -102,13 +102,13 @@ export function PrescriptionsListPage() {
             <div>
               <label className="block text-sm font-medium text-text-primary mb-2">Facility</label>
               <select
-                value={filters.facilityId}
+                aria-label="Prescription clinic"
+                value={activeClinicId ?? ""}
                 onChange={(e) =>
-                  setFilters({ ...filters, facilityId: e.target.value })
+                  void switchClinic(e.target.value)
                 }
                 className="w-full px-3 py-2 border border-border-strong rounded-lg text-text-primary bg-white"
               >
-                <option value="">All Facilities</option>
                 {facilities.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name}
@@ -122,7 +122,7 @@ export function PrescriptionsListPage() {
 
       {/* List */}
       <Card className="overflow-hidden p-0">
-        {prescriptionsQuery.isLoading ? (
+        {prescriptionsQuery.isError ? <p role="alert" className="p-5 text-danger-600">{prescriptionsQuery.error.message}</p> : prescriptionsQuery.isLoading ? (
           <p className="px-5 py-10 text-center text-sm text-text-secondary">Loading prescriptions...</p>
         ) : filteredPrescriptions.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-text-secondary">

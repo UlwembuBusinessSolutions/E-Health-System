@@ -1,8 +1,10 @@
+// Lihle | 2026-09-09 | Use the active clinic, display load errors, and disable dispensing actions while a request is pending to keep queue actions consistent.
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Pill } from "lucide-react";
 import { dispensePrescription, listDispensingQueue } from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
+import { useClinic } from "@/app/ClinicProvider";
 import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
@@ -21,7 +23,8 @@ function formatTime(iso: string): string {
 // request elsewhere in this app.
 export function PharmacyQueuePage() {
   const queryClient = useQueryClient();
-  const [facilityId, setFacilityId] = useState("");
+  const { activeClinicId, switchClinic } = useClinic();
+  const [facilityId, setFacilityId] = useState(activeClinicId ?? "");
   const [actionError, setActionError] = useState<string | null>(null);
   const [dispensingId, setDispensingId] = useState<string | null>(null);
 
@@ -50,7 +53,7 @@ export function PharmacyQueuePage() {
     onError: (error) => {
       setActionError(error instanceof ApiError ? error.message : "Couldn't dispense that prescription. Try again.");
     },
-    onSettled: () => setDispensingId(null),
+    onSettled: () => { setDispensingId(null); void queryClient.invalidateQueries({ queryKey: ["pharmacy"] }); },
   });
 
   const facilities = facilitiesQuery.data ?? [];
@@ -66,7 +69,7 @@ export function PharmacyQueuePage() {
             <div className="relative">
               <select
                 value={facilityId}
-                onChange={(e) => setFacilityId(e.target.value)}
+                onChange={(e) => void switchClinic(e.target.value)}
                 className="h-11 appearance-none rounded-lg border border-border-strong bg-surface-raised pl-3.5 pr-10 text-[14px] text-text-primary outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
               >
                 {facilities.map((f) => (
@@ -86,7 +89,7 @@ export function PharmacyQueuePage() {
             {actionError}
           </div>
         )}
-        {!facilityId ? (
+        {queueQuery.isError ? <p role="alert" className="p-5 text-danger-600">{queueQuery.error.message}</p> : !facilityId ? (
           <p className="px-5 py-10 text-center text-[14px] text-text-secondary">Loading facilities…</p>
         ) : queueQuery.isLoading ? (
           <p className="px-5 py-10 text-center text-[14px] text-text-secondary">Loading queue…</p>
@@ -121,6 +124,7 @@ export function PharmacyQueuePage() {
                   size="md"
                   icon={<CheckCircle2 className="size-3.5" aria-hidden />}
                   loading={dispensingId === p.id && dispenseMutation.isPending}
+                  disabled={dispenseMutation.isPending}
                   onClick={() => dispenseMutation.mutate(p.id)}
                   className="shrink-0"
                 >

@@ -1,3 +1,4 @@
+// Lihle | 2026-09-09 | Normalize array and paginated visit responses and reject malformed data so visit selectors can load supported backend responses.
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
 import type { QueueToken } from "./queue";
@@ -42,11 +43,15 @@ export async function createVisit(payload: CreateVisitPayload): Promise<VisitWit
 }
 
 export async function listVisits(): Promise<Visit[]> {
-  const response = await apiClient.get<{ items: Visit[] }>(
+  const response = await apiClient.get<Visit[] | { items?: Visit[]; content?: Visit[] }>(
     "/api/v1/visits",
     { headers: tenantAuthHeaders() },
   );
-  return response.items;
+  const visits = Array.isArray(response) ? response : response?.items ?? response?.content;
+  if (!Array.isArray(visits)) {
+    throw new Error("The server returned an invalid visit list. Please reload visits.");
+  }
+  return visits;
 }
 
 export async function getVisit(id: string): Promise<Visit> {

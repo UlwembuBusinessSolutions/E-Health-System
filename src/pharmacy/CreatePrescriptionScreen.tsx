@@ -1,10 +1,10 @@
+// Lihle | 2026-09-09 | Validate visits and all medication rows, prevent edits during submission, and add recovery actions and responsive fields so prescription creation handles invalid input and loading failures clearly.
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, AlertCircle } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { createPrescription } from "@/shared/api/pharmacy";
 import { listVisits } from "@/shared/api/visits";
-import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
 import { Input } from "@/shared/components/Input";
@@ -25,7 +25,7 @@ export function CreatePrescriptionScreen() {
 
   const [visitId, setVisitId] = useState(defaultVisitId);
   const [items, setItems] = useState<PrescriptionItemForm[]>([
-    { id: "1", drugName: "", dosage: "", quantity: "" },
+    { id: "1", drugName: "", dosage: "", quantity: 1 },
   ]);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,8 +35,8 @@ export function CreatePrescriptionScreen() {
     mutationFn: async () => {
       setError(null);
 
-      if (!visitId) {
-        throw new Error("Select a visit");
+      if (!visitId || !visitsQuery.data?.some(visit => visit.id === visitId)) {
+        throw new Error("Select a patient visit before creating a prescription. If no visits are available, open Patients to start a visit, then reload visits here.");
       }
 
       // Validate all items have values
@@ -44,8 +44,11 @@ export function CreatePrescriptionScreen() {
         (item) => item.drugName.trim() && item.dosage.trim() && item.quantity !== ""
       );
 
-      if (validItems.length === 0) {
-        throw new Error("Add at least one medication");
+      if (validItems.length !== items.length || validItems.length === 0) {
+        throw new Error("Complete every medication row or remove incomplete rows.");
+      }
+      if (validItems.some(item => !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1)) {
+        throw new Error("Each quantity must be a positive whole number.");
       }
 
       const result = await createPrescription({
@@ -73,7 +76,7 @@ export function CreatePrescriptionScreen() {
 
   const addItem = () => {
     const newId = String(Math.max(...items.map((i) => Number(i.id) || 0)) + 1);
-    setItems([...items, { id: newId, drugName: "", dosage: "", quantity: "" }]);
+    setItems([...items, { id: newId, drugName: "", dosage: "", quantity: 1 }]);
   };
 
   const removeItem = (id: string) => {
@@ -101,7 +104,8 @@ export function CreatePrescriptionScreen() {
         description="Add medications for a patient visit"
       />
 
-      <div className="grid gap-5">
+      <form onSubmit={(event) => { event.preventDefault(); if (!createMutation.isPending) createMutation.mutate(); }} noValidate>
+      <fieldset disabled={createMutation.isPending} className="grid gap-5">
         {/* Visit Selection */}
         <Card className="p-6">
           <h3 className="mb-4 text-sm font-semibold text-text-primary">
@@ -112,7 +116,7 @@ export function CreatePrescriptionScreen() {
             <p className="text-sm text-text-secondary">Loading visits…</p>
           ) : visitsQuery.isError ? (
             <p role="alert" className="text-sm text-danger-700">
-              {visitsQuery.error instanceof ApiError
+              {visitsQuery.error instanceof Error
                 ? visitsQuery.error.message
                 : "Unable to load visits. Check that the backend is running, then try again."}
             </p>
@@ -150,6 +154,16 @@ export function CreatePrescriptionScreen() {
               )}
             </div>
           )}
+          {(visitsQuery.isError || (!visitsQuery.isPending && visits.length === 0)) && (
+            <div className="mt-3 flex flex-wrap gap-3">
+              <Button type="button" variant="secondary" onClick={() => navigate("/app/patients")}>
+                Open Patients to start a visit
+              </Button>
+              <Button type="button" variant="secondary" loading={visitsQuery.isFetching} onClick={() => void visitsQuery.refetch()}>
+                Reload visits
+              </Button>
+            </div>
+          )}
         </Card>
 
         {/* Medications */}
@@ -159,6 +173,7 @@ export function CreatePrescriptionScreen() {
               Medications
             </h3>
             <button
+              type="button"
               onClick={addItem}
               className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border-strong text-text-secondary hover:bg-surface-hover text-sm font-medium"
             >
@@ -168,7 +183,7 @@ export function CreatePrescriptionScreen() {
           </div>
 
           {error && (
-            <div className="mb-4 flex items-start gap-3 rounded-lg border border-danger-200 bg-danger-50 p-3">
+            <div role="alert" className="mb-4 flex items-start gap-3 rounded-lg border border-danger-200 bg-danger-50 p-3">
               <AlertCircle className="size-4 shrink-0 text-danger-600 mt-0.5" aria-hidden />
               <p className="text-sm text-danger-700">{error}</p>
             </div>
@@ -177,23 +192,25 @@ export function CreatePrescriptionScreen() {
           <div className="space-y-3">
             {items.map((item, idx) => (
               <div key={item.id} className="flex gap-2 items-start">
-                <div className="flex-1 grid grid-cols-3 gap-2">
+                <div className="min-w-0 flex-1 grid gap-2 sm:grid-cols-3">
                   <Input
-                    label={idx === 0 ? "Drug Name" : ""}
+                    label={`Drug Name ${idx + 1}`}
                     placeholder="e.g., Aspirin"
                     value={item.drugName}
                     onChange={(e) => updateItem(item.id, "drugName", e.target.value)}
                   />
                   <Input
-                    label={idx === 0 ? "Dosage" : ""}
+                    label={`Dosage ${idx + 1}`}
                     placeholder="e.g., 500mg"
                     value={item.dosage}
                     onChange={(e) => updateItem(item.id, "dosage", e.target.value)}
                   />
                   <Input
                     type="number"
-                    label={idx === 0 ? "Quantity" : ""}
-                    placeholder="1"
+                    label={`Quantity ${idx + 1}`}
+                    min={1}
+                    step={1}
+                    placeholder="Enter quantity"
                     value={item.quantity}
                     onChange={(e) =>
                       updateItem(item.id, "quantity", e.target.value ? Number(e.target.value) : "")
@@ -202,6 +219,7 @@ export function CreatePrescriptionScreen() {
                 </div>
                 {items.length > 1 && (
                   <button
+                    type="button"
                     onClick={() => removeItem(item.id)}
                     className="mt-6 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border-strong text-text-secondary hover:bg-surface-hover"
                     aria-label="Remove medication"
@@ -221,19 +239,22 @@ export function CreatePrescriptionScreen() {
         {/* Actions */}
         <div className="flex gap-3 justify-end">
           <Button
+            type="button"
             variant="secondary"
             onClick={() => navigate(-1)}
           >
             Cancel
           </Button>
           <Button
+            type="submit"
             loading={createMutation.isPending}
-            onClick={() => createMutation.mutate()}
+            disabled={visitsQuery.isPending || visitsQuery.isFetching}
           >
             Create Prescription
           </Button>
         </div>
-      </div>
+      </fieldset>
+      </form>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+// Lihle | 2026-09-09 | Show query failures and allow the header to wrap so verification errors and actions remain visible on small screens.
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { listManualVerificationCases } from "@/shared/api/pharmacy";
@@ -32,7 +33,7 @@ export function ManualVerificationQueuePage() {
 
   return (
     <div>
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <PageHeader
           title="Manual Verification Queue"
           description="Prescriptions requiring manual identity verification"
@@ -48,7 +49,7 @@ export function ManualVerificationQueuePage() {
       </div>
 
       <Card className="overflow-hidden p-0">
-        {casesQuery.isLoading ? (
+        {casesQuery.isError ? <p role="alert" className="p-5 text-danger-600">{casesQuery.error.message}</p> : casesQuery.isLoading ? (
           <p className="px-5 py-10 text-center text-sm text-text-secondary">
             Loading verification queue…
           </p>

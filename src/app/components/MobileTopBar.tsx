@@ -1,7 +1,8 @@
+// Lihle | 2026-09-09 | Add the audit trail to mobile navigation so activity records are reachable on small screens.
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Gauge, LogOut, Pill, Stethoscope, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
+import { ClipboardList, Gauge, LogOut, Pill, Stethoscope, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 import { getTenantSlug } from "@/shared/api/auth";
 import { getOrganizationSelf } from "@/shared/api/organization";
@@ -21,6 +22,7 @@ export function MobileTopBar() {
     { to: "/app/queue", label: "Queue", icon: Ticket, end: false },
     { to: "/app/triage", label: "Triage", icon: Stethoscope, end: false },
     { to: "/app/pharmacy", label: "Pharmacy", icon: Pill, end: false },
+    { to: "/app/audit", label: "Audit trail", icon: ClipboardList, end: false },
     ...(user?.role === "ORG_ADMIN" ? [{ to: "/app/staff", label: "Staff", icon: UsersIcon, end: false }] : []),
   ];
 

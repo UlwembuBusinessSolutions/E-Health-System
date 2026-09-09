@@ -1,3 +1,4 @@
+// Lihle | 2026-09-09 | Register clinic audit and visit-selection routes so navigation reaches the new audit and vitals workflows.
 import { Navigate, Route, Routes } from "react-router-dom";
 import { FindOrganizationScreen } from "@/auth/FindOrganizationScreen";
 import { LoginScreen } from "@/auth/LoginScreen";
@@ -37,6 +38,7 @@ import { AddClinicScreen } from "@/platform/AddClinicScreen";
 import { UsersPage } from "@/platform/UsersPage";
 import { CreateOperatorScreen } from "@/platform/CreateOperatorScreen";
 import { AuditPage } from "@/platform/AuditPage";
+import { ClinicAuditPage } from "@/audit/ClinicAuditPage";
 
 export function AppRouter() {
   return (
@@ -63,6 +65,7 @@ export function AppRouter() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="audit" element={<ClinicAuditPage />} />
         <Route
           path="staff"
           element={
@@ -94,6 +97,7 @@ export function AppRouter() {
         <Route path="pharmacy/manual-verification" element={<ManualVerificationQueuePage />} />
         <Route path="pharmacy/prescriptions/:id" element={<PrescriptionDetailPage />} />
         <Route path="triage" element={<TriageDashboard />} />
+        <Route path="triage/capture" element={<CaptureVitalsScreen />} />
         <Route path="triage/capture/:visitId" element={<CaptureVitalsScreen />} />
         <Route path="triage/list" element={<TriageAssessmentListPage />} />
         <Route path="triage/assessments/:id" element={<TriageAssessmentDetailPage />} />

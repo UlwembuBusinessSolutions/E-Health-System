@@ -1,258 +1,41 @@
+// Lihle | 2026-09-09 | Derive daily counts, recent assessments, and visits awaiting vitals from API data so the dashboard reflects recorded clinic activity.
 import { useQuery } from "@tanstack/react-query";
-import {
-  Plus,
-  Clock,
-  AlertTriangle,
-  CheckCircle2,
-} from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { Activity, AlertTriangle, Clock, Plus } from "lucide-react";
+import { isAbnormal, listTriageAssessments } from "@/shared/api/triage";
 import { listVisits } from "@/shared/api/visits";
-import { Card } from "@/shared/components/Card";
-import { Button } from "@/shared/components/Button";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { StatCard } from "@/shared/components/StatCard";
 
-// Mock recent assessments - TODO: Replace with API call to listTriageAssessments
-const mockRecentAssessments = [
-  {
-    id: "assess-001",
-    visitId: "visit-001",
-    patientName: "Sarah Mkhize",
-    patientMpi: "MPI-00001",
-    systolicBP: 145,
-    diastolicBP: 92,
-    capturedAt: new Date(Date.now() - 30 * 60000).toISOString(), // 30 mins ago
-    status: "abnormal",
-  },
-  {
-    id: "assess-002",
-    visitId: "visit-002",
-    patientName: "James Ndlela",
-    patientMpi: "MPI-00002",
-    systolicBP: 120,
-    diastolicBP: 80,
-    capturedAt: new Date(Date.now() - 90 * 60000).toISOString(), // 90 mins ago
-    status: "normal",
-  },
-  {
-    id: "assess-003",
-    visitId: "visit-003",
-    patientName: "Lindiwe Zuma",
-    patientMpi: "MPI-00003",
-    systolicBP: 88,
-    diastolicBP: 55,
-    capturedAt: new Date(Date.now() - 150 * 60000).toISOString(), // 150 mins ago
-    status: "abnormal",
-  },
-];
-
 export function TriageDashboard() {
-  const navigate = useNavigate();
-
-  // Fetch visits to show availability of triage capture
-  useQuery({
-    queryKey: ["visits"],
-    queryFn: () => listVisits(),
-    refetchInterval: 5000,
-  });
-
-  const stats = {
-    totalAssessments: mockRecentAssessments.length,
-    normalReadings: mockRecentAssessments.filter(
-      (a) => a.status === "normal"
-    ).length,
-    abnormalReadings: mockRecentAssessments.filter(
-      (a) => a.status === "abnormal"
-    ).length,
-    pendingReview: mockRecentAssessments.filter(
-      (a) => a.status === "abnormal"
-    ).length,
-  };
-
-  const formatTime = (isoString: string) => {
-    const date = new Date(isoString);
-    const now = new Date();
-    const diffMinutes = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60)
-    );
-
-    if (diffMinutes < 1) return "just now";
-    if (diffMinutes < 60) return `${diffMinutes}m ago`;
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return date.toLocaleDateString("en-ZA");
-  };
-
-  return (
-    <div className="space-y-6 p-6">
-      <PageHeader
-        title="Triage Assessment Module"
-        description="Vital signs management and patient assessment"
-      />
-
-      {/* Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Total Assessments"
-          value={stats.totalAssessments}
-          icon={Clock}
-          hint="All vital signs captured today"
-        />
-        <StatCard
-          label="Normal Readings"
-          value={stats.normalReadings}
-          icon={CheckCircle2}
-          hint="Vitals within normal ranges"
-        />
-        <StatCard
-          label="Abnormal Readings"
-          value={stats.abnormalReadings}
-          icon={AlertTriangle}
-          hint="Require clinician attention"
-        />
-        <StatCard
-          label="Pending Review"
-          value={stats.pendingReview}
-          icon={AlertTriangle}
-          hint="Out-of-range vitals"
-        />
-      </div>
-
-      {/* Quick Actions */}
-      <Card className="space-y-4 p-6">
-        <h3 className="text-sm font-semibold text-text-primary">
-          Quick Actions
-        </h3>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Button
-            onClick={() => navigate("/app/triage/capture")}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Capture Vitals
-          </Button>
-          <Button
-            onClick={() => navigate("/app/triage/list")}
-            variant="secondary"
-          >
-            Browse Assessments
-          </Button>
-          <Button
-            onClick={() =>
-              navigate("/app/triage/list", { state: { filter: "abnormal" } })
-            }
-            variant="secondary"
-          >
-            Abnormal Readings
-          </Button>
-          <Button
-            onClick={() => window.location.reload()}
-            variant="secondary"
-          >
-            Refresh Data
-          </Button>
-        </div>
-      </Card>
-
-      {/* Abnormal Readings Alert */}
-      {stats.abnormalReadings > 0 && (
-        <Card className="border-l-4 border-l-yellow-500 bg-yellow-50 p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-600" />
-            <div className="flex-1">
-              <h4 className="font-semibold text-yellow-900">
-                {stats.abnormalReadings} Patient(s) with Abnormal Readings
-              </h4>
-              <p className="mt-1 text-sm text-yellow-800">
-                {stats.abnormalReadings === 1
-                  ? "One patient has vital signs outside normal ranges."
-                  : `${stats.abnormalReadings} patients have vital signs outside normal ranges.`}{" "}
-                Please review and assess for clinical significance.
-              </p>
-              <Button
-                onClick={() =>
-                  navigate("/app/triage/list", { state: { filter: "abnormal" } })
-                }
-                className="mt-3 bg-yellow-600 hover:bg-yellow-700"
-              >
-                Review Abnormal Readings
-              </Button>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Recent Assessments */}
-      <Card className="space-y-4 p-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-text-primary">
-            Recent Assessments
-          </h3>
-          <Button
-            onClick={() => navigate("/app/triage/list")}
-            variant="secondary"
-            className="text-xs"
-          >
-            View All
-          </Button>
-        </div>
-
-        <div className="space-y-3">
-          {mockRecentAssessments.length === 0 ? (
-            <div className="flex items-center justify-center rounded-lg border border-dashed border-border-subtle bg-gray-50 py-8">
-              <p className="text-sm text-text-secondary">
-                No assessments yet. Start by capturing vital signs.
-              </p>
-            </div>
-          ) : (
-            mockRecentAssessments.map((assessment) => (
-              <button
-                key={assessment.id}
-                onClick={() =>
-                  navigate(`/app/triage/assessments/${assessment.id}`)
-                }
-                className="flex items-center justify-between rounded-lg border border-border-subtle bg-white p-3 hover:bg-gray-50 active:bg-gray-100"
-              >
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium text-text-primary">
-                    {assessment.patientName}
-                  </p>
-                  <p className="text-xs text-text-secondary">
-                    MPI: {assessment.patientMpi} • BP:{" "}
-                    {assessment.systolicBP}/{assessment.diastolicBP} mmHg
-                  </p>
-                  <p className="text-xs text-text-secondary">
-                    {formatTime(assessment.capturedAt)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {assessment.status === "abnormal" && (
-                    <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                  )}
-                  {assessment.status === "normal" && (
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  )}
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      </Card>
-
-      {/* Available Visits Info Card */}
-      <Card className="space-y-3 border-l-4 border-l-blue-500 bg-blue-50 p-4">
-        <h4 className="font-semibold text-blue-900">About Triage Assessment</h4>
-        <p className="text-sm text-blue-800">
-          The Triage module allows clinicians to quickly capture and assess vital
-          signs for patients during clinic visits. All measurements are validated
-          against clinically plausible ranges and compared with prior assessments
-          for trend analysis.
-        </p>
-        <div className="mt-3 text-xs text-blue-700">
-          <p className="font-medium">Requires RECQ License:</p>
-          <p>Triage assessment requires appropriate clinical credentials</p>
-        </div>
-      </Card>
-    </div>
-  );
+  const assessments = useQuery({ queryKey: ["triage", "assessments"], queryFn: listTriageAssessments });
+  const visits = useQuery({ queryKey: ["visits"], queryFn: listVisits });
+  const today = new Date().toLocaleDateString("en-ZA");
+  const rows = (assessments.data ?? []).filter(row => new Date(row.assessment.capturedAt).toLocaleDateString("en-ZA") === today);
+  const captured = new Set((assessments.data ?? []).map(row => row.assessment.visitId));
+  const waiting = (visits.data ?? []).filter(v => new Date(v.visitDateTime).toLocaleDateString("en-ZA") === today && !captured.has(v.id));
+  return <div className="space-y-6">
+    <PageHeader title="Triage" action={<Link className="inline-flex items-center gap-2 text-brand-700" to="/app/triage/capture"><Plus size={18} />Capture vitals</Link>} />
+    {assessments.isError || visits.isError ? <p role="alert" className="text-danger-600">{assessments.error?.message ?? visits.error?.message}</p> : assessments.isPending || visits.isPending ? <p>Loading triage...</p> : <>
+      <div className="grid gap-4 sm:grid-cols-3"><StatCard label="Assessments today" value={rows.length} icon={Activity} /><StatCard label="Out of range today" value={rows.filter(row => isAbnormal(row.assessment)).length} icon={AlertTriangle} /><StatCard label="Awaiting vitals today" value={waiting.length} icon={Clock} /></div>
+      <nav className="flex flex-wrap gap-5 border-b pb-4 text-sm text-brand-700"><Link to="/app/triage/list">All assessments</Link><Link to="/app/triage/list?status=ABNORMAL">Out-of-range readings</Link><Link to="/app/pharmacy">Pharmacy</Link></nav>
+      <section>
+        <h2 className="mb-3 text-base font-semibold">Recent assessments</h2>
+        {assessments.data?.length ? <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b bg-surface-raised"><tr>{["Patient", "Blood pressure", "Heart rate", "Temperature", "Captured", "Details"].map(label => <th key={label} className="p-3 whitespace-nowrap">{label}</th>)}</tr></thead>
+            <tbody>{[...assessments.data].sort((a, b) => Date.parse(b.assessment.capturedAt) - Date.parse(a.assessment.capturedAt)).slice(0, 10).map(({ assessment, patientName, patientMpi }) => <tr key={assessment.id} className="border-b">
+              <td className="p-3"><p className="font-medium">{patientName}</p><p className="font-mono text-xs text-text-secondary">{patientMpi}</p></td>
+              <td className="p-3 whitespace-nowrap">{assessment.systolicBloodPressure}/{assessment.diastolicBloodPressure} mmHg</td>
+              <td className="p-3 whitespace-nowrap">{assessment.heartRate} bpm</td>
+              <td className="p-3 whitespace-nowrap">{assessment.temperatureCelsius} °C</td>
+              <td className="p-3 whitespace-nowrap">{new Date(assessment.capturedAt).toLocaleString("en-ZA")}</td>
+              <td className="p-3 whitespace-nowrap"><Link className="text-brand-700" aria-label={`View assessment for ${patientName}`} to={`/app/triage/assessments/${assessment.id}`}>View details</Link></td>
+            </tr>)}</tbody>
+          </table>
+        </div> : <p className="text-sm text-text-secondary">No assessments captured yet. Capture vitals for a visit to see its details here.</p>}
+      </section>
+      <section><h2 className="mb-3 text-base font-semibold">Awaiting vitals</h2>{waiting.length === 0 ? <p className="text-sm text-text-secondary">No visits awaiting vitals today.</p> : <ul className="divide-y">{waiting.map(v => <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div>{v.patientName}<p className="font-mono text-xs text-text-secondary">{v.patientMpi}</p></div><Link className="text-sm text-brand-700" to={`/app/triage/capture/${v.id}`}>Capture vitals</Link></li>)}</ul>}</section>
+    </>}
+  </div>;
 }

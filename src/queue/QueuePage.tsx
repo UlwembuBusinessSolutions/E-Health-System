@@ -1,8 +1,10 @@
+// Lihle | 2026-09-09 | Initialize the queue from the active clinic and switch through ClinicProvider so queue selection follows the shared clinic context.
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpCircle, PhoneCall, Ticket } from "lucide-react";
 import { callNext, issueManualToken, listQueue, type QueueEntry } from "@/shared/api/queue";
 import { getFacilities } from "@/shared/api/facilities";
+import { useClinic } from "@/app/ClinicProvider";
 import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
@@ -20,7 +22,8 @@ function formatTime(iso: string): string {
 // caller's own profile.
 export function QueuePage() {
   const queryClient = useQueryClient();
-  const [facilityId, setFacilityId] = useState("");
+  const { activeClinicId, switchClinic } = useClinic();
+  const [facilityId, setFacilityId] = useState(activeClinicId ?? "");
   const [actionError, setActionError] = useState<string | null>(null);
   const [justCalled, setJustCalled] = useState<QueueEntry | null>(null);
 
@@ -73,7 +76,7 @@ export function QueuePage() {
             <div className="relative">
               <select
                 value={facilityId}
-                onChange={(e) => setFacilityId(e.target.value)}
+                onChange={(e) => void switchClinic(e.target.value)}
                 className="h-11 appearance-none rounded-lg border border-border-strong bg-surface-raised pl-3.5 pr-10 text-[14px] text-text-primary outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
               >
                 {facilities.map((f) => (

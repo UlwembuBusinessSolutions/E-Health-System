@@ -1,3 +1,4 @@
+// Lihle | 2026-09-09 | Add assessment list and detail requests and whole-number vital validation so triage screens use stored assessments and reject invalid numeric input.
 import { apiClient } from "@/shared/api/client";
 import { tenantAuthHeaders } from "@/shared/api/auth";
 
@@ -90,6 +91,9 @@ export function validateVitalSigns(
   vitals: Partial<CaptureVitalsPayload>
 ): Record<string, string> {
   const errors: Record<string, string> = {};
+  for (const field of ["systolicBloodPressure", "diastolicBloodPressure", "heartRate", "respiratoryRate"] as const) {
+    if (!Number.isInteger(vitals[field])) errors[field] = "Enter a whole number.";
+  }
 
   if (vitals.systolicBloodPressure !== undefined) {
     const sys = vitals.systolicBloodPressure;
@@ -150,7 +154,7 @@ export function validateVitalSigns(
  * Check if vital signs are abnormal but plausible
  * Returns true if any vital is outside normal ranges
  */
-export function isAbnormal(vitals: CaptureVitalsPayload): boolean {
+export function isAbnormal(vitals: Omit<CaptureVitalsPayload, "confirmOutOfRange">): boolean {
   const sys = vitals.systolicBloodPressure;
   const dia = vitals.diastolicBloodPressure;
   const hr = vitals.heartRate;
@@ -175,6 +179,21 @@ export function isAbnormal(vitals: CaptureVitalsPayload): boolean {
 /**
  * Format vital signs for display
  */
+export interface AssessmentSummary {
+  assessment: VitalSigns;
+  patientName: string;
+  patientMpi: string;
+}
+
+export async function listTriageAssessments(): Promise<AssessmentSummary[]> {
+  const response = await apiClient.get<{ items: AssessmentSummary[] }>("/api/v1/triage-assessments", { headers: tenantAuthHeaders() });
+  return response.items;
+}
+
+export function getTriageAssessment(id: string): Promise<CaptureVitalsResponse> {
+  return apiClient.get<CaptureVitalsResponse>(`/api/v1/triage-assessments/${id}`, { headers: tenantAuthHeaders() });
+}
+
 export function formatVitals(vitals: VitalSigns): Record<string, string> {
   return {
     systolicBP: `${vitals.systolicBloodPressure} mmHg`,

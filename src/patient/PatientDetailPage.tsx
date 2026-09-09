@@ -1,3 +1,4 @@
+// Lihle | 2026-09-09 | Default and restrict visit creation to the active clinic so visits use the selected clinic context.
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
@@ -6,6 +7,7 @@ import { getPatient } from "@/shared/api/patients";
 import { createVisit, type ServiceStream, type VisitType, type VisitWithToken } from "@/shared/api/visits";
 import { createPrescription, type Prescription, type PrescriptionItem } from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
+import { useClinic } from "@/app/ClinicProvider";
 import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
@@ -66,7 +68,8 @@ export function PatientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const patientId = id ?? "";
   const [isStartingVisit, setIsStartingVisit] = useState(false);
-  const [facilityId, setFacilityId] = useState("");
+  const { activeClinicId } = useClinic();
+  const [facilityId, setFacilityId] = useState(activeClinicId ?? "");
   const [visitType, setVisitType] = useState<VisitType | "">("");
   const [serviceStream, setServiceStream] = useState<ServiceStream | "">("");
   const [visitError, setVisitError] = useState<string | null>(null);
@@ -226,7 +229,7 @@ export function PatientDetailPage() {
                     <Select
                       label="Facility"
                       required
-                      options={(facilitiesQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }))}
+                      options={(facilitiesQuery.data ?? []).filter(f => f.id === activeClinicId).map((f) => ({ value: f.id, label: f.name }))}
                       value={facilityId}
                       onChange={(e) => setFacilityId(e.target.value)}
                     />

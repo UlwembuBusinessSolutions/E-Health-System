@@ -1,7 +1,9 @@
+// Lihle | 2026-09-09 | Wrap authenticated screens in ClinicProvider so clinic selection and scoped data are shared across workflows.
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { MobileTopBar } from "./components/MobileTopBar";
 import { useOrganizationBranding } from "./useOrganizationBranding";
+import { ClinicProvider } from "./ClinicProvider";
 
 // The authenticated frame every real tenant screen renders inside —
 // Dashboard, Staff, and staff creation. Mirrors PlatformShell.tsx exactly
@@ -16,9 +18,11 @@ export function AppShell() {
       <Sidebar />
       <MobileTopBar />
       <main className="min-w-0 flex-1">
+        <ClinicProvider>
         <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
           <Outlet />
         </div>
+        </ClinicProvider>
       </main>
     </div>
   );
