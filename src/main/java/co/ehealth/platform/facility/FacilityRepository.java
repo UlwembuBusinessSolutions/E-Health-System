@@ -1,5 +1,7 @@
 package co.ehealth.platform.facility;
 
+// lihle | 2026-09-09 | Limited clinic discovery to accessible active facilities so dropdowns respect staff assignments.
+
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

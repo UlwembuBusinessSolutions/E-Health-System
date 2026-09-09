@@ -1,5 +1,7 @@
 package co.ehealth.platform.core.security;
 
+// lihle | 2026-09-09 | Registered clinic-context filtering and allowed clinic headers for authenticated browser requests.
+
 import co.ehealth.platform.identity.UserRepository;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.platform.PlatformOperatorRepository;

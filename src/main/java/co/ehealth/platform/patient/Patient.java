@@ -1,5 +1,7 @@
 package co.ehealth.platform.patient;
 
+// lihle | 2026-09-09 | Bound patient access to the active clinic to prevent cross-clinic data exposure.
+
 import co.ehealth.platform.identity.Gender;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

@@ -1,5 +1,7 @@
 package co.ehealth.platform.core.common;
 
+// lihle | 2026-09-09 | Mapped clinic and triage failures to explicit HTTP errors that the frontend can display.
+
 import co.ehealth.platform.core.security.InvalidTokenException;
 import co.ehealth.platform.identity.AccountLockedException;
 import co.ehealth.platform.identity.DuplicateFieldException;

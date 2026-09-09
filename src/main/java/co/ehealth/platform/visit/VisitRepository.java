@@ -1,5 +1,7 @@
 package co.ehealth.platform.visit;
 
+// lihle | 2026-09-09 | Aligned visit responses and scoped visit/queue access to the active clinic for connected clinical screens.
+
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

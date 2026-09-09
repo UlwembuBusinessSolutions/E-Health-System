@@ -1,5 +1,7 @@
 package co.ehealth.platform.platform;
 
+// lihle | 2026-09-09 | Set clinic context during development seeding because patient registration now requires it.
+
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;

@@ -1,5 +1,7 @@
 package co.ehealth.platform.pharmacy;
 
+// lihle | 2026-09-09 | Scoped prescription and verification queries to the active clinic to protect patient records.
+
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.clinic.ClinicContext;
 import co.ehealth.platform.core.tenant.ModuleCode;

@@ -1,5 +1,7 @@
 package co.ehealth.platform.identity;
 
+// lihle | 2026-09-09 | Added clinic context to audit handling so actions can be traced to the clinic where they occurred.
+
 import co.ehealth.platform.core.audit.AuditLog;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
@@ -87,8 +89,7 @@ public class TenantAuditController {
             @RequestParam(required = false) UUID userId,
             @RequestParam(required = false) String action,
             @RequestParam(required = false) ModuleCode module,
-            @RequestParam(required = false) String entityId,
-            @RequestParam(required = false) Boolean privileged) {
+            @RequestParam(required = false) String entityId) {
         permissionService.requireAccess(ModuleCode.AUDT, PermissionLevel.VIEW);
 
         List<AuditLog> rows = auditLogService.listInClinic();

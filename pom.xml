@@ -18,6 +18,7 @@
   <description>Ulwembu multi-tenant e-health platform API — Phase 1 identity, tenancy and platform-provisioning slice</description>
 
   <properties>
+    <!-- lihle | 2026-09-09 | Keep Java 21 bytecode for compatibility with the current Spring tooling. -->
     <!-- Compiled bytecode targets 21, not the JDK 25 used to build/run: Spring 6.1.x's -->
     <!-- bundled ASM (used for classpath scanning and by spring-boot-maven-plugin) can't -->
     <!-- parse class file major version 69 (Java 25) yet. -->

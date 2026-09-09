@@ -1,5 +1,7 @@
 package co.ehealth.platform.core.clinic;
 
+// lihle | 2026-09-09 | Updated regression coverage and fixtures to verify clinic isolation and clinical workflows.
+
 import co.ehealth.platform.PlatformApplication;
 import co.ehealth.platform.core.tenant.TenantMigrationRunner;
 import com.fasterxml.jackson.databind.JsonNode;

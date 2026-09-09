@@ -1,5 +1,7 @@
 package co.ehealth.platform.triage;
 
+// lihle | 2026-09-09 | Connected persisted triage reads and validation to the UI while restricting records to the active clinic.
+
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;

@@ -1,5 +1,7 @@
 package co.ehealth.platform.core.clinic;
 
+// lihle | 2026-09-09 | Added assigned-clinic context and access checks to prevent access outside a user's clinic scope.
+
 import co.ehealth.platform.core.common.FilterResponses;
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import co.ehealth.platform.identity.ClinicScopeService;

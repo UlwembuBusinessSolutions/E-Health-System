@@ -1,5 +1,7 @@
 package co.ehealth.platform.platform;
 
+// lihle | 2026-09-09 | Retained remote compatibility changes during integration to preserve the published backend contract.
+
 import co.ehealth.platform.core.tenant.TenantAccessTracker;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

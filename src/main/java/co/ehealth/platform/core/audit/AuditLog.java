@@ -1,5 +1,7 @@
 package co.ehealth.platform.core.audit;
 
+// lihle | 2026-09-09 | Added clinic context to audit handling so actions can be traced to the clinic where they occurred.
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;

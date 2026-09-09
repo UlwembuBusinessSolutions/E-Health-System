@@ -1,5 +1,7 @@
 package co.ehealth.platform.patient;
 
+// lihle | 2026-09-09 | Bound patient access to the active clinic to prevent cross-clinic data exposure.
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

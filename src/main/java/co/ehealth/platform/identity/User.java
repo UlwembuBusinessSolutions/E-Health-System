@@ -1,5 +1,7 @@
 package co.ehealth.platform.identity;
 
+// lihle | 2026-09-09 | Aligned staff roles and clinic assignments so permissions follow the current clinic context.
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

@@ -1,5 +1,7 @@
 package co.ehealth.platform.identity;
 
+// lihle | 2026-09-09 | Aligned staff roles and clinic assignments so permissions follow the current clinic context.
+
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.notification.EmailService;
 import co.ehealth.platform.core.security.TemporaryPasswordGenerator;

@@ -1,5 +1,7 @@
 package co.ehealth.platform.pharmacy;
 
+// lihle | 2026-09-09 | Scoped prescription and verification queries to the active clinic to protect patient records.
+
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

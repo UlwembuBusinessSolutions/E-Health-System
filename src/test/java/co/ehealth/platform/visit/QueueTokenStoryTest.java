@@ -1,5 +1,7 @@
 package co.ehealth.platform.visit;
 
+// lihle | 2026-09-09 | Updated regression coverage and fixtures to verify clinic isolation and clinical workflows.
+
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.facility.FacilityService;
 import co.ehealth.platform.identity.PermissionService;

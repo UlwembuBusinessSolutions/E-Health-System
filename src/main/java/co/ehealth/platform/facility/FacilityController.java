@@ -1,5 +1,7 @@
 package co.ehealth.platform.facility;
 
+// lihle | 2026-09-09 | Limited clinic discovery to accessible active facilities so dropdowns respect staff assignments.
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
