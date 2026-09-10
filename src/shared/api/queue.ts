@@ -9,6 +9,7 @@ export interface QueueToken {
   id: string;
   visitId: string;
   facilityId: string;
+  stationId: string | null;
   tokenNumber: number;
   priority: TokenPriority;
   status: TokenStatus;
@@ -47,6 +48,17 @@ export async function callNext(facilityId: string): Promise<QueueEntry> {
   return apiClient.post<QueueEntry>(
     `/api/v1/queue/call-next?facilityId=${encodeURIComponent(facilityId)}`,
     undefined,
+    { headers: tenantAuthHeaders() },
+  );
+}
+
+export async function transferToken(
+  tokenId: string,
+  targetStationId: string,
+): Promise<QueueToken> {
+  return apiClient.post<QueueToken>(
+    `/api/v1/queue/tokens/${encodeURIComponent(tokenId)}/transfer`,
+    { targetStationId },
     { headers: tenantAuthHeaders() },
   );
 }

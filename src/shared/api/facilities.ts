@@ -27,3 +27,21 @@ export async function getFacilities(): Promise<Facility[]> {
   }
   return facilities;
 }
+
+export interface Station {
+  id: string;
+  name: string;
+  code: string;
+  facilityId: string;
+  careService: CareService;
+}
+
+export type CareService = "MEDICAL" | "SURGICAL" | "DIAGNOSTIC" | "LONG_TERM_CARE";
+
+export async function getStations(facilityId: string): Promise<Station[]> {
+  const response = await apiClient.get<{ items: Station[] }>(
+    `/api/v1/facilities/${encodeURIComponent(facilityId)}/stations`,
+    { headers: tenantAuthHeaders() },
+  );
+  return response.items;
+}
