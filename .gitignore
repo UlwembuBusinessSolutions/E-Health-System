@@ -1,8 +1,8 @@
 target/
 .env
 *.local
+data/
 .idea/
 *.iml
 .vscode/
 .DS_Store
-*.md

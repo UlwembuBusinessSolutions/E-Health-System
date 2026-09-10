@@ -53,7 +53,7 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable) // stateless bearer-token API — no cookie session to forge
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authorize -> authorize
-                .requestMatchers("/api/v1/auth/login", "/api/v1/auth/password-reset/**",
+                .requestMatchers("/api/v1/auth/login", "/api/v1/auth/sso/**", "/api/v1/auth/password-reset/**",
                         "/actuator/health").permitAll()
                 // Getting a token in the first place can't require one.
                 .requestMatchers("/platform/auth/login", "/platform/auth/register", "/platform/auth/password-reset/**").permitAll()

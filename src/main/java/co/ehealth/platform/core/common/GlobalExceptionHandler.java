@@ -5,6 +5,7 @@ import co.ehealth.platform.identity.AccountLockedException;
 import co.ehealth.platform.identity.DuplicateFieldException;
 import co.ehealth.platform.identity.InvalidCredentialsException;
 import co.ehealth.platform.identity.InvalidResetCodeException;
+import co.ehealth.platform.identity.NativeLoginDisabledException;
 import co.ehealth.platform.identity.LastRemainingAdminException;
 import co.ehealth.platform.identity.NotAnOrgAdminException;
 import co.ehealth.platform.identity.NotAuthorizedException;
@@ -98,6 +99,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         // used to tell those two cases apart either.
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(new ApiErrorResponse("Incorrect email or password.", null));
+    }
+
+    @ExceptionHandler(NativeLoginDisabledException.class)
+    public ResponseEntity<ApiErrorResponse> handleNativeLoginDisabled(NativeLoginDisabledException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(AccountLockedException.class)

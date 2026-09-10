@@ -269,6 +269,9 @@ public class User {
     }
 
     public void setStatus(UserStatus status) {
+        if (this.status != status) {
+            this.tokenVersion++;
+        }
         this.status = status;
     }
 

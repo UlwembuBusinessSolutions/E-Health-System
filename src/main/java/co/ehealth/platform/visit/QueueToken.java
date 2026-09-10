@@ -80,6 +80,10 @@ public class QueueToken {
         this.calledAt = at;
     }
 
+    public void promote() {
+        this.priority = TokenPriority.PRIORITY;
+    }
+
     public UUID getId() {
         return id;
     }

@@ -4,6 +4,7 @@ import co.ehealth.platform.core.common.FilterResponses;
 import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
+import co.ehealth.platform.identity.UserStatus;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -75,10 +76,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         Optional<User> user = userRepository.findById(userId);
         int tokenVersion = claims.get("tokenVersion", Integer.class);
 
-        if (user.isEmpty() || user.get().getTokenVersion() != tokenVersion) {
+        if (user.isEmpty() || user.get().getTokenVersion() != tokenVersion
+                || user.get().getStatus() != UserStatus.ACTIVE) {
             // Password changed, or the account was disabled, since this
-            // token was issued — tokenVersion no longer matches, so it's
-            // treated as revoked even though it hasn't naturally expired.
+            // token was issued — tokenVersion no longer matches, or the
+            // account is no longer active, so it's treated as revoked even
+            // though it hasn't naturally expired.
             FilterResponses.writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED,
                     "Session expired. Please sign in again.");
             return;

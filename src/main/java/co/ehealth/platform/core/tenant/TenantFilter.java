@@ -120,6 +120,7 @@ public class TenantFilter extends OncePerRequestFilter {
         // preflight request, not found by reading the filter in isolation.
         String uri = request.getRequestURI();
         return uri.startsWith("/actuator/health") || uri.startsWith("/platform/")
+                || uri.equals("/api/v1/auth/sso/saml/callback")
                 || "OPTIONS".equalsIgnoreCase(request.getMethod());
     }
 }

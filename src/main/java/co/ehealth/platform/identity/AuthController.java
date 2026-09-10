@@ -2,6 +2,7 @@ package co.ehealth.platform.identity;
 
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import co.ehealth.platform.core.security.JwtService;
+import co.ehealth.platform.platform.TenantSsoService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -22,16 +23,21 @@ public class AuthController {
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
     private final UserRepository userRepository;
+    private final TenantSsoService tenantSsoService;
 
     public AuthController(AuthService authService, PasswordResetService passwordResetService,
-                           UserRepository userRepository) {
+                           UserRepository userRepository, TenantSsoService tenantSsoService) {
         this.authService = authService;
         this.passwordResetService = passwordResetService;
         this.userRepository = userRepository;
+        this.tenantSsoService = tenantSsoService;
     }
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        if (!tenantSsoService.isNativeLoginAllowed()) {
+            throw new NativeLoginDisabledException();
+        }
         JwtService.IssuedToken issued = authService.login(request.email(), request.password());
         User user = userRepository.findByEmail(request.email()).orElseThrow();
         return ResponseEntity.ok(new LoginResponse(issued.token(), issued.expiresAt().toString(),
