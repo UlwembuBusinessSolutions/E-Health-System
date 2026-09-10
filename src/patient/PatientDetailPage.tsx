@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Pill, Plus, Printer, Ticket, Trash2 } from "lucide-react";
+import { ArrowLeft, Link2, Pill, Plus, Printer, Ticket, Trash2 } from "lucide-react";
 import { getPatient } from "@/shared/api/patients";
-import { createVisit, type ServiceStream, type VisitType, type VisitWithToken } from "@/shared/api/visits";
+import { createVisit, recordTriage, type ServiceStream, type VisitType, type VisitWithToken, type TriageResult } from "@/shared/api/visits";
 import { listQueue } from "@/shared/api/queue";
 import { createPrescription, type Prescription, type PrescriptionItem } from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
@@ -82,6 +82,9 @@ export function PatientDetailPage() {
   const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItem[]>([{ ...EMPTY_ITEM }]);
   const [prescriptionError, setPrescriptionError] = useState<string | null>(null);
   const [createdPrescription, setCreatedPrescription] = useState<Prescription | null>(null);
+  const [triage, setTriage] = useState({ respiratoryRate: "", pulseRate: "", systolicBp: "", temperature: "", avpu: "ALERT", mobility: "AMBULANT", trauma: false, deceased: false });
+  const [triageResult, setTriageResult] = useState<TriageResult | null>(null);
+  const [triageError, setTriageError] = useState<string | null>(null);
 
   const patientQuery = useQuery({
     queryKey: ["patients", patientId],
@@ -122,6 +125,17 @@ export function PatientDetailPage() {
     }
     startVisit.mutate();
   };
+
+  const captureTriage = useMutation({
+    mutationFn: () => recordTriage(startedVisit!.visit.id, {
+      respiratoryRate: Number(triage.respiratoryRate), pulseRate: Number(triage.pulseRate),
+      systolicBp: Number(triage.systolicBp), temperature: Number(triage.temperature),
+      avpu: triage.avpu as "ALERT", mobility: triage.mobility as "AMBULANT",
+      trauma: triage.trauma, deceased: triage.deceased,
+    }),
+    onSuccess: setTriageResult,
+    onError: (error) => setTriageError(error instanceof ApiError ? error.message : "Couldn't calculate TEWS."),
+  });
 
   const prescribe = useMutation({
     mutationFn: (visitId: string) => createPrescription({ visitId, items: prescriptionItems }),
@@ -191,13 +205,21 @@ export function PatientDetailPage() {
                 </div>
               </div>
               {!isStartingVisit && !startedVisit && (
-                <Button
-                  variant="secondary"
-                  icon={<Ticket className="size-4" aria-hidden />}
-                  onClick={() => setIsStartingVisit(true)}
-                >
-                  Start visit
-                </Button>
+                <div className="flex gap-2">
+                  <Link
+                    to={`/app/patients/${patient.id}/dependants/new`}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface-raised px-4 text-[14px] font-semibold text-text-primary transition-colors duration-150 hover:bg-surface-sunken"
+                  >
+                    <Link2 className="size-4" aria-hidden /> Add dependant
+                  </Link>
+                  <Button
+                    variant="secondary"
+                    icon={<Ticket className="size-4" aria-hidden />}
+                    onClick={() => setIsStartingVisit(true)}
+                  >
+                    Start visit
+                  </Button>
+                </div>
               )}
             </div>
           </Card>
@@ -219,6 +241,18 @@ export function PatientDetailPage() {
                       View queue
                     </Link>
                   </p>
+                  {!triageResult && (
+                    <div className="mt-3 grid w-full max-w-2xl grid-cols-2 gap-3 text-left sm:grid-cols-4">
+                      {(["respiratoryRate", "pulseRate", "systolicBp", "temperature"] as const).map((field) => (
+                        <Input key={field} label={field === "systolicBp" ? "Systolic BP" : field === "respiratoryRate" ? "Respiratory rate" : field === "pulseRate" ? "Pulse" : "Temperature"} type="number" value={triage[field]} onChange={(e) => setTriage({ ...triage, [field]: e.target.value })} />
+                      ))}
+                      <Select label="AVPU" options={[["ALERT", "Alert"], ["VOICE", "Voice"], ["PAIN", "Pain"], ["UNRESPONSIVE", "Unresponsive"]].map(([value, label]) => ({ value, label }))} value={triage.avpu} onChange={(e) => setTriage({ ...triage, avpu: e.target.value })} />
+                      <Select label="Mobility" options={[["AMBULANT", "Ambulant"], ["WITH_HELP", "With help"], ["IMMOBILE", "Immobile"]].map(([value, label]) => ({ value, label }))} value={triage.mobility} onChange={(e) => setTriage({ ...triage, mobility: e.target.value })} />
+                      <Button size="md" loading={captureTriage.isPending} onClick={() => { setTriageError(null); captureTriage.mutate(); }}>Calculate TEWS</Button>
+                    </div>
+                  )}
+                  {triageError && <p role="alert" className="text-[13.5px] text-danger-600">{triageError}</p>}
+                  {triageResult && <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[14px] font-semibold">TEWS {triageResult.tewsScore} · {triageResult.assignedColour} · SLA: {triageResult.sla}</p>}
                   <div className="mt-1 flex gap-2">
                     <Button
                       variant="primary"

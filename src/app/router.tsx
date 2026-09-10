@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { FindOrganizationScreen } from "@/auth/FindOrganizationScreen";
 import { LoginScreen } from "@/auth/LoginScreen";
+import { SsoCallbackScreen } from "@/auth/SsoCallbackScreen";
 import { ForgotPasswordScreen } from "@/auth/ForgotPasswordScreen";
 import { SetPasswordScreen } from "@/auth/SetPasswordScreen";
 import { RequireAuth } from "@/auth/RequireAuth";
@@ -10,6 +11,7 @@ import { StaffListPage } from "@/staff/StaffListPage";
 import { PatientSearchPage } from "@/patient/PatientSearchPage";
 import { RegisterPatientScreen } from "@/patient/RegisterPatientScreen";
 import { PatientDetailPage } from "@/patient/PatientDetailPage";
+import { AddDependantScreen } from "@/patient/AddDependantScreen";
 import { QueuePage } from "@/queue/QueuePage";
 import { PharmacyQueuePage } from "@/pharmacy/PharmacyQueuePage";
 import { AppShell } from "./AppShell";
@@ -40,6 +42,7 @@ export function AppRouter() {
           on this route. */}
       <Route path="/login" element={<FindOrganizationScreen />} />
       <Route path="/org/:tenantSlug/login" element={<LoginScreen />} />
+      <Route path="/org/:tenantSlug/sso/callback" element={<SsoCallbackScreen />} />
       <Route path="/org/:tenantSlug/forgot-password" element={<ForgotPasswordScreen />} />
       <Route path="/org/:tenantSlug/set-password" element={<SetPasswordScreen />} />
       {/* The tenant app shell — Dashboard, Staff, and staff creation all
@@ -80,6 +83,7 @@ export function AppRouter() {
         <Route path="patients" element={<PatientSearchPage />} />
         <Route path="patients/new" element={<RegisterPatientScreen />} />
         <Route path="patients/:id" element={<PatientDetailPage />} />
+        <Route path="patients/:id/dependants/new" element={<AddDependantScreen />} />
         <Route path="queue" element={<QueuePage />} />
         <Route path="pharmacy" element={<PharmacyQueuePage />} />
       </Route>

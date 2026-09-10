@@ -37,3 +37,37 @@ export interface VisitWithToken {
 export async function createVisit(payload: CreateVisitPayload): Promise<VisitWithToken> {
   return apiClient.post<VisitWithToken>("/api/v1/visits", payload, { headers: tenantAuthHeaders() });
 }
+
+export type TriageColour = "RED" | "ORANGE" | "YELLOW" | "GREEN" | "BLUE";
+export type Avpu = "ALERT" | "VOICE" | "PAIN" | "UNRESPONSIVE";
+export type Mobility = "AMBULANT" | "WITH_HELP" | "IMMOBILE";
+
+export interface TriagePayload {
+  respiratoryRate: number;
+  pulseRate: number;
+  systolicBp: number;
+  temperature: number;
+  avpu: Avpu;
+  mobility: Mobility;
+  trauma: boolean;
+  deceased: boolean;
+  overrideColour?: TriageColour;
+  overrideReason?: string;
+}
+
+export interface TriageResult {
+  id: string;
+  tewsScore: number;
+  calculatedColour: TriageColour;
+  assignedColour: TriageColour;
+  slaMinutes: number | null;
+  sla: string;
+  overrideReason: string | null;
+  recordedAt: string;
+}
+
+export async function recordTriage(visitId: string, payload: TriagePayload): Promise<TriageResult> {
+  return apiClient.post<TriageResult>(`/api/v1/visits/${visitId}/triage`, payload, {
+    headers: tenantAuthHeaders(),
+  });
+}

@@ -69,3 +69,43 @@ export async function searchPatients(query: string): Promise<Patient[]> {
 export async function getPatient(id: string): Promise<Patient> {
   return apiClient.get<Patient>(`/api/v1/patients/${id}`, { headers: tenantAuthHeaders() });
 }
+
+export type DependantRelationship = "CHILD" | "SPOUSE" | "PARTNER" | "PARENT" | "OTHER";
+
+export interface AddDependantPayload {
+  firstName: string;
+  lastName: string;
+  idNumber: string;
+  address: string;
+  contactNumber: string;
+  relationship: DependantRelationship;
+  supportingDocument: File;
+}
+
+export interface DependantRelationshipRecord {
+  id: string;
+  principalId: string;
+  dependant: Patient;
+  relationship: DependantRelationship;
+  supportingDocumentName: string;
+  supportingDocumentUrl?: string;
+  createdAt: string;
+}
+
+export async function addDependant(
+  principalId: string,
+  payload: AddDependantPayload,
+): Promise<DependantRelationshipRecord> {
+  const form = new FormData();
+  form.append("firstName", payload.firstName);
+  form.append("lastName", payload.lastName);
+  form.append("idNumber", payload.idNumber);
+  form.append("address", payload.address);
+  form.append("contactNumber", payload.contactNumber);
+  form.append("relationship", payload.relationship);
+  form.append("supportingDocument", payload.supportingDocument);
+
+  return apiClient.post<DependantRelationshipRecord>(`/api/v1/patients/${principalId}/dependants`, form, {
+    headers: tenantAuthHeaders(),
+  });
+}

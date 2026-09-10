@@ -135,8 +135,8 @@ textarea {
 
 @media print {
   @page {
-    margin: 12mm;
-    size: 80mm auto;
+    margin: 6mm;
+    size: A4 portrait;
   }
 
   body * {
@@ -150,72 +150,133 @@ textarea {
 
   .print-ticket {
     display: block;
-    width: 56mm;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 200px;
+    padding: 12px 16px;
+    background: #ffffff;
+    border-radius: 4px;
     color: #171916;
-    font-family: "IBM Plex Mono", monospace;
-  }
-
-  .print-ticket__brand,
-  .print-ticket__heading,
-  .print-ticket__footer,
-  .print-ticket__patient {
-    margin: 0;
-    text-align: center;
+    font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    page-break-after: avoid;
+    page-break-inside: avoid;
   }
 
   .print-ticket__brand {
-    font-size: 9pt;
+    margin: 0 0 1px 0;
+    text-align: center;
+    font-size: 7pt;
     font-weight: 600;
+    color: var(--color-brand-600, #185950);
+    letter-spacing: 0.3px;
   }
 
   .print-ticket__heading {
-    margin-top: 5mm;
-    font-size: 10pt;
+    margin: 0 0 4px 0;
+    text-align: center;
+    font-size: 6.5pt;
     text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--color-text-secondary, #636a62);
   }
 
   .print-ticket__token {
-    margin: 4mm 0;
+    margin: 2px 0 6px 0;
     text-align: center;
-    font-size: 32pt;
+    font-size: 22pt;
     font-weight: 700;
+    color: var(--color-brand-700, #144840);
+    letter-spacing: 0.5px;
+    line-height: 1.2;
   }
 
   .print-ticket__details {
     margin: 0;
-    border-top: 1px dashed #171916;
-    border-bottom: 1px dashed #171916;
-    padding: 3mm 0;
+    border-top: 1px dashed var(--color-border-strong, #c2c7bf);
+    border-bottom: 1px dashed var(--color-border-strong, #c2c7bf);
+    padding: 4px 0;
   }
 
   .print-ticket__details div {
     display: flex;
     justify-content: space-between;
     gap: 4mm;
-    margin: 1.5mm 0;
+    padding: 1px 0;
+    font-size: 6.5pt;
   }
 
   .print-ticket__details dt,
   .print-ticket__details dd {
     margin: 0;
-    font-size: 9pt;
   }
 
   .print-ticket__details dt {
     font-weight: 600;
+    color: var(--color-text-secondary, #636a62);
   }
 
   .print-ticket__details dd {
     text-align: right;
+    font-weight: 500;
   }
 
   .print-ticket__patient {
-    margin-top: 4mm;
-    font-size: 9pt;
+    margin: 4px 0 2px 0;
+    text-align: center;
+    font-size: 7pt;
+    font-weight: 500;
   }
 
   .print-ticket__footer {
-    margin-top: 5mm;
-    font-size: 8pt;
+    margin: 2px 0 0 0;
+    text-align: center;
+    font-size: 5.5pt;
+    color: var(--color-text-secondary, #636a62);
+    letter-spacing: 0.2px;
+  }
+}
+
+/* Even smaller version for very compact printing */
+@media print and (max-width: 80mm) {
+  @page {
+    margin: 3mm;
+    size: 80mm auto;
+  }
+
+  .print-ticket {
+    width: 100%;
+    max-width: 56mm;
+    padding: 6mm 3mm;
+    position: static;
+    transform: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .print-ticket__token {
+    font-size: 20pt;
+  }
+  
+  .print-ticket__brand {
+    font-size: 6.5pt;
+  }
+  
+  .print-ticket__heading {
+    font-size: 6pt;
+  }
+  
+  .print-ticket__details div {
+    font-size: 6pt;
+  }
+  
+  .print-ticket__patient {
+    font-size: 6.5pt;
+  }
+  
+  .print-ticket__footer {
+    font-size: 5pt;
   }
 }

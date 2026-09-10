@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { Mail } from "lucide-react";
+import { Mail, ShieldCheck } from "lucide-react";
 import { AuthLayout } from "./AuthLayout";
 import { loginSchema, type LoginValues } from "./validation";
-import { login } from "@/shared/api/auth";
+import { getTenantAuthPolicy, login, startSso, SsoUnavailableError } from "@/shared/api/auth";
 import { ApiError } from "@/shared/api/client";
 import { useAuth } from "./AuthContext";
 import { Input } from "@/shared/components/Input";
@@ -22,6 +22,12 @@ export function LoginScreen() {
   const navigate = useNavigate();
   const { setUser } = useAuth();
   const [formError, setFormError] = useState<string | null>(null);
+  const [ssoError, setSsoError] = useState<string | null>(null);
+  const policyQuery = useQuery({
+    queryKey: ["tenant-auth-policy", tenantSlug],
+    queryFn: () => getTenantAuthPolicy(tenantSlug!),
+    enabled: Boolean(tenantSlug),
+  });
 
   const {
     register,
@@ -49,6 +55,29 @@ export function LoginScreen() {
     mutation.mutate({ ...values, tenantSlug });
   };
 
+  const handleSso = async () => {
+    if (!tenantSlug) return;
+    setSsoError(null);
+
+    if (policyQuery.data && !policyQuery.data.ssoEnabled) {
+      setSsoError("Your organisation has not enabled employer sign-in yet. Please use your email and password instead.");
+      return;
+    }
+
+    try {
+      const { authorizationUrl } = await startSso(tenantSlug);
+      window.location.assign(authorizationUrl);
+    } catch (error) {
+      setSsoError(
+        error instanceof ApiError
+          ? error.message
+          : error instanceof SsoUnavailableError
+            ? error.message
+            : "Single sign-on is unavailable for this organisation.",
+      );
+    }
+  };
+
   // No slug in the URL at all (shouldn't normally happen — the route
   // requires it — but a malformed/hand-typed URL like /org//login could
   // still reach here with an empty param) sends the visitor to the gate
@@ -65,16 +94,26 @@ export function LoginScreen() {
       tenantSlug={tenantSlug}
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="auth-fields flex flex-col gap-4">
-        {formError && (
+        {(formError || ssoError) && (
           <div
             role="alert"
             className="rounded-lg border border-danger-500/30 bg-danger-50 px-3.5 py-2.5 text-[13.5px] text-danger-600"
           >
-            {formError}
+            {formError ?? ssoError}
           </div>
         )}
 
-        <Input
+        <Button type="button" size="lg" variant="secondary" icon={<ShieldCheck className="size-4" aria-hidden />} onClick={handleSso}>
+          Sign in with your employer
+        </Button>
+
+        {(policyQuery.data?.ssoEnabled ?? false) && policyQuery.data?.passwordLoginEnabled && (
+          <div className="flex items-center gap-3 text-[12px] text-text-secondary before:h-px before:flex-1 before:bg-border-subtle after:h-px after:flex-1 after:bg-border-subtle">
+            Or use your password
+          </div>
+        )}
+
+        {(!policyQuery.data || policyQuery.data.passwordLoginEnabled) && <Input
           label="Email"
           required
           type="email"
@@ -83,9 +122,9 @@ export function LoginScreen() {
           autoComplete="email"
           error={errors.email?.message}
           {...register("email")}
-        />
+        />}
 
-        <div>
+        {(!policyQuery.data || policyQuery.data.passwordLoginEnabled) && <div>
           <PasswordInput
             label="Password"
             required
@@ -101,11 +140,17 @@ export function LoginScreen() {
               Forgot password?
             </Link>
           </div>
-        </div>
+        </div>}
 
-        <Button type="submit" size="lg" loading={isSubmitting || mutation.isPending} className="mt-1 w-full">
-          Sign in
-        </Button>
+        {(!policyQuery.data || policyQuery.data.passwordLoginEnabled) ? (
+          <Button type="submit" size="lg" loading={isSubmitting || mutation.isPending} className="mt-1 w-full">
+            Sign in
+          </Button>
+        ) : (
+          <p className="text-center text-[13.5px] text-text-secondary">
+            Password sign-in is disabled for this organisation.
+          </p>
+        )}
       </form>
     </AuthLayout>
   );

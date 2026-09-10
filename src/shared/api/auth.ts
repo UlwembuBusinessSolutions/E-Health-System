@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from "./types";
-import { apiClient } from "./client";
+import { ApiError, apiClient } from "./client";
 
 // login() is wired to the real backend; requestPasswordReset()/resetPassword()
 // below are still TEMP mocks — out of scope for the staff-creation/photo/
@@ -68,12 +68,16 @@ export function tenantAuthHeaders(): HeadersInit {
 // decides what the UI shows, same trust boundary as any other client-side
 // state.
 function decodeRolesFromToken(token: string): string[] {
+  const decoded = decodeTokenClaims(token);
+  return Array.isArray(decoded.roles) ? decoded.roles : [];
+}
+
+function decodeTokenClaims(token: string): Record<string, unknown> {
   try {
     const payload = token.split(".")[1];
-    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-    return Array.isArray(decoded.roles) ? decoded.roles : [];
+    return JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as Record<string, unknown>;
   } catch {
-    return [];
+    return {};
   }
 }
 
@@ -83,10 +87,107 @@ export interface LoginPayload {
   tenantSlug: string;
 }
 
+export interface TenantAuthPolicy {
+  ssoEnabled: boolean;
+  passwordLoginEnabled: boolean;
+  providerName: string | null;
+}
+
+export async function getTenantAuthPolicy(tenantSlug: string): Promise<TenantAuthPolicy> {
+  return apiClient.get<TenantAuthPolicy>("/api/v1/auth/sso/policy", {
+    headers: { "X-Tenant-ID": tenantSlug },
+  });
+}
+
 interface LoginResponse {
   accessToken: string;
   expiresAt: string;
-  user: { id: string; email: string; firstName: string; lastName: string };
+  user: { id: string; email: string; firstName: string; lastName: string } | null;
+}
+
+export interface SsoStartResponse {
+  authorizationUrl: string;
+}
+
+export interface SsoCallbackPayload {
+  code: string;
+  state: string;
+  tenantSlug: string;
+  redirectUri: string;
+}
+
+export interface SsoHandoffPayload {
+  code: string;
+  tenantSlug: string;
+}
+
+export class SsoUnavailableError extends Error {
+  constructor(message = "Single sign-on is currently unavailable. Use your password to sign in.") {
+    super(message);
+    this.name = "SsoUnavailableError";
+  }
+}
+
+export async function startSso(tenantSlug: string): Promise<SsoStartResponse> {
+  try {
+    return await apiClient.post<SsoStartResponse>(
+      "/api/v1/auth/sso/start",
+      { redirectUri: `${window.location.origin}/org/${tenantSlug}/sso/callback` },
+      { headers: { "X-Tenant-ID": tenantSlug } },
+    );
+  } catch (error) {
+    if (error instanceof TypeError || (error instanceof ApiError && error.status >= 500)) {
+      throw new SsoUnavailableError();
+    }
+    throw error;
+  }
+}
+
+export async function completeSso(payload: SsoCallbackPayload): Promise<AuthenticatedUser> {
+  let response: LoginResponse;
+  try {
+    response = await apiClient.post<LoginResponse>(
+      "/api/v1/auth/sso/callback",
+      { code: payload.code, state: payload.state, redirectUri: payload.redirectUri },
+      { headers: { "X-Tenant-ID": payload.tenantSlug } },
+    );
+  } catch (error) {
+    if (error instanceof TypeError || (error instanceof ApiError && error.status >= 500)) {
+      throw new SsoUnavailableError("The identity provider could not be reached. Return to sign in and try again.");
+    }
+    throw error;
+  }
+  setTenantSlug(payload.tenantSlug);
+  setTenantToken(response.accessToken);
+  const roles = decodeRolesFromToken(response.accessToken);
+  const claims = decodeTokenClaims(response.accessToken);
+  const user = response.user ?? {
+    id: typeof claims.sub === "string" ? claims.sub : "",
+    email: typeof claims.email === "string" ? claims.email : "",
+    firstName: typeof claims.given_name === "string" ? claims.given_name : "",
+    lastName: typeof claims.family_name === "string" ? claims.family_name : "",
+  };
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: roles.includes("ORG_ADMIN") ? "ORG_ADMIN" : (roles[0] ?? "STAFF"),
+  };
+}
+
+export async function completeSamlHandoff(payload: SsoHandoffPayload): Promise<AuthenticatedUser> {
+  const response = await apiClient.post<LoginResponse>(
+    "/api/v1/auth/sso/handoff",
+    { code: payload.code },
+    { headers: { "X-Tenant-ID": payload.tenantSlug } },
+  );
+  setTenantSlug(payload.tenantSlug);
+  setTenantToken(response.accessToken);
+  const roles = decodeRolesFromToken(response.accessToken);
+  const user = response.user;
+  if (!user) throw new SsoUnavailableError("The SSO session could not be completed. Please try again.");
+  return { ...user, role: roles.includes("ORG_ADMIN") ? "ORG_ADMIN" : (roles[0] ?? "STAFF") };
 }
 
 export async function login(payload: LoginPayload): Promise<AuthenticatedUser> {
@@ -99,11 +200,18 @@ export async function login(payload: LoginPayload): Promise<AuthenticatedUser> {
   setTenantToken(response.accessToken);
 
   const roles = decodeRolesFromToken(response.accessToken);
+  const claims = decodeTokenClaims(response.accessToken);
+  const user = response.user ?? {
+    id: typeof claims.sub === "string" ? claims.sub : "",
+    email: typeof claims.email === "string" ? claims.email : "",
+    firstName: typeof claims.given_name === "string" ? claims.given_name : "",
+    lastName: typeof claims.family_name === "string" ? claims.family_name : "",
+  };
   return {
-    id: response.user.id,
-    email: response.user.email,
-    firstName: response.user.firstName,
-    lastName: response.user.lastName,
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
     // The real LoginResponse has no role field at all — this is the known
     // drift api-reference.html already flags (Section "Tenant auth"). Read
     // from the token's own roles claim instead of leaving this hardcoded.
