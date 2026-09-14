@@ -1,3 +1,4 @@
+// Lihle | 2026-09-09 | Add PUT requests and notify the clinic provider when access is rejected so assignments can be saved and clinic access refreshed.
 // Every module's own path already carries its full route ("/api/v1/facilities",
 // "/platform/organizations" — the platform module deliberately isn't under
 // /api/v1 at all, see SecurityConfig), so this is the origin the backend
@@ -36,6 +37,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
+    if (res.status === 403 && /not assigned to this active clinic|outside the active clinic context|Select an assigned clinic/i.test(body?.message ?? "")) {
+      window.dispatchEvent(new Event("clinic-access-denied"));
+    }
     throw new ApiError(body?.message ?? res.statusText, res.status, body?.fieldErrors);
   }
 
@@ -68,5 +72,7 @@ export const apiClient = {
     }),
   patch: <T>(path: string, body?: unknown, init?: RequestInit) =>
     request<T>(path, { ...init, method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
+  put: <T>(path: string, body?: unknown, init?: RequestInit) =>
+    request<T>(path, { ...init, method: "PUT", body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: "DELETE" }),
 };

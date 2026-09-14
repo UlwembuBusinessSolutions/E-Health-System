@@ -48,6 +48,66 @@ export interface OrganizationSummary {
   totalModuleCount: number;
 }
 
+// SADM-US-005's paged projection. Aggregate clinic and module counts are
+// calculated server-side, keeping the register to one request per page.
+export interface TenantRegisterItem {
+  id: string;
+  name: string;
+  sector: OrganizationSector;
+  status: OrganizationStatus;
+  clinicCount: number;
+  activeModuleCount: number;
+}
+
+export interface TenantRegisterPage {
+  items: TenantRegisterItem[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface ListTenantRegisterParams {
+  page?: number;
+  size?: number;
+  name?: string;
+}
+
+interface TenantRegisterResponse {
+  items?: TenantRegisterItem[];
+  content?: TenantRegisterItem[];
+  page?: number | { number?: number; size?: number; totalElements?: number; totalPages?: number };
+  pageSize?: number;
+  totalItems?: number;
+  totalElements?: number;
+  totalPages?: number;
+  number?: number;
+  size?: number;
+}
+
+export async function listTenantRegister(params: ListTenantRegisterParams = {}): Promise<TenantRegisterPage> {
+  const page = params.page ?? 0;
+  const size = params.size ?? 25;
+  const search = new URLSearchParams({ page: String(page), size: String(size) });
+  if (params.name) search.set("name", params.name);
+
+  const response = await apiClient.get<TenantRegisterResponse>(`/api/v1/tenants?${search.toString()}`, {
+    headers: authHeaders(),
+  });
+  const pageInfo = typeof response.page === "object" ? response.page : undefined;
+  const items = response.items ?? response.content ?? [];
+  const totalItems = response.totalItems ?? response.totalElements ?? pageInfo?.totalElements ?? items.length;
+  const totalPages = response.totalPages ?? pageInfo?.totalPages ?? Math.max(1, Math.ceil(totalItems / size));
+
+  return {
+    items,
+    page: typeof response.page === "number" ? response.page : (response.number ?? pageInfo?.number ?? page),
+    pageSize: response.pageSize ?? response.size ?? pageInfo?.size ?? size,
+    totalItems,
+    totalPages,
+  };
+}
+
 // One admin's details — matches PlatformController.AdminRequest field-for-field.
 export interface AdminInput {
   firstName: string;
@@ -436,7 +496,6 @@ export async function listPlatformAudit(params: ListPlatformAuditParams = {}): P
   if (params.organizationId) search.set("organizationId", params.organizationId);
   if (params.from) search.set("from", params.from);
   if (params.to) search.set("to", params.to);
-  if (params.privileged !== undefined) search.set("privileged", String(params.privileged));
   const queryString = search.toString();
   const response = await apiClient.get<{ items: PlatformAuditEntry[] }>(
     `/platform/audit${queryString ? `?${queryString}` : ""}`,

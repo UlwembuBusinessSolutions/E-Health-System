@@ -1,3 +1,4 @@
+// Lihle | 2026-09-09 | Distinguish loading, failed, and empty clinic lists and add reload support so staff creation explains why clinic selection is unavailable.
 import { useState, type ChangeEvent } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -54,6 +55,11 @@ export function AddStaffScreen() {
 
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
   const rolesQuery = useQuery({ queryKey: ["roles"], queryFn: getRoles });
+  const clinics = facilitiesQuery.data ?? [];
+  const clinicLoadError = facilitiesQuery.isError
+    ? `Unable to load clinics. ${facilitiesQuery.error.message}`
+    : undefined;
+  const noClinics = facilitiesQuery.isSuccess && clinics.length === 0;
 
   const {
     register,
@@ -382,15 +388,23 @@ export function AddStaffScreen() {
               </FormRow>
 
               <FormRow>
+                <div className="flex flex-col gap-2">
                 <Select
                   label="Clinic"
                   required
-                  placeholder={facilitiesQuery.isLoading ? "Loading clinics…" : "Select clinic"}
-                  disabled={facilitiesQuery.isLoading}
-                  options={(facilitiesQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }))}
-                  error={errors.facilityId?.message}
+                  placeholder={facilitiesQuery.isPending ? "Loading clinics…" : clinicLoadError ? "Clinics could not be loaded" : noClinics ? "No clinics available" : "Select clinic"}
+                  disabled={facilitiesQuery.isPending}
+                  options={clinics.map((f) => ({ value: f.id, label: f.name }))}
+                  error={clinicLoadError ?? (noClinics ? "No clinics are available for your account. Ask your administrator to check clinic setup and access." : facilitiesQuery.isPending ? undefined : errors.facilityId?.message)}
                   {...register("facilityId")}
                 />
+                {(facilitiesQuery.isError || noClinics) && <button
+                  type="button"
+                  className="self-start text-sm text-brand-700 underline disabled:opacity-60"
+                  disabled={facilitiesQuery.isFetching}
+                  onClick={() => void facilitiesQuery.refetch()}
+                >{facilitiesQuery.isFetching ? "Reloading clinics…" : "Reload clinics"}</button>}
+                </div>
                 <Select
                   label="Role"
                   required

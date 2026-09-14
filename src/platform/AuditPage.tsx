@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ChevronDown, ClipboardList, ShieldCheck } from "lucide-react";
+import { ChevronDown, ClipboardList } from "lucide-react";
 import { listOrganizations, listPlatformAudit, type PlatformAuditEntry } from "@/shared/api/platform";
 import { Card } from "@/shared/components/Card";
 import { PageHeader } from "@/shared/components/PageHeader";
-import { StatusPill } from "@/shared/components/StatusPill";
 
 const AUDIT_ACTIONS = [
   "ORGANIZATION_PROVISIONED",
@@ -18,14 +17,7 @@ const AUDIT_ACTIONS = [
   "MODULE_TOGGLED",
   "PLATFORM_OPERATOR_CREATED",
   "PLATFORM_OPERATOR_LOGIN",
-  "CROSS_TENANT_ACCESS",
 ] as const;
-
-const PRIVILEGED_OPTIONS = [
-  { value: "", label: "All events" },
-  { value: "true", label: "Privileged only" },
-  { value: "false", label: "Non-privileged only" },
-];
 
 function actionLabel(action: string): string {
   const words = action.toLowerCase().split("_");
@@ -47,7 +39,6 @@ export function AuditPage() {
   const [organizationId, setOrganizationId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [privileged, setPrivileged] = useState<"" | "true" | "false">("");
 
   const organizationsQuery = useQuery({
     queryKey: ["platform", "organizations", "all"],
@@ -55,20 +46,18 @@ export function AuditPage() {
   });
 
   const auditQuery = useQuery({
-    queryKey: ["platform", "audit", { action, organizationId, from, to, privileged }],
+    queryKey: ["platform", "audit", { action, organizationId, from, to }],
     queryFn: () =>
       listPlatformAudit({
         action: action || undefined,
         organizationId: organizationId || undefined,
         from: from || undefined,
         to: to || undefined,
-        privileged: privileged === "" ? undefined : privileged === "true",
       }),
   });
 
-  const hasActiveFilters =
-    action !== "" || organizationId !== "" || from !== "" || to !== "" || privileged !== "";
-  const entries: PlatformAuditEntry[] = auditQuery.data ?? [];
+  const hasActiveFilters = action !== "" || organizationId !== "" || from !== "" || to !== "";
+  const entries = auditQuery.data ?? [];
 
   return (
     <div>
@@ -91,13 +80,6 @@ export function AuditPage() {
             { value: "", label: "All organizations" },
             ...(organizationsQuery.data ?? []).map((org) => ({ value: org.id, label: org.displayName })),
           ]}
-        />
-        <FilterSelect
-          id="audit-privileged"
-          label="Privileged"
-          value={privileged}
-          onChange={(value) => setPrivileged(value as "" | "true" | "false")}
-          options={PRIVILEGED_OPTIONS}
         />
         <div className="flex flex-col gap-1.5">
           <label htmlFor="audit-from" className="text-[13px] font-medium text-text-primary">
@@ -133,7 +115,6 @@ export function AuditPage() {
               setOrganizationId("");
               setFrom("");
               setTo("");
-              setPrivileged("");
             }}
             className="h-11 shrink-0 rounded-lg px-3 text-[13.5px] font-medium text-text-secondary transition-colors duration-150 hover:bg-surface-sunken hover:text-text-primary"
           >
@@ -158,7 +139,7 @@ export function AuditPage() {
               <thead>
                 <tr className="border-b border-border-subtle">
                   <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
-                    Timestamp
+                    When
                   </th>
                   <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
                     Action
@@ -197,21 +178,9 @@ function AuditRow({ entry }: { entry: PlatformAuditEntry }) {
         {formatDateTime(entry.createdAt)}
       </td>
       <td className="px-5 py-3.5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="inline-flex rounded bg-brand-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-brand-700">
-            {actionLabel(entry.action)}
-          </span>
-          {entry.privileged && (
-            <span title="Performed by a platform operator">
-              <StatusPill tone="warning">
-                <span className="inline-flex items-center gap-1">
-                  <ShieldCheck className="size-3" aria-hidden />
-                  Privileged
-                </span>
-              </StatusPill>
-            </span>
-          )}
-        </div>
+        <span className="inline-flex rounded bg-brand-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-brand-700">
+          {actionLabel(entry.action)}
+        </span>
       </td>
       <td className="px-5 py-3.5 text-[13.5px] text-text-primary">
         {entry.organizationId && entry.organizationName ? (
@@ -224,7 +193,7 @@ function AuditRow({ entry }: { entry: PlatformAuditEntry }) {
       </td>
       <td className="px-5 py-3.5">
         <p className="text-[13.5px] text-text-primary">{entry.operatorName}</p>
-        {entry.operatorEmail && <p className="text-[12px] text-text-secondary">{entry.operatorEmail}</p>}
+        <p className="text-[12px] text-text-secondary">{entry.operatorEmail}</p>
       </td>
       <td className="max-w-xs px-5 py-3.5 text-[13px] text-text-secondary">{entry.detail ?? "—"}</td>
       <td className="max-w-[220px] px-5 py-3.5 text-[12px] text-text-secondary">

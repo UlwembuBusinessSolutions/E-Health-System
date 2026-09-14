@@ -15,9 +15,7 @@ const TONE_CLASSES: Record<PillTone, string> = {
 // between the Platform Console and the tenant app rather than duplicated —
 // both need the exact same "state of a record" affordance (an organization,
 // a platform operator, a staff member).
-// src/shared/components/StatusPill.tsx — one-line type change, no behavior change
-export function StatusPill({ tone, children }: { tone: PillTone; children: React.ReactNode }) {
-//export function StatusPill({ tone, children }: { tone: PillTone; children: string }) {
+export function StatusPill({ tone, children }: { tone: PillTone; children: string }) {
   return (
     <span
       className={clsx(

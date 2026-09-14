@@ -1,7 +1,10 @@
+// Lihle | 2026-09-09 | Add a clinic-access action and assignment dialog so administrators can manage staff clinic membership from the roster.
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Check, Copy, KeyRound, Plus, Search } from "lucide-react";
+import { Building2, Check, Copy, KeyRound, Plus, Search } from "lucide-react";
+import { ClinicAssignmentsDialog } from "./ClinicAssignmentsDialog";
+import type { StaffRosterEntry } from "@/shared/api/staff";
 import { listStaff, resetStaffPassword, setStaffEnabled } from "@/shared/api/staff";
 import { getFacilities } from "@/shared/api/facilities";
 import { ApiError } from "@/shared/api/client";
@@ -52,6 +55,7 @@ function CopyButton({ text }: { text: string }) {
 export function StaffListPage() {
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
+  const [editingClinics, setEditingClinics] = useState<StaffRosterEntry | null>(null);
   const [confirmResetId, setConfirmResetId] = useState<string | null>(null);
   const [revealedPassword, setRevealedPassword] = useState<{ id: string; password: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -114,6 +118,7 @@ export function StaffListPage() {
           </Link>
         }
       />
+      {editingClinics && <ClinicAssignmentsDialog staff={editingClinics} onClose={() => setEditingClinics(null)} />}
 
       <div className="mb-4">
         <Input
@@ -223,6 +228,9 @@ export function StaffListPage() {
                           >
                             Reset password
                           </Button>
+                          <button type="button" title="Manage clinic access" aria-label={`Manage clinics for ${s.firstName} ${s.lastName}`}
+                            className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border-strong text-brand-600 hover:bg-brand-50"
+                            onClick={() => setEditingClinics(s)}><Building2 className="size-4" aria-hidden /></button>
                           <Button
                             variant="secondary"
                             size="md"
