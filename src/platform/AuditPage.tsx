@@ -7,10 +7,6 @@ import { Card } from "@/shared/components/Card";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { StatusPill } from "@/shared/components/StatusPill";
 
-// Fixed, not derived from the data returned — a quiet stretch with zero
-// MODULE_TOGGLED rows shouldn't make that filter option disappear. Matches
-// every recordPlatformAudit()/PlatformAuditLog(...) call site in
-// OrganizationProvisioningService and PlatformOperatorService field-for-field.
 const AUDIT_ACTIONS = [
   "ORGANIZATION_PROVISIONED",
   "ORGANIZATION_DETAILS_UPDATED",
@@ -45,38 +41,6 @@ function formatDateTime(iso: string): string {
     minute: "2-digit",
   });
 }
-
-// AUDT-US-005 — the compliance-facing view of platform_audit_log:
-// every provisioning, suspend/reactivate, module toggle, detail edit, and
-// operator creation, across every organization, in one filterable feed. An
-// organization's own tenant-schema trail (its staff logging in, updating
-// records) is a separate, narrower view — OrganizationDetailPage's own
-// Audit card, reached from that organization's page rather than here.
-// export function AuditPage() {
-//   const [action, setAction] = useState("");
-//   const [organizationId, setOrganizationId] = useState("");
-//   const [from, setFrom] = useState("");
-//   const [to, setTo] = useState("");
-
-//   const organizationsQuery = useQuery({
-//     queryKey: ["platform", "organizations", "all"],
-//     queryFn: () => listOrganizations({ sort: "newest" }),
-//   });
-
-//   const auditQuery = useQuery({
-//     queryKey: ["platform", "audit", { action, organizationId, from, to }],
-//     queryFn: () =>
-//       listPlatformAudit({
-//         action: action || undefined,
-//         organizationId: organizationId || undefined,
-//         from: from || undefined,
-//         to: to || undefined,
-//       }),
-//   });
-//
-//  const hasActiveFilters = action !== "" || organizationId !== "" || from !== "" || to !== "";
-//  const entries = auditQuery.data ?? [];
-
 
 export function AuditPage() {
   const [action, setAction] = useState("");
@@ -225,45 +189,6 @@ export function AuditPage() {
     </div>
   );
 }
-
-// function AuditRow({ entry }: { entry: PlatformAuditEntry }) {
-//   return (
-//     <tr className="transition-colors duration-150 hover:bg-surface-sunken">
-//       <td className="whitespace-nowrap px-5 py-3.5 font-mono text-[13px] text-text-secondary tabular-nums">
-//         {formatDateTime(entry.createdAt)}
-//       </td>
-//       <td className="px-5 py-3.5">
-//         <span className="inline-flex rounded bg-brand-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-brand-700">
-//           {actionLabel(entry.action)}
-//         </span>
-//       </td>
-//       <td className="px-5 py-3.5 text-[13.5px] text-text-primary">
-//         {entry.organizationId && entry.organizationName ? (
-//           <Link to={`/platform/organizations/${entry.organizationId}`} className="hover:text-brand-600 hover:underline">
-//             {entry.organizationName}
-//           </Link>
-//         ) : (
-//           <span className="text-text-secondary">—</span>
-//         )}
-//       </td>
-//       <td className="px-5 py-3.5">
-//         <p className="text-[13.5px] text-text-primary">{entry.operatorName}</p>
-//         <p className="text-[12px] text-text-secondary">{entry.operatorEmail}</p>
-//       </td>
-//       <td className="max-w-xs px-5 py-3.5 text-[13px] text-text-secondary">{entry.detail ?? "—"}</td>
-//       <td className="max-w-[220px] px-5 py-3.5 text-[12px] text-text-secondary">
-//         {entry.ipAddress && <p className="font-mono">{entry.ipAddress}</p>}
-//         {entry.deviceSignature && (
-//           <p className="truncate" title={entry.deviceSignature}>
-//             {entry.deviceSignature}
-//           </p>
-//         )}
-//         {!entry.ipAddress && !entry.deviceSignature && "—"}
-//       </td>
-//     </tr>
-//   );
-// }
-
 
 function AuditRow({ entry }: { entry: PlatformAuditEntry }) {
   return (
