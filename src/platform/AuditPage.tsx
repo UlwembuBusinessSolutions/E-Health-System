@@ -6,10 +6,6 @@ import { listOrganizations, listPlatformAudit, type PlatformAuditEntry } from "@
 import { Card } from "@/shared/components/Card";
 import { PageHeader } from "@/shared/components/PageHeader";
 
-// Fixed, not derived from the data returned — a quiet stretch with zero
-// MODULE_TOGGLED rows shouldn't make that filter option disappear. Matches
-// every recordPlatformAudit()/PlatformAuditLog(...) call site in
-// OrganizationProvisioningService and PlatformOperatorService field-for-field.
 const AUDIT_ACTIONS = [
   "ORGANIZATION_PROVISIONED",
   "ORGANIZATION_DETAILS_UPDATED",
@@ -38,12 +34,6 @@ function formatDateTime(iso: string): string {
   });
 }
 
-// AUDT-US-005 — the compliance-facing view of platform_audit_log:
-// every provisioning, suspend/reactivate, module toggle, detail edit, and
-// operator creation, across every organization, in one filterable feed. An
-// organization's own tenant-schema trail (its staff logging in, updating
-// records) is a separate, narrower view — OrganizationDetailPage's own
-// Audit card, reached from that organization's page rather than here.
 export function AuditPage() {
   const [action, setAction] = useState("");
   const [organizationId, setOrganizationId] = useState("");
