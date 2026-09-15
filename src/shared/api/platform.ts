@@ -278,6 +278,48 @@ export interface AddClinicPayload {
   operatingHours?: string;
 }
 
+// SADM-US-011 / BR-SADM-060 — a per-clinic override of a tenant's own
+// module entitlement. Mirrors ModuleEntitlement above, plus tenantEnabled
+// (what gates whether this clinic is even allowed to turn a module ON) and
+// overridden (whether this clinic has ever explicitly departed from its
+// tenant's current default).
+export interface FacilityModuleEntitlement {
+  code: string;
+  displayName: string;
+  phase: ModulePhase;
+  foundation: boolean;
+  tenantEnabled: boolean;
+  enabled: boolean;
+  overridden: boolean;
+}
+
+export async function listFacilityModules(
+  organizationId: string,
+  facilityId: string,
+): Promise<FacilityModuleEntitlement[]> {
+  const response = await apiClient.get<{ items: FacilityModuleEntitlement[] }>(
+    `/platform/organizations/${organizationId}/facilities/${facilityId}/modules`,
+    { headers: authHeaders() },
+  );
+  return response.items;
+}
+
+// 409 if the caller tries to enable a module the tenant itself hasn't
+// switched on (TenantModuleNotEnabledException) — surfaced to the caller
+// as an ApiError, same as every other rejected write in this app.
+export async function toggleFacilityModule(
+  organizationId: string,
+  facilityId: string,
+  moduleCode: string,
+  enabled: boolean,
+): Promise<void> {
+  await apiClient.post<void>(
+    `/platform/organizations/${organizationId}/facilities/${facilityId}/modules/${moduleCode}`,
+    { enabled },
+    { headers: authHeaders() },
+  );
+}
+
 export async function listOrganizationFacilities(
   organizationId: string,
 ): Promise<Facility[]> {

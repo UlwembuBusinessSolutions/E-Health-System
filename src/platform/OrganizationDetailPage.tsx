@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Building2, Camera, Check, ClipboardList, Copy, Hospital, KeyRound, Mail, Pencil, Plus, Store, Trash2, UserPlus, X } from "lucide-react";
+//import { ArrowLeft, Building2, Camera, Check, ClipboardList, Copy, Hospital, KeyRound, Mail, Pencil, Plus, Store, Trash2, UserPlus, X } from "lucide-react";
+import { ArrowLeft, Building2, Camera, Check, ClipboardList, Copy, Hospital, KeyRound, Mail, Pencil, Plus, Store, Trash2, UserPlus, X, ChevronDown, ChevronUp } from "lucide-react";
 import {
   getOrganization,
   listOrganizationAdmins,
@@ -19,10 +20,14 @@ import {
   toggleOrganizationModule,
   listOrganizationAudit,
   listOrganizationFacilities,
+  listFacilityModules,
+  toggleFacilityModule,
   type ModulePhase,
   type OrganizationSector,
   type FacilityType,
+  type FacilityModuleEntitlement,
 } from "@/shared/api/platform";
+
 import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
@@ -109,6 +114,96 @@ const PHASE_LABELS: Record<ModulePhase, string> = {
   PHASE_4: "Phase 4",
 };
 
+
+// SADM-US-011's own panel, rendered inline under an expanded clinic row.
+// Deliberately reuses PHASE_ORDER/PHASE_LABELS/Switch — same visual
+// language as the tenant-level Modules card above, just one clinic's
+// picture instead of the whole organization's. A module the tenant
+// hasn't switched on renders its Switch disabled with an explanatory
+// caption rather than letting the click through and surfacing the 409
+// only after the fact — the AC's own "explains the tenant-level
+// entitlement must be enabled first" is satisfied before the click, not
+// just in the error banner after it.
+function FacilityModulesPanel({
+  modules,
+  isLoading,
+  error,
+  togglingCode,
+  onToggle,
+}: {
+  modules: FacilityModuleEntitlement[] | undefined;
+  isLoading: boolean;
+  error: string | null;
+  togglingCode: string | null;
+  onToggle: (code: string, enabled: boolean) => void;
+}) {
+  return (
+    <div className="border-t border-border-subtle bg-surface-sunken px-5 py-4">
+      {error && (
+        <p role="alert" className="mb-3 text-[12.5px] text-danger-600">
+          {error}
+        </p>
+      )}
+      {isLoading ? (
+        <p className="text-[13px] text-text-secondary">Loading this clinic's modules…</p>
+      ) : !modules || modules.length === 0 ? (
+        <p className="text-[13px] text-text-secondary">Couldn't load this clinic's modules.</p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {PHASE_ORDER.map((phase) => {
+            const phaseModules = modules.filter((m) => m.phase === phase);
+            if (phaseModules.length === 0) return null;
+            return (
+              <div key={phase}>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-secondary">
+                  {PHASE_LABELS[phase]}
+                </p>
+                <div className="grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
+                  {phaseModules.map((mod) => (
+                    <div key={mod.code} className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="shrink-0 rounded bg-brand-50 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-brand-700">
+                            {mod.code}
+                          </span>
+                          <span className="truncate text-[13px] text-text-primary">{mod.displayName}</span>
+                          {mod.overridden && !mod.foundation && (
+                            <span
+                              className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-medium text-amber-600"
+                              title="This clinic's setting differs from its organization's default"
+                            >
+                              Overridden
+                            </span>
+                          )}
+                        </div>
+                        {!mod.foundation && !mod.tenantEnabled && (
+                          <p className="mt-0.5 text-[11.5px] text-text-secondary">
+                            Off at the organization level — enable it there first.
+                          </p>
+                        )}
+                      </div>
+                      {mod.foundation ? (
+                        <span className="shrink-0 text-[11px] font-medium text-text-secondary">Always on</span>
+                      ) : (
+                        <Switch
+                          checked={mod.enabled}
+                          disabled={togglingCode === mod.code || (!mod.tenantEnabled && !mod.enabled)}
+                          onChange={(enabled) => onToggle(mod.code, enabled)}
+                          label={`${mod.enabled ? "Disable" : "Enable"} ${mod.displayName} for this clinic`}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // One organization's own page — what OrganizationsPage's row chevron leads
 // to. Everything scoped to this one client: its lifecycle switch (suspend/
 // reactivate, same action the list offers, kept here too since this is
@@ -130,6 +225,9 @@ export function OrganizationDetailPage() {
   const [moduleError, setModuleError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [expandedFacilityId, setExpandedFacilityId] = useState<string | null>(null);
+  const [facilityModuleError, setFacilityModuleError] = useState<string | null>(null);
+  const [togglingFacilityModule, setTogglingFacilityModule] = useState<string | null>(null);
 
   const orgQuery = useQuery({
     queryKey: ["platform", "organizations", organizationId],
@@ -164,6 +262,38 @@ export function OrganizationDetailPage() {
     onError: (error) => {
       setDetailsError(error instanceof ApiError ? error.message : "Couldn't save those changes. Try again.");
     },
+  });
+
+    // SADM-US-011 — only fetched once a clinic's own modules panel is
+  // opened, not for every clinic up front: a tenant can have many clinics,
+  // and nobody needs this data until they actually expand one.
+  const facilityModulesQuery = useQuery({
+    queryKey: ["platform", "organizations", organizationId, "facilities", expandedFacilityId, "modules"],
+    queryFn: () => listFacilityModules(organizationId, expandedFacilityId as string),
+    enabled: !!expandedFacilityId,
+  });
+
+  const toggleFacilityModuleMutation = useMutation({
+    mutationFn: ({ facilityId, code, enabled }: { facilityId: string; code: string; enabled: boolean }) =>
+      toggleFacilityModule(organizationId, facilityId, code, enabled),
+    onMutate: ({ code }) => {
+      setFacilityModuleError(null);
+      setTogglingFacilityModule(code);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["platform", "organizations", organizationId, "facilities", expandedFacilityId, "modules"],
+      });
+    },
+    onError: (error) => {
+      // BR-SADM-060 AC2's 409 (TenantModuleNotEnabledException) lands here
+      // with a clear message already — surfaced as-is, same as every other
+      // ApiError in this app.
+      setFacilityModuleError(
+        error instanceof ApiError ? error.message : "Couldn't update that module for this clinic. Try again.",
+      );
+    },
+    onSettled: () => setTogglingFacilityModule(null),
   });
 
   const adminsQuery = useQuery({
@@ -565,27 +695,55 @@ export function OrganizationDetailPage() {
               )}
               {facilities.map((facility) => {
                 const Icon = FACILITY_TYPE_ICON[facility.type];
+                const isExpanded = expandedFacilityId === facility.id;
                 return (
-                  <div key={facility.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink-100 text-ink-600">
-                        <Icon className="size-4" aria-hidden />
-                      </span>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate text-[13.5px] font-medium text-text-primary">{facility.name}</p>
-                          <StatusPill tone={facility.active ? "success" : "neutral"}>
-                            {facility.active ? "Active" : "Inactive"}
-                          </StatusPill>
+                  <div key={facility.id}>
+                    <div className="flex items-center justify-between gap-3 px-5 py-3.5">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink-100 text-ink-600">
+                          <Icon className="size-4" aria-hidden />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-[13.5px] font-medium text-text-primary">{facility.name}</p>
+                            <StatusPill tone={facility.active ? "success" : "neutral"}>
+                              {facility.active ? "Active" : "Inactive"}
+                            </StatusPill>
+                          </div>
+                          <p className="truncate text-[12.5px] text-text-secondary">
+                            {facility.code} · {FACILITY_TYPE_LABEL[facility.type]}
+                            {facility.address ? ` · ${facility.address}` : ""}
+                          </p>
                         </div>
-                        <p className="truncate text-[12.5px] text-text-secondary">
-                          {facility.code} · {FACILITY_TYPE_LABEL[facility.type]}
-                          {facility.address ? ` · ${facility.address}` : ""}
-                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        {facility.operatingHours && (
+                          <span className="text-[12px] text-text-secondary">{facility.operatingHours}</span>
+                        )}
+                        <Button
+                          variant="secondary"
+                          size="md"
+                          icon={isExpanded ? <ChevronUp className="size-3.5" aria-hidden /> : <ChevronDown className="size-3.5" aria-hidden />}
+                          onClick={() => {
+                            setFacilityModuleError(null);
+                            setExpandedFacilityId(isExpanded ? null : facility.id);
+                          }}
+                        >
+                          Modules
+                        </Button>
                       </div>
                     </div>
-                    {facility.operatingHours && (
-                      <span className="shrink-0 text-[12px] text-text-secondary">{facility.operatingHours}</span>
+
+                    {isExpanded && (
+                      <FacilityModulesPanel
+                        modules={facilityModulesQuery.data}
+                        isLoading={facilityModulesQuery.isLoading}
+                        error={facilityModuleError}
+                        togglingCode={togglingFacilityModule}
+                        onToggle={(code, enabled) =>
+                          toggleFacilityModuleMutation.mutate({ facilityId: facility.id, code, enabled })
+                        }
+                      />
                     )}
                   </div>
                 );
