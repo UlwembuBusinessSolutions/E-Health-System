@@ -20,13 +20,8 @@ public class TenantMigrationRunner {
     }
 
     public void migrateControlSchema() {
-        Flyway.configure()
-                .dataSource(dataSource)
-                .schemas("control")
-                .locations("classpath:db/migration/control")
-                .outOfOrder(true) // allow re-running migrations that were added later
-                .load()
-                .migrate();
+        Flyway.configure().dataSource(dataSource).schemas("control")
+                .locations("classpath:db/migration/control").load().migrate();
     }
 
     public void provisionTenantSchema(String schemaName) {

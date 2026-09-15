@@ -1,12 +1,7 @@
 -- AUDT-US-005
 -- Make the platform audit log append-only and tamper-resistant.
 --
--- The application has no update/delete API for audit records and
--- PlatformAuditLog is Hibernate @Immutable. These database triggers
--- provide the authoritative enforcement boundary as well.
---
--- INSERT remains permitted because platform services legitimately
--- create audit records.
+-- INSERT remains permitted.
 -- SELECT remains permitted.
 -- UPDATE / DELETE / TRUNCATE are prohibited.
 
@@ -24,12 +19,10 @@ BEGIN
 END;
 $$;
 
-
 CREATE TRIGGER platform_audit_log_reject_update_delete_trigger
 BEFORE UPDATE OR DELETE ON control.platform_audit_log
 FOR EACH ROW
 EXECUTE FUNCTION control.platform_audit_log_reject_mutation();
-
 
 CREATE TRIGGER platform_audit_log_reject_truncate_trigger
 BEFORE TRUNCATE ON control.platform_audit_log

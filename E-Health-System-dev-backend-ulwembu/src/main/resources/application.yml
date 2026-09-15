@@ -7,21 +7,13 @@ spring:
 
   # dev is the only profile this codebase defines right now.
   # It turns on PlatformOperatorBootstrap.
-  # Leave it active for this environment.dddd
-  
   profiles:
     active: dev
 
   datasource:
-<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/resources/application.yml
     url: ${DB_URL:jdbc:postgresql://localhost:5432/ulwembu}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:mpho}
-=======
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/ulwembus}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:Linhle@12}
->>>>>>> origin/dev-backend-ulwembu:src/main/resources/application.yml
+    username: ${DB_USERNAME:ulwembu}
+    password: ${DB_PASSWORD:ulwembu_dev_local}
     hikari:
       maximum-pool-size: 20
 
@@ -47,24 +39,18 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
-<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/resources/application.yml
       mail.smtp.starttls.required: true
       mail.smtp.connectiontimeout: 10000
       mail.smtp.timeout: 10000
       mail.smtp.writetimeout: 10000
-=======
-
-      # Short timeouts on purpose because no real SMTP server
-      # is configured in this environment.
-      mail.smtp.connectiontimeout: 3000
-      mail.smtp.timeout: 3000
-      mail.smtp.writetimeout: 3000
->>>>>>> origin/dev-backend-ulwembu:src/main/resources/application.yml
 
 app:
   jwt:
     secret: ${JWT_SECRET:vfVifMQarglDAZJg64W7tHxpHVzzQC6BbtFO/u6MJrM=}
     access-token-ttl-minutes: 720
+
+  audit:
+    export-signing-secret: ${AUDIT_EXPORT_SIGNING_SECRET:dev-audit-export-signing-secret-change-me}
 
   idle-lock:
     timeout-minutes: ${IDLE_LOCK_TIMEOUT_MINUTES:15}
@@ -96,12 +82,10 @@ app:
     # Every outbound email gets written here before the real send
     # is attempted.
     capture-dir: ${NOTIFICATIONS_CAPTURE_DIR:./data/emails}
-<<<<<<< HEAD:E-Health-System-dev-backend-ulwembu/src/main/resources/application.yml
+
   pharmacy:
     expiry-warning-days: ${PHARMACY_EXPIRY_WARNING_DAYS:90}
-=======
 
->>>>>>> origin/dev-backend-ulwembu:src/main/resources/application.yml
   frontend:
     base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
 
@@ -117,4 +101,3 @@ management:
     # SMTP server does not make overall application health DOWN.
     mail:
       enabled: false
-
