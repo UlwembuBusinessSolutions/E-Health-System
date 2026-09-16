@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, AlertCircle } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { createPrescription } from "@/shared/api/pharmacy";
+import { checkClinicalSafety, createPrescription, type ClinicalSafetyAlert, type PrescriptionItem } from "@/shared/api/pharmacy";
 import { listVisits } from "@/shared/api/visits";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
@@ -28,6 +28,8 @@ export function CreatePrescriptionScreen() {
     { id: "1", drugName: "", dosage: "", quantity: 1 },
   ]);
   const [error, setError] = useState<string | null>(null);
+  const [alerts, setAlerts] = useState<ClinicalSafetyAlert[]>([]);
+  const [overrideReason, setOverrideReason] = useState("");
 
   const visitsQuery = useQuery({ queryKey: ["visits"], queryFn: listVisits });
 
@@ -51,13 +53,24 @@ export function CreatePrescriptionScreen() {
         throw new Error("Each quantity must be a positive whole number.");
       }
 
+      const prescriptionItems: PrescriptionItem[] = validItems.map((item) => ({
+        drugName: item.drugName.trim(),
+        dosage: item.dosage.trim(),
+        quantity: Number(item.quantity),
+      }));
+      const visit = visitsQuery.data?.find((candidate) => candidate.id === visitId);
+      if (!visit) throw new Error("The selected visit is no longer available. Reload visits and try again.");
+
+      const safetyAlerts = await checkClinicalSafety(visit.patientId, prescriptionItems);
+      setAlerts(safetyAlerts);
+      if (safetyAlerts.some((alert) => alert.severity === "HIGH" || alert.severity === "CRITICAL") && !overrideReason.trim()) {
+        throw new Error("A high-severity clinical alert requires a documented override reason before prescribing.");
+      }
+
       const result = await createPrescription({
         visitId,
-        items: validItems.map((item) => ({
-          drugName: item.drugName.trim(),
-          dosage: item.dosage.trim(),
-          quantity: Number(item.quantity),
-        })),
+        items: prescriptionItems,
+        overrideReason: overrideReason.trim() || undefined,
       });
 
       return result;
@@ -96,6 +109,7 @@ export function CreatePrescriptionScreen() {
   const visits = visitsQuery.data ?? [];
 
   const selectedVisit = visits.find((v) => v.id === visitId);
+  const requiresOverride = alerts.some((alert) => alert.severity === "HIGH" || alert.severity === "CRITICAL");
 
   return (
     <div>
@@ -235,6 +249,30 @@ export function CreatePrescriptionScreen() {
             Fill in all fields for each medication. Remove empty rows if needed.
           </p>
         </Card>
+
+        {alerts.length > 0 && (
+          <Card className="border border-danger-200 bg-danger-50 p-6">
+            <h3 className="text-sm font-semibold text-danger-700">Clinical safety alerts</h3>
+            <ul className="mt-3 space-y-2">
+              {alerts.map((alert) => (
+                <li key={alert.ruleId} className="text-sm text-danger-700">
+                  <span className="font-semibold">{alert.severity}</span> · {alert.message}
+                  <span className="text-danger-600"> ({alert.drugName}{alert.relatedTo ? ` / ${alert.relatedTo}` : ""})</span>
+                </li>
+              ))}
+            </ul>
+            {requiresOverride && (
+              <div className="mt-4">
+                <label className="mb-2 block text-sm font-medium text-danger-700" htmlFor="prescribing-override-reason">
+                  Override reason required
+                </label>
+                <textarea id="prescribing-override-reason" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)}
+                  rows={3} className="w-full rounded-lg border border-danger-300 bg-white px-3 py-2 text-sm text-text-primary"
+                  placeholder="Record the clinical reason for proceeding" />
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* Actions */}
         <div className="flex gap-3 justify-end">

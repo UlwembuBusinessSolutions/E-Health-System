@@ -1,13 +1,12 @@
 // Lihle | 2026-09-09 | Use the active clinic, display load errors, and disable dispensing actions while a request is pending to keep queue actions consistent.
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Pill } from "lucide-react";
-import { dispensePrescription, listDispensingQueue } from "@/shared/api/pharmacy";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Pill } from "lucide-react";
+import { listDispensingQueue } from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
 import { useClinic } from "@/app/ClinicProvider";
-import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
-import { Button } from "@/shared/components/Button";
 import { PageHeader } from "@/shared/components/PageHeader";
 
 function formatTime(iso: string): string {
@@ -22,12 +21,9 @@ function formatTime(iso: string): string {
 // if the signed-in user isn't a pharmacist, same as any other rejected
 // request elsewhere in this app.
 export function PharmacyQueuePage() {
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { activeClinicId, switchClinic } = useClinic();
   const [facilityId, setFacilityId] = useState(activeClinicId ?? "");
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [dispensingId, setDispensingId] = useState<string | null>(null);
-
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
 
   useEffect(() => {
@@ -41,19 +37,6 @@ export function PharmacyQueuePage() {
     queryFn: () => listDispensingQueue(facilityId),
     enabled: !!facilityId,
     refetchInterval: 5000,
-  });
-
-  const dispenseMutation = useMutation({
-    mutationFn: (id: string) => dispensePrescription(id),
-    onMutate: (id) => {
-      setActionError(null);
-      setDispensingId(id);
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pharmacy"] }),
-    onError: (error) => {
-      setActionError(error instanceof ApiError ? error.message : "Couldn't dispense that prescription. Try again.");
-    },
-    onSettled: () => { setDispensingId(null); void queryClient.invalidateQueries({ queryKey: ["pharmacy"] }); },
   });
 
   const facilities = facilitiesQuery.data ?? [];
@@ -84,11 +67,6 @@ export function PharmacyQueuePage() {
       />
 
       <Card className="overflow-hidden p-0">
-        {actionError && (
-          <div role="alert" className="border-b border-danger-500/30 bg-danger-50 px-5 py-2.5 text-[13.5px] text-danger-600">
-            {actionError}
-          </div>
-        )}
         {queueQuery.isError ? <p role="alert" className="p-5 text-danger-600">{queueQuery.error.message}</p> : !facilityId ? (
           <p className="px-5 py-10 text-center text-[14px] text-text-secondary">Loading facilities…</p>
         ) : queueQuery.isLoading ? (
@@ -119,17 +97,7 @@ export function PharmacyQueuePage() {
                     ))}
                   </ul>
                 </div>
-                <Button
-                  variant="secondary"
-                  size="md"
-                  icon={<CheckCircle2 className="size-3.5" aria-hidden />}
-                  loading={dispensingId === p.id && dispenseMutation.isPending}
-                  disabled={dispenseMutation.isPending}
-                  onClick={() => dispenseMutation.mutate(p.id)}
-                  className="shrink-0"
-                >
-                  Dispense
-                </Button>
+                <button type="button" onClick={() => navigate(`/app/pharmacy/prescriptions/${p.id}`)} className="shrink-0 rounded-lg border border-border-strong px-4 py-2 text-sm font-semibold text-brand-600">Review and dispense</button>
               </div>
             ))}
           </div>

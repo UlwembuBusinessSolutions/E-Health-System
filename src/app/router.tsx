@@ -15,6 +15,7 @@ import { PharmacyQueuePage } from "@/pharmacy/PharmacyQueuePage";
 import { PharmacyDashboard } from "@/pharmacy/PharmacyDashboard";
 import { CreatePrescriptionScreen } from "@/pharmacy/CreatePrescriptionScreen";
 import { PrescriptionDetailPage } from "@/pharmacy/PrescriptionDetailPage";
+import { PrescriptionQueriesPage } from "@/pharmacy/PrescriptionQueriesPage";
 import { ManualVerificationQueuePage } from "@/pharmacy/ManualVerificationQueuePage";
 import { PrescriptionsListPage } from "@/pharmacy/PrescriptionsListPage";
 import {
@@ -94,6 +95,7 @@ export function AppRouter() {
         <Route path="pharmacy/queue" element={<PharmacyQueuePage />} />
         <Route path="pharmacy/create" element={<CreatePrescriptionScreen />} />
         <Route path="pharmacy/list" element={<PrescriptionsListPage />} />
+        <Route path="pharmacy/queries" element={<PrescriptionQueriesPage />} />
         <Route path="pharmacy/manual-verification" element={<ManualVerificationQueuePage />} />
         <Route path="pharmacy/prescriptions/:id" element={<PrescriptionDetailPage />} />
         <Route path="triage" element={<TriageDashboard />} />

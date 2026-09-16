@@ -5,7 +5,13 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Pill, Plus, Ticket, Trash2 } from "lucide-react";
 import { getPatient } from "@/shared/api/patients";
 import { createVisit, type ServiceStream, type VisitType, type VisitWithToken } from "@/shared/api/visits";
-import { createPrescription, type Prescription, type PrescriptionItem } from "@/shared/api/pharmacy";
+import {
+  checkClinicalSafety,
+  createPrescription,
+  type ClinicalSafetyAlert,
+  type Prescription,
+  type PrescriptionItem,
+} from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
 import { useClinic } from "@/app/ClinicProvider";
 import { ApiError } from "@/shared/api/client";
@@ -77,6 +83,8 @@ export function PatientDetailPage() {
   const [isPrescribing, setIsPrescribing] = useState(false);
   const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItem[]>([{ ...EMPTY_ITEM }]);
   const [prescriptionError, setPrescriptionError] = useState<string | null>(null);
+  const [clinicalAlerts, setClinicalAlerts] = useState<ClinicalSafetyAlert[]>([]);
+  const [overrideReason, setOverrideReason] = useState("");
   const [createdPrescription, setCreatedPrescription] = useState<Prescription | null>(null);
 
   const patientQuery = useQuery({
@@ -114,10 +122,26 @@ export function PatientDetailPage() {
   };
 
   const prescribe = useMutation({
-    mutationFn: (visitId: string) => createPrescription({ visitId, items: prescriptionItems }),
+    mutationFn: async (visitId: string) => {
+      const alerts = await checkClinicalSafety(patientId, prescriptionItems);
+      setClinicalAlerts(alerts);
+      const needsOverride = alerts.some((alert) => alert.severity === "HIGH" || alert.severity === "CRITICAL");
+
+      if (needsOverride && !overrideReason.trim()) {
+        throw new Error("A high-severity clinical alert requires a documented override reason before prescribing.");
+      }
+
+      return createPrescription({
+        visitId,
+        items: prescriptionItems,
+        overrideReason: overrideReason.trim() || undefined,
+      });
+    },
     onSuccess: (result) => {
       setCreatedPrescription(result);
       setIsPrescribing(false);
+      setClinicalAlerts([]);
+      setOverrideReason("");
     },
     onError: (error) => {
       setPrescriptionError(error instanceof ApiError ? error.message : "Couldn't create that prescription. Try again.");
@@ -135,11 +159,29 @@ export function PatientDetailPage() {
     prescribe.mutate(startedVisit.visit.id);
   };
 
+  const openPrescribing = () => {
+    setPrescriptionError(null);
+    setClinicalAlerts([]);
+    setOverrideReason("");
+    setIsPrescribing(true);
+  };
+
+  const closePrescribing = () => {
+    setPrescriptionError(null);
+    setClinicalAlerts([]);
+    setOverrideReason("");
+    setIsPrescribing(false);
+  };
+
   const updateItem = (index: number, patch: Partial<PrescriptionItem>) => {
     setPrescriptionItems((items) => items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+    setClinicalAlerts([]);
   };
 
   const patient = patientQuery.data;
+  const requiresClinicalOverride = clinicalAlerts.some(
+    (alert) => alert.severity === "HIGH" || alert.severity === "CRITICAL",
+  );
 
   return (
     <div>
@@ -207,7 +249,7 @@ export function PatientDetailPage() {
                         variant="secondary"
                         size="md"
                         icon={<Pill className="size-3.5" aria-hidden />}
-                        onClick={() => setIsPrescribing(true)}
+                        onClick={openPrescribing}
                       >
                         Prescribe
                       </Button>
@@ -290,6 +332,35 @@ export function PatientDetailPage() {
                       {prescriptionError}
                     </p>
                   )}
+                  {clinicalAlerts.length > 0 && (
+                    <div className="mb-4 rounded-lg border border-warning-200 bg-warning-50 p-4">
+                      <h3 className="text-[13.5px] font-semibold text-warning-900">Clinical safety alerts</h3>
+                      <div className="mt-3 flex flex-col gap-2">
+                        {clinicalAlerts.map((alert) => (
+                          <div key={alert.ruleId} className="rounded-md bg-white/70 p-3 text-[13px] text-warning-700">
+                            <p className="font-semibold">
+                              {titleCase(alert.severity)} - {alert.type.replaceAll("_", " ").toLowerCase()}
+                            </p>
+                            <p className="mt-1">{alert.message}</p>
+                            {alert.relatedTo && (
+                              <p className="mt-1 text-warning-800">Related to {alert.relatedTo}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {requiresClinicalOverride && (
+                        <div className="mt-3">
+                          <Input
+                            label="Clinical override reason"
+                            required
+                            placeholder="Document the clinical reason for continuing"
+                            value={overrideReason}
+                            onChange={(e) => setOverrideReason(e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="flex flex-col gap-3">
                     {prescriptionItems.map((item, index) => (
                       <div key={index} className="grid grid-cols-1 gap-3 sm:grid-cols-[2fr_2fr_1fr_auto]">
@@ -342,7 +413,7 @@ export function PatientDetailPage() {
                     <Button loading={prescribe.isPending} onClick={handlePrescribe}>
                       Create prescription
                     </Button>
-                    <Button variant="secondary" onClick={() => setIsPrescribing(false)}>
+                    <Button variant="secondary" onClick={closePrescribing}>
                       Cancel
                     </Button>
                   </div>

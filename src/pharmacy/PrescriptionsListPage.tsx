@@ -9,12 +9,12 @@ import { Input } from "@/shared/components/Input";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { getFacilities } from "@/shared/api/facilities";
-import { listPrescriptions } from "@/shared/api/pharmacy";
+import { listPrescriptions, type PrescriptionStatus } from "@/shared/api/pharmacy";
 import { useClinic } from "@/app/ClinicProvider";
 
 interface PrescriptionListFilters {
   facilityId: string;
-  status: "ALL" | "PENDING" | "DISPENSED";
+  status: "ALL" | PrescriptionStatus;
   searchTerm: string;
 }
 
@@ -95,6 +95,7 @@ export function PrescriptionsListPage() {
             >
               <option value="ALL">All Status</option>
               <option value="PENDING">Pending</option>
+              <option value="HELD">Held</option>
               <option value="DISPENSED">Dispensed</option>
             </select>
           </div>
@@ -167,7 +168,7 @@ export function PrescriptionsListPage() {
                     </p>
                   </div>
                   <div>
-                    <StatusPill tone={p.status === "PENDING" ? "warning" : "success"}>
+                    <StatusPill tone={p.status === "DISPENSED" ? "success" : p.status === "HELD" ? "danger" : "warning"}>
                       {p.status}
                     </StatusPill>
                   </div>

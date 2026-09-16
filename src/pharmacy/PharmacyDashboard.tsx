@@ -1,8 +1,8 @@
 // Lihle | 2026-09-09 | Load statistics for the active clinic and show loading, error, and retry states so incomplete requests do not appear as empty results.
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Plus, Clock, AlertTriangle, CheckCircle2, MessageSquareWarning } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { getDispensedTodayCount, listDispensingQueue, listManualVerificationCases } from "@/shared/api/pharmacy";
+import { getDispensedTodayCount, listDispensingQueue, listManualVerificationCases, listPrescriptionQueries } from "@/shared/api/pharmacy";
 import { useClinic } from "@/app/ClinicProvider";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
@@ -13,6 +13,7 @@ interface QueueStats {
   pending: number;
   dispensed: number;
   verificationCases: number;
+  openQueries: number;
 }
 
 export function PharmacyDashboard() {
@@ -37,18 +38,26 @@ export function PharmacyDashboard() {
     enabled: !!primaryFacilityId,
   });
 
+  const queriesQuery = useQuery({
+    queryKey: ["pharmacy", "queries"],
+    queryFn: listPrescriptionQueries,
+    refetchInterval: 10_000,
+  });
+
   const queue = queueQuery.data ?? [];
   const verificationCases = verificationQuery.data ?? [];
+  const prescriptionQueries = queriesQuery.data ?? [];
 
   const stats: QueueStats = {
     pending: queue.length,
     dispensed: dispensedTodayQuery.data ?? 0,
     verificationCases: verificationCases.length,
+    openQueries: prescriptionQueries.filter((query) => query.status === "OPEN").length,
   };
 
-  const error = queueQuery.error ?? verificationQuery.error ?? dispensedTodayQuery.error;
-  if (error) return <div><PageHeader title="Pharmacy" /><p role="alert" className="text-danger-600">{error.message}</p><Button variant="secondary" onClick={() => { void queueQuery.refetch(); void verificationQuery.refetch(); void dispensedTodayQuery.refetch(); }}>Retry</Button></div>;
-  if (queueQuery.isPending || verificationQuery.isPending || dispensedTodayQuery.isPending) return <p>Loading pharmacy...</p>;
+  const error = queueQuery.error ?? verificationQuery.error ?? dispensedTodayQuery.error ?? queriesQuery.error;
+  if (error) return <div><PageHeader title="Pharmacy" /><p role="alert" className="text-danger-600">{error.message}</p><Button variant="secondary" onClick={() => { void queueQuery.refetch(); void verificationQuery.refetch(); void dispensedTodayQuery.refetch(); void queriesQuery.refetch(); }}>Retry</Button></div>;
+  if (queueQuery.isPending || verificationQuery.isPending || dispensedTodayQuery.isPending || queriesQuery.isPending) return <p>Loading pharmacy...</p>;
 
   return (
     <div>
@@ -66,7 +75,7 @@ export function PharmacyDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid gap-4 sm:grid-cols-4">
         <StatCard
           label="Pending Prescriptions"
           value={stats.pending}
@@ -78,6 +87,12 @@ export function PharmacyDashboard() {
           value={stats.verificationCases}
           icon={AlertTriangle}
           hint={stats.verificationCases > 0 ? "Awaiting review" : undefined}
+        />
+        <StatCard
+          label="Open Queries"
+          value={stats.openQueries}
+          icon={MessageSquareWarning}
+          hint={stats.openQueries > 0 ? "Needs response" : undefined}
         />
         <StatCard
           label="Dispensed Today"
@@ -92,7 +107,7 @@ export function PharmacyDashboard() {
         <h3 className="mb-4 text-sm font-semibold text-text-primary">
           Quick Actions
         </h3>
-        <div className="grid gap-3 sm:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-5">
           <Button
             variant="secondary"
             className="w-full"
@@ -113,6 +128,13 @@ export function PharmacyDashboard() {
             onClick={() => navigate("/app/pharmacy/manual-verification")}
           >
             Manual Verifications
+          </Button>
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => navigate("/app/pharmacy/queries")}
+          >
+            Prescription Queries
           </Button>
           <Button
             variant="secondary"

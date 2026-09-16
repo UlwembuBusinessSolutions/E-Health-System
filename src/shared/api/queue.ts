@@ -3,7 +3,7 @@ import { tenantAuthHeaders } from "./auth";
 
 // RECQ-US-001/002/004. Matches QueueController field-for-field.
 export type TokenPriority = "NORMAL" | "PRIORITY";
-export type TokenStatus = "ISSUED" | "CALLED";
+export type TokenStatus = "ISSUED" | "CALLED" | "IN_SERVICE" | "STOPPED" | "COMPLETED" | "CANCELLED";
 
 export interface QueueToken {
   id: string;
@@ -15,6 +15,10 @@ export interface QueueToken {
   manual: boolean;
   issuedAt: string;
   calledAt: string | null;
+  completedAt: string | null;
+  stoppedAt: string | null;
+  cancelledAt: string | null;
+  reasonCode: string | null;
 }
 
 // The staff-facing queue view (patient name attached) — not the public
@@ -49,4 +53,23 @@ export async function callNext(facilityId: string): Promise<QueueEntry> {
     undefined,
     { headers: tenantAuthHeaders() },
   );
+}
+
+export type TokenAction = "START_SERVICE" | "COMPLETE" | "STOP" | "RESUME" | "CANCEL";
+
+export async function listOpenQueue(facilityId: string): Promise<QueueEntry[]> {
+  const response = await apiClient.get<{ items: QueueEntry[] }>(
+    `/api/v1/queue/open?facilityId=${encodeURIComponent(facilityId)}`,
+    { headers: tenantAuthHeaders() },
+  );
+  return response.items;
+}
+
+export function cancellationReasons(): Promise<string[]> {
+  return apiClient.get<string[]>("/api/v1/queue/cancellation-reasons", { headers: tenantAuthHeaders() });
+}
+
+export function transitionToken(id: string, action: TokenAction, reasonCode?: string): Promise<QueueToken> {
+  return apiClient.post<QueueToken>(`/api/v1/queue/tokens/${encodeURIComponent(id)}/transition`,
+    { action, reasonCode }, { headers: tenantAuthHeaders() });
 }
