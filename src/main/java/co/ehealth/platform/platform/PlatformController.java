@@ -115,7 +115,7 @@ public class PlatformController {
     // requires already being one.
     @DeleteMapping("/{id}/admins/{userId}")
     public ResponseEntity<Void> removeAdmin(@PathVariable UUID id, @PathVariable UUID userId,
-                                             @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.removeAdmin(id, userId, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
@@ -133,14 +133,14 @@ public class PlatformController {
 
     @PostMapping("/{id}/admins/{userId}/enable")
     public ResponseEntity<Void> enableAdmin(@PathVariable UUID id, @PathVariable UUID userId,
-                                             @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.setAdminEnabled(id, userId, true, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/admins/{userId}/disable")
     public ResponseEntity<Void> disableAdmin(@PathVariable UUID id, @PathVariable UUID userId,
-                                              @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.setAdminEnabled(id, userId, false, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
@@ -149,7 +149,7 @@ public class PlatformController {
     // own why-note on why LOCKED needs its own lever.
     @PostMapping("/{id}/admins/{userId}/unlock")
     public ResponseEntity<Void> unlockAdmin(@PathVariable UUID id, @PathVariable UUID userId,
-                                             @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.unlockAdmin(id, userId, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
@@ -168,8 +168,8 @@ public class PlatformController {
     // own why-note for why that one stays permanent.
     @PatchMapping("/{id}")
     public ResponseEntity<OrganizationSummary> updateDetails(@PathVariable UUID id,
-                                                               @Valid @RequestBody UpdateOrganizationRequest request,
-                                                               @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @Valid @RequestBody UpdateOrganizationRequest request,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.updateDetails(id, request.displayName(), request.sector(), operator.operatorId());
         Organization organization = provisioningService.getOrganization(id);
         int enabledModules = provisioningService.countEnabledModules(List.of(id)).get(id);
@@ -181,14 +181,14 @@ public class PlatformController {
 
     @PostMapping("/{id}/suspend")
     public ResponseEntity<Void> suspend(@PathVariable UUID id,
-                                         @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.suspend(id, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/reactivate")
     public ResponseEntity<Void> reactivate(@PathVariable UUID id,
-                                            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.reactivate(id, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
@@ -202,8 +202,8 @@ public class PlatformController {
     // same shape as staff creation then a separate photo upload.
     @PostMapping(value = "/{id}/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<LogoUploadResponse> uploadLogo(@PathVariable UUID id,
-                                                          @RequestParam("file") MultipartFile file,
-                                                          @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         String url = provisioningService.uploadLogo(id, file, operator.operatorId());
         return ResponseEntity.ok(new LogoUploadResponse(url));
     }
@@ -226,8 +226,8 @@ public class PlatformController {
     // needs a tenant-scoped session this controller's callers don't have).
     @PostMapping("/{id}/facilities")
     public ResponseEntity<FacilityResponse> addClinic(@PathVariable UUID id,
-                                                        @Valid @RequestBody AddClinicRequest request,
-                                                        @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @Valid @RequestBody AddClinicRequest request,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         var command = new OrganizationProvisioningService.AddClinicCommand(
                 request.name(), request.code(), request.type(), request.address(), request.phone(),
                 request.operatingHours());
@@ -251,7 +251,7 @@ public class PlatformController {
     }
 
     public record FacilityResponse(UUID id, String name, String code, FacilityType type, String address,
-                                    String phone, String operatingHours, boolean active) {
+            String phone, String operatingHours, boolean active) {
         static FacilityResponse from(Facility f) {
             return new FacilityResponse(f.getId(), f.getName(), f.getCode(), f.getType(), f.getAddress(),
                     f.getPhone(), f.getOperatingHours(), f.isActive());
@@ -259,7 +259,8 @@ public class PlatformController {
     }
 
     // SADM-US-010. All 20 modules, not just the ones this org has an
-    // opinion about — see OrganizationProvisioningService.listModuleEntitlements()'s
+    // opinion about — see
+    // OrganizationProvisioningService.listModuleEntitlements()'s
     // own why-note on what an absent row means.
     @GetMapping("/{id}/modules")
     public ResponseEntity<Map<String, Object>> listModules(@PathVariable UUID id) {
@@ -272,9 +273,28 @@ public class PlatformController {
     // any other malformed path variable.
     @PostMapping("/{id}/modules/{moduleCode}")
     public ResponseEntity<Void> toggleModule(@PathVariable UUID id, @PathVariable ModuleCode moduleCode,
-                                              @Valid @RequestBody ToggleModuleRequest request,
-                                              @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @Valid @RequestBody ToggleModuleRequest request,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.toggleModule(id, moduleCode, request.enabled(), operator.operatorId());
+        return ResponseEntity.noContent().build();
+    }
+
+    // SADM-US-011 / BR-SADM-060 — the per-clinic counterpart to
+    // GET/POST .../modules above. Same {moduleCode} enum binding, same
+    // ToggleModuleRequest body.
+    @GetMapping("/{id}/facilities/{facilityId}/modules")
+    public ResponseEntity<Map<String, Object>> listFacilityModules(@PathVariable UUID id,
+            @PathVariable UUID facilityId) {
+        return ResponseEntity.ok(Map.of("items", provisioningService.listFacilityModuleEntitlements(id, facilityId)));
+    }
+
+    @PostMapping("/{id}/facilities/{facilityId}/modules/{moduleCode}")
+    public ResponseEntity<Void> toggleFacilityModule(@PathVariable UUID id, @PathVariable UUID facilityId,
+            @PathVariable ModuleCode moduleCode,
+            @Valid @RequestBody ToggleModuleRequest request,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+        provisioningService.setFacilityModuleEnabled(id, facilityId, moduleCode, request.enabled(),
+                operator.operatorId());
         return ResponseEntity.noContent().build();
     }
 
@@ -309,8 +329,8 @@ public class PlatformController {
     // rather than being a frontend constant, so the catalogue only has one
     // source of truth (ModuleCode) instead of two places that could drift.
     public record OrganizationSummary(UUID id, String slug, String displayName, OrganizationStatus status,
-                                       OrganizationSector sector, String logoUrl, Instant createdAt,
-                                       int enabledModuleCount, int totalModuleCount) {
+            OrganizationSector sector, String logoUrl, Instant createdAt,
+            int enabledModuleCount, int totalModuleCount) {
         static OrganizationSummary from(Organization o, int enabledModuleCount) {
             return new OrganizationSummary(o.getId(), o.getSlug(), o.getDisplayName(), o.getStatus(), o.getSector(),
                     o.getBranding().logoUrl(), o.getCreatedAt(), enabledModuleCount,

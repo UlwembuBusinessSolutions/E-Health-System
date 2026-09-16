@@ -1,5 +1,6 @@
 package co.ehealth.platform.platform;
 
+import co.ehealth.platform.facility.FacilityModuleEntitlementView;
 import co.ehealth.platform.core.audit.AuditLog;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.notification.EmailService;
@@ -44,8 +45,7 @@ import java.util.stream.Collectors;
 public class OrganizationProvisioningService {
 
     private static final Pattern SLUG_PATTERN = Pattern.compile("^[a-z][a-z0-9-]{1,61}[a-z0-9]$");
-    private static final String TEMP_PASSWORD_CHARS =
-            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    private static final String TEMP_PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     // What a brand-new tenant gets switched on by default, before any
@@ -342,7 +342,7 @@ public class OrganizationProvisioningService {
     // reading this later shouldn't have to guess whether a field that
     // looks unchanged really was.
     public void updateDetails(UUID organizationId, String displayName, OrganizationSector sector,
-                               UUID actingOperatorId) {
+            UUID actingOperatorId) {
         Organization organization = organizationRepository.findById(organizationId)
                 .orElseThrow(OrganizationNotFoundException::new);
         String previousName = organization.getDisplayName();
@@ -489,7 +489,8 @@ public class OrganizationProvisioningService {
     private void seedDefaultModuleEntitlements(UUID organizationId, OrganizationSector sector) {
         Set<ModuleCode> defaults = SECTOR_DEFAULT_MODULES.get(sector);
         for (ModuleCode code : ModuleCode.values()) {
-            if (code.isFoundation()) continue;
+            if (code.isFoundation())
+                continue;
             moduleEntitlementRepository.save(
                     new ModuleEntitlement(organizationId, code, defaults.contains(code)));
         }
@@ -548,8 +549,8 @@ public class OrganizationProvisioningService {
     // creation is still all-or-nothing (StaffService.createOrgAdmin()
     // runs inside its own @Transactional).
     private List<ProvisionedAdmin> createAdmins(List<AdminInput> adminInputs, String schemaName,
-                                                 String organizationDisplayName, String organizationSlug,
-                                                 String auditAction, UUID auditEntityId) {
+            String organizationDisplayName, String organizationSlug,
+            String auditAction, UUID auditEntityId) {
         List<ProvisionedAdmin> created = new ArrayList<>(adminInputs.size());
         for (AdminInput input : adminInputs) {
             String temporaryPassword = generateTemporaryPassword();
@@ -572,8 +573,8 @@ public class OrganizationProvisioningService {
     // users. Writing it here, before TenantContext.clear() runs, is what
     // keeps the entry inside the tenant it's supposed to belong to.
     private User createAdminUser(AdminInput details, String schemaName, String temporaryPassword,
-                                  String organizationDisplayName, String organizationSlug, String auditAction,
-                                  UUID auditEntityId) {
+            String organizationDisplayName, String organizationSlug, String auditAction,
+            UUID auditEntityId) {
         TenantContext.setCurrentTenant(schemaName);
         try {
             User admin = staffService.createOrgAdmin(details.firstName(), details.lastName(),
@@ -623,14 +624,14 @@ public class OrganizationProvisioningService {
     // constraint, predates this story), so it's collected the same way
     // FacilityController's own tenant-side create form already does.
     public record AddClinicCommand(String name, String code, FacilityType type, String address, String phone,
-                                    String operatingHours) {
+            String operatingHours) {
     }
 
     // What createAdminUser() needs for one admin, independent of whether
     // it's one of an organization's first batch (provisionOrganization) or
     // added to one that already exists (addAdmins).
     public record AdminInput(String firstName, String lastName, String employeeNumber, String email,
-                              String contactNumber, Gender gender) {
+            String contactNumber, Gender gender) {
     }
 
     // temporaryPassword is returned exactly once, in this response — never
@@ -651,5 +652,112 @@ public class OrganizationProvisioningService {
     public record TenantAuditEntryView(
             UUID id, String action, String entityType, String entityId, Instant createdAt, String actorName,
             String beforeValue, String afterValue, String ipAddress, String deviceSignature) {
+    }
+
+    // SADM-US-011 — the read half, for a clinic's own module picture on
+    // the platform console. Resolves the tenant-level state from the
+    // control schema first (no TenantContext needed for that), THEN
+    // switches into the tenant schema to read the clinic's own overrides —
+    // same two-schema sequencing as every other method here that crosses
+    // both (see this class's own top-level why-note on why it's never one
+    // @Transactional).
+    // public List<FacilityModuleEntitlementView>
+    // listFacilityModuleEntitlements(UUID organizationId, UUID facilityId) {
+    // organizationRepository.findById(organizationId).orElseThrow(OrganizationNotFoundException::new);
+    // Map<ModuleCode, Boolean> tenantEnabledByCode = moduleEntitlementQueryService
+    // .listForOrganization(organizationId).stream()
+    // .collect(Collectors.toMap(ModuleEntitlementView::code,
+    // ModuleEntitlementView::enabled));
+
+    // Organization organization = organizationRepository.findById(organizationId)
+    // .orElseThrow(OrganizationNotFoundException::new);
+    // TenantContext.setCurrentTenant(organization.getSchemaName());
+    // try {
+    // return facilityService.listModuleEntitlements(facilityId,
+    // tenantEnabledByCode);
+    // } finally {
+    // TenantContext.clear();
+    // }
+    // }
+
+    // The write half. Reads the tenant-level entitlement directly from
+    // moduleEntitlementRepository (control schema, no TenantContext
+    // needed) before switching tenants — FacilityService.setModuleOverride()
+    // enforces BR-SADM-060 AC2 against whatever boolean this passes it, it
+    // has no way to look the tenant state up itself.
+    // public void setFacilityModuleEnabled(UUID organizationId, UUID facilityId,
+    // ModuleCode moduleCode,
+    // boolean enabled, UUID actingOperatorId) {
+    // Organization organization = organizationRepository.findById(organizationId)
+    // .orElseThrow(OrganizationNotFoundException::new);
+
+    // boolean tenantLevelEnabled = moduleCode.isFoundation()
+    // ||
+    // moduleEntitlementRepository.findByOrganizationIdAndModuleCode(organizationId,
+    // moduleCode)
+    // .map(ModuleEntitlement::isEnabled).orElse(false);
+
+    // TenantContext.setCurrentTenant(organization.getSchemaName());
+    // try {
+    // facilityService.setModuleOverride(facilityId, moduleCode, enabled,
+    // tenantLevelEnabled);
+    // } finally {
+    // TenantContext.clear();
+    // }
+
+    // String detail = "%s: facility=%s -> %s".formatted(moduleCode, facilityId,
+    // enabled ? "ON" : "OFF");
+    // platformAuditLogRepository.save(
+    // new PlatformAuditLog(actingOperatorId, "FACILITY_MODULE_TOGGLED",
+    // organizationId, detail,
+    // Instant.now()));
+    // }
+
+    // SADM-US-011 / BR-SADM-060 — the read half, for a clinic's own module
+    // picture on the platform console. Resolves the tenant-level state
+    // from the control schema first (no TenantContext needed for that),
+    // THEN switches into the tenant schema to read the clinic's own
+    // overrides — same two-schema sequencing as every other method here
+    // that crosses both.
+    public List<FacilityModuleEntitlementView> listFacilityModuleEntitlements(UUID organizationId, UUID facilityId) {
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(OrganizationNotFoundException::new);
+        Map<ModuleCode, Boolean> tenantEnabledByCode = moduleEntitlementQueryService
+                .listForOrganization(organizationId).stream()
+                .collect(Collectors.toMap(ModuleEntitlementView::code, ModuleEntitlementView::enabled));
+
+        TenantContext.setCurrentTenant(organization.getSchemaName());
+        try {
+            return facilityService.listModuleEntitlements(facilityId, tenantEnabledByCode);
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    // The write half. Reads the tenant-level entitlement directly from
+    // moduleEntitlementRepository (control schema, no TenantContext
+    // needed) before switching tenants — FacilityService.setModuleOverride()
+    // enforces BR-SADM-060 AC2 against whatever boolean this passes it, it
+    // has no way to look the tenant state up itself.
+    public void setFacilityModuleEnabled(UUID organizationId, UUID facilityId, ModuleCode moduleCode,
+            boolean enabled, UUID actingOperatorId) {
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(OrganizationNotFoundException::new);
+
+        boolean tenantLevelEnabled = moduleCode.isFoundation()
+                || moduleEntitlementRepository.findByOrganizationIdAndModuleCode(organizationId, moduleCode)
+                        .map(ModuleEntitlement::isEnabled).orElse(false);
+
+        TenantContext.setCurrentTenant(organization.getSchemaName());
+        try {
+            facilityService.setModuleOverride(facilityId, moduleCode, enabled, tenantLevelEnabled);
+        } finally {
+            TenantContext.clear();
+        }
+
+        String detail = "%s: facility=%s -> %s".formatted(moduleCode, facilityId, enabled ? "ON" : "OFF");
+        platformAuditLogRepository.save(
+                new PlatformAuditLog(actingOperatorId, "FACILITY_MODULE_TOGGLED", organizationId, detail,
+                        Instant.now()));
     }
 }
