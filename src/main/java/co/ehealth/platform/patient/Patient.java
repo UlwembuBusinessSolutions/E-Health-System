@@ -73,6 +73,13 @@ public class Patient {
     @Column(name = "contact_number", nullable = false, length = 20)
     private String contactNumber;
 
+    // Optional — not every patient has one on file, and PREG-US-003 doesn't
+    // list it as mandatory. Added for cross-tenant patient migration:
+    // PatientMigrationService sends a notification email here when set, and
+    // silently skips it otherwise.
+    @Column(length = 255)
+    private String email;
+
     // Both nullable — not everyone has medical aid, and PREG-US-003 doesn't
     // list it as mandatory the way name/DOB/ID/address/contact are.
     @Column(name = "medical_aid_provider", length = 100)
@@ -98,9 +105,11 @@ public class Patient {
 
     // PREG-US-017 AC2 / PREG-US-018 — archiving, not deleting, is the only
     // way to withdraw a record from active use; there is still no delete
-    // method anywhere on this class or PatientRepository. One-way: archive()
-    // below has no matching un-archive, same append-only-history philosophy
-    // as PatientFieldHistory and PatientDocument elsewhere in this module.
+    // method anywhere on this class or PatientRepository. Effectively
+    // one-way in every ordinary flow: archive() below has no general-purpose
+    // unarchive, same append-only-history philosophy as PatientFieldHistory
+    // and PatientDocument elsewhere in this module. reactivateFromMigration()
+    // is the one narrow, deliberate exception — see its own why-note.
     @Column(nullable = false)
     private boolean archived = false;
 
@@ -125,7 +134,7 @@ public class Patient {
 
     public Patient(String mpiNumber, String firstName, String lastName, LocalDate dateOfBirth, Gender gender,
                    CitizenshipStatus citizenshipStatus, String idNumber, String address, String contactNumber,
-                   String medicalAidProvider, String medicalAidNumber, String passportNumber,
+                   String email, String medicalAidProvider, String medicalAidNumber, String passportNumber,
                    LocalDate passportExpiry, UUID registeredByUserId, Instant createdAt) {
         this.mpiNumber = mpiNumber;
         this.firstName = firstName;
@@ -136,6 +145,7 @@ public class Patient {
         this.idNumber = idNumber;
         this.address = address;
         this.contactNumber = contactNumber;
+        this.email = email;
         this.medicalAidProvider = medicalAidProvider;
         this.medicalAidNumber = medicalAidNumber;
         this.passportNumber = passportNumber;
@@ -184,6 +194,10 @@ public class Patient {
         return contactNumber;
     }
 
+    public String getEmail() {
+        return email;
+    }
+
     public String getMedicalAidProvider() {
         return medicalAidProvider;
     }
@@ -228,15 +242,53 @@ public class Patient {
         return deceasedDate;
     }
 
-    // The only caller is PatientService.archive(), same "one entry point,
+    // PatientService.archive() is the normal caller, same "one entry point,
     // guarded by the service layer" pattern setFirstName() etc. above
-    // already follow — never call this directly from anywhere else.
+    // already follow. PatientMigrationService.migrate() is the one other
+    // caller, deliberately not routed through patientService.archive():
+    // that method writes a generic "PATIENT_ARCHIVED" audit row, and
+    // migration needs its own distinct "PATIENT_MIGRATED_OUT" row instead —
+    // calling this directly avoids writing both for the same event.
     public void archive(String reason, LocalDate deceasedDate, UUID archivedByUserId, Instant archivedAt) {
         this.archived = true;
         this.archivedReason = reason;
         this.deceasedDate = deceasedDate;
         this.archivedByUserId = archivedByUserId;
         this.archivedAt = archivedAt;
+    }
+
+    // The one narrow exception to this class's otherwise one-way archiving —
+    // PatientMigrationWriter.writeDestination()'s "returning patient" path,
+    // for when someone migrating IN already has an archived record at this
+    // exact tenant under the same idNumber (id_number's own tenant-wide
+    // UNIQUE constraint guarantees a match can only be this same person's
+    // own earlier record here). The caller only reaches this after
+    // confirming — via a patient_migrations row for this record's id — that
+    // it was archived specifically BECAUSE this tenant migrated them out
+    // before, never for an unrelated reason (deceased, duplicate cleanup):
+    // this is not a general-purpose "undo an archive" and must never be
+    // exposed as one. mpiNumber/idNumber/dateOfBirth/gender/citizenshipStatus
+    // are untouched, same as every other update path on this class — only
+    // the archived-state fields clear and the mutable contact/demographic
+    // fields refresh from whatever the migration is carrying now (they may
+    // have changed while this person was away).
+    public void reactivateFromMigration(String firstName, String lastName, String address, String contactNumber,
+                                         String email, String medicalAidProvider, String medicalAidNumber,
+                                         String passportNumber, LocalDate passportExpiry) {
+        this.archived = false;
+        this.archivedReason = null;
+        this.archivedAt = null;
+        this.archivedByUserId = null;
+        this.deceasedDate = null;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.address = address;
+        this.contactNumber = contactNumber;
+        this.email = email;
+        this.medicalAidProvider = medicalAidProvider;
+        this.medicalAidNumber = medicalAidNumber;
+        this.passportNumber = passportNumber;
+        this.passportExpiry = passportExpiry;
     }
 
     public void setFirstName(String firstName) {
@@ -253,6 +305,10 @@ public class Patient {
 
     public void setContactNumber(String contactNumber) {
         this.contactNumber = contactNumber;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public void setMedicalAidProvider(String medicalAidProvider) {

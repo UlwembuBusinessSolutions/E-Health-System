@@ -1,5 +1,6 @@
 package co.ehealth.platform.core.notification;
 
+import co.ehealth.platform.core.tenant.OrganizationMailSettingsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,11 +12,35 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Optional;
+
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.Accent;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.FooterAudience;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.InfoRow;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.codeBox;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.ctaButton;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.esc;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.footer;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.greeting;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.infoBox;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.kicker;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.lead;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.muted;
+import static co.ehealth.platform.core.notification.EmailHtmlTemplate.shell;
 
 // One method per notification this system actually sends, not a generic
 // send(to, subject, body) every caller composes by hand — keeps "what does
 // this email say" in one place, same reasoning as AuditLogService being the
 // one write path for audit rows rather than each caller building one itself.
+//
+// Each method builds both a plain-text body (the long-standing format —
+// still the disk-captured record and the multipart/alternative fallback
+// for clients that don't render HTML) and an HTML body via
+// EmailHtmlTemplate's shared shell/components, branded to match the app's
+// own design tokens (Frontend/src/index.css) and the real Ulwembu
+// wordmark. Content is identical between the two — the HTML version never
+// says anything the plain-text one doesn't.
 @Service
 public class EmailService {
 
@@ -23,17 +48,20 @@ public class EmailService {
     private static final DateTimeFormatter FILE_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmssSSS");
 
     private final EmailDeliveryWorker deliveryWorker;
+    private final OrganizationMailSettingsService mailSettingsService;
     private final String fromAddress;
     private final String frontendBaseUrl;
     private final Path captureDir;
     private final Clock clock;
 
     public EmailService(EmailDeliveryWorker deliveryWorker,
+                         OrganizationMailSettingsService mailSettingsService,
                          @Value("${app.notifications.from-address}") String fromAddress,
                          @Value("${app.frontend.base-url}") String frontendBaseUrl,
                          @Value("${app.notifications.capture-dir}") String captureDir,
                          Clock clock) {
         this.deliveryWorker = deliveryWorker;
+        this.mailSettingsService = mailSettingsService;
         this.fromAddress = fromAddress;
         this.frontendBaseUrl = frontendBaseUrl;
         this.captureDir = Path.of(captureDir);
@@ -70,7 +98,20 @@ public class EmailService {
                 temporary one stops working once you do.
                 """.formatted(firstName, organizationDisplayName, frontendBaseUrl, organizationSlug, toEmail,
                 temporaryPassword);
-        send(toEmail, subject, body);
+        String html = shell(Accent.BRAND,
+                kicker(Accent.BRAND, "Your admin account is ready")
+                        + greeting("Hi " + esc(firstName) + ",")
+                        + lead("An administrator account has been created for you on <strong>"
+                        + esc(organizationDisplayName) + "</strong>.")
+                        + infoBox("Sign-in details", List.of(
+                        new InfoRow("Organization", esc(organizationSlug)),
+                        new InfoRow("Email", esc(toEmail)),
+                        new InfoRow("Temporary password", esc(temporaryPassword))))
+                        + ctaButton(Accent.BRAND, frontendBaseUrl + "/login", "Sign in to Ulwembu")
+                        + muted("You&rsquo;ll be asked to choose a new password the first time you sign in "
+                        + "&mdash; this temporary one stops working once you do."),
+                footer(FooterAudience.STAFF));
+        send(toEmail, subject, body, html);
     }
 
     // Fired once per staff account StaffService.createStaff() creates —
@@ -97,7 +138,20 @@ public class EmailService {
                 temporary one stops working once you do.
                 """.formatted(firstName, organizationDisplayName, employeeNumber, frontendBaseUrl, organizationSlug,
                 toEmail, temporaryPassword);
-        send(toEmail, subject, body);
+        String html = shell(Accent.BRAND,
+                kicker(Accent.BRAND, "Your staff account is ready")
+                        + greeting("Hi " + esc(firstName) + ",")
+                        + lead("A staff account has been created for you on <strong>" + esc(organizationDisplayName)
+                        + "</strong> (employee number <strong>" + esc(employeeNumber) + "</strong>).")
+                        + infoBox("Sign-in details", List.of(
+                        new InfoRow("Organization", esc(organizationSlug)),
+                        new InfoRow("Email", esc(toEmail)),
+                        new InfoRow("Temporary password", esc(temporaryPassword))))
+                        + ctaButton(Accent.BRAND, frontendBaseUrl + "/login", "Sign in to Ulwembu")
+                        + muted("You&rsquo;ll be asked to choose a new password the first time you sign in "
+                        + "&mdash; this temporary one stops working once you do."),
+                footer(FooterAudience.STAFF));
+        send(toEmail, subject, body, html);
     }
 
     // Fired once per operator PlatformOperatorService.createOperator()
@@ -125,7 +179,18 @@ public class EmailService {
                 Keep this password safe — there's no self-service way to change it yet, so \
                 treat it as a standing credential rather than a temporary one for now.
                 """.formatted(firstName, frontendBaseUrl, toEmail, temporaryPassword);
-        send(toEmail, subject, body);
+        String html = shell(Accent.BRAND,
+                kicker(Accent.BRAND, "Your platform account is ready")
+                        + greeting("Hi " + esc(firstName) + ",")
+                        + lead("A platform operator account has been created for you.")
+                        + infoBox("Sign-in details", List.of(
+                        new InfoRow("Email", esc(toEmail)),
+                        new InfoRow("Temporary password", esc(temporaryPassword))))
+                        + ctaButton(Accent.BRAND, frontendBaseUrl + "/platform/login", "Sign in to the Platform Console")
+                        + muted("Keep this password safe &mdash; there&rsquo;s no self-service way to change it yet, "
+                        + "so treat it as a standing credential rather than a temporary one for now."),
+                footer(FooterAudience.PLATFORM));
+        send(toEmail, subject, body, html);
     }
 
     // Fired once per PasswordResetService.requestReset() call — the piece
@@ -149,7 +214,16 @@ public class EmailService {
                 This code expires in %d minutes and can only be used once. If you didn't \
                 request this, you can ignore this email — your password hasn't changed.
                 """.formatted(firstName, code, codeTtlMinutes);
-        send(toEmail, subject, body);
+        String html = shell(Accent.BRAND,
+                kicker(Accent.BRAND, "Reset your password")
+                        + greeting("Hi " + esc(firstName) + ",")
+                        + lead("Someone requested a password reset for this account. If that was you, use this "
+                        + "code to continue:")
+                        + codeBox(esc(code), "Expires in " + codeTtlMinutes + " minutes")
+                        + muted("This code can only be used once. If you didn&rsquo;t request this, you can ignore "
+                        + "this email &mdash; your password hasn&rsquo;t changed."),
+                footer(FooterAudience.STAFF));
+        send(toEmail, subject, body, html);
     }
 
     // Fired once per PlatformOperatorService.resetPassword() call — the
@@ -171,7 +245,17 @@ public class EmailService {
 
                 If you didn't expect this, contact your platform team right away.
                 """.formatted(firstName, frontendBaseUrl, toEmail, temporaryPassword);
-        send(toEmail, subject, body);
+        String html = shell(Accent.BRAND,
+                kicker(Accent.BRAND, "Your platform password was reset")
+                        + greeting("Hi " + esc(firstName) + ",")
+                        + lead("Your platform operator password has been reset by another operator.")
+                        + infoBox("Sign-in details", List.of(
+                        new InfoRow("Email", esc(toEmail)),
+                        new InfoRow("Temporary password", esc(temporaryPassword))))
+                        + ctaButton(Accent.BRAND, frontendBaseUrl + "/platform/login", "Sign in to the Platform Console")
+                        + muted("If you didn&rsquo;t expect this, contact your platform team right away."),
+                footer(FooterAudience.PLATFORM));
+        send(toEmail, subject, body, html);
     }
 
     // Fired once per StaffService.resetPassword() call — the admin-triggered
@@ -198,15 +282,115 @@ public class EmailService {
                 temporary one stops working once you do.
                 """.formatted(firstName, organizationDisplayName, frontendBaseUrl, organizationSlug, toEmail,
                 temporaryPassword);
-        send(toEmail, subject, body);
+        String html = shell(Accent.BRAND,
+                kicker(Accent.BRAND, "Your password was reset")
+                        + greeting("Hi " + esc(firstName) + ",")
+                        + lead("Your account password on <strong>" + esc(organizationDisplayName)
+                        + "</strong> has been reset by an administrator.")
+                        + infoBox("Sign-in details", List.of(
+                        new InfoRow("Email", esc(toEmail)),
+                        new InfoRow("Temporary password", esc(temporaryPassword))))
+                        + ctaButton(Accent.BRAND, frontendBaseUrl + "/org/" + organizationSlug + "/login",
+                        "Sign in to Ulwembu")
+                        + muted("You&rsquo;ll be asked to choose a new password the first time you sign in "
+                        + "&mdash; this temporary one stops working once you do."),
+                footer(FooterAudience.STAFF));
+        send(toEmail, subject, body, html);
     }
 
-    private void send(String toEmail, String subject, String body) {
+    // Fired once per PatientMigrationService.migrate() call that succeeds
+    // AND has an email on file (decision #4 — silently skipped otherwise,
+    // same as every other "no address, no email" case in this system).
+    // Reassures the recipient that their prior visit/vitals/prescription
+    // history hasn't been lost — it hasn't, it just stays at the previous
+    // clinic (decision #2's own "fresh clinical history" line) — since a
+    // bare "your record moved" notice alone could easily read as "your
+    // history is gone." The one template with FooterAudience.PATIENT and
+    // Accent.SUCCESS — warmer tone, no credentials to show, so no CTA
+    // button either.
+    public void sendPatientMigratedEmail(String toEmail, String firstName, String destinationOrganizationDisplayName,
+                                          String destinationFacilityName, String newMpiNumber) {
+        String subject = "Your medical record has moved to " + destinationOrganizationDisplayName;
+        String body = """
+                Hi %s,
+
+                Your medical record has been transferred to %s at %s.
+
+                Your new record number there is %s.
+
+                Your visit history, vitals, and prescriptions from your previous clinic remain on file \
+                there and are not affected by this transfer.
+
+                If you weren't expecting this, please contact your previous clinic.
+                """.formatted(firstName, destinationFacilityName, destinationOrganizationDisplayName, newMpiNumber);
+        String html = shell(Accent.SUCCESS,
+                kicker(Accent.SUCCESS, "Your clinic transfer is complete")
+                        + greeting("Hi " + esc(firstName) + ",")
+                        + lead("Your medical record has been transferred to <strong>"
+                        + esc(destinationFacilityName) + "</strong> at <strong>"
+                        + esc(destinationOrganizationDisplayName) + "</strong>.")
+                        + infoBox("Your new record", List.of(new InfoRow("Record number", esc(newMpiNumber))))
+                        + lead("Your visit history, vitals, and prescriptions from your previous clinic remain "
+                        + "on file there and are not affected by this transfer.")
+                        + muted("If you weren&rsquo;t expecting this, please contact your previous clinic."),
+                footer(FooterAudience.PATIENT));
+        send(toEmail, subject, body, html);
+    }
+
+    // Fired once per PrescriptionService.sendPrescriberMessage() call — a
+    // pharmacy query about a specific prescription that isn't a stock or
+    // dispensing action (a dosage concern, missing information, anything
+    // needing the prescriber's own clinical judgment). No CTA button: there
+    // is no prescriber-facing web view of this thread today, only the
+    // pharmacy's own history and this email — the prescriber's reply
+    // channel is whatever they already use (phone, in person), not a link
+    // back into the app.
+    public void sendPrescriberQueryEmail(String toEmail, String prescriberFirstName, String organizationDisplayName,
+                                          String senderName, String prescriptionSerialNumber, String message) {
+        String subject = "Question about prescription " + prescriptionSerialNumber + " — " + organizationDisplayName;
+        String body = """
+                Hi %s,
+
+                %s at %s has a question about prescription %s:
+
+                "%s"
+
+                Please follow up with the pharmacy directly.
+                """.formatted(prescriberFirstName, senderName, organizationDisplayName, prescriptionSerialNumber,
+                message);
+        String html = shell(Accent.BRAND,
+                kicker(Accent.BRAND, "A question about a prescription")
+                        + greeting("Hi " + esc(prescriberFirstName) + ",")
+                        + lead(esc(senderName) + " at <strong>" + esc(organizationDisplayName)
+                        + "</strong> has a question about prescription <strong>"
+                        + esc(prescriptionSerialNumber) + "</strong>:")
+                        + infoBox("Message", List.of(new InfoRow("From " + esc(senderName), esc(message))))
+                        + muted("Please follow up with the pharmacy directly."),
+                footer(FooterAudience.STAFF));
+        send(toEmail, subject, body, html);
+    }
+
+    private void send(String toEmail, String subject, String textBody, String htmlBody) {
+        // Resolved here, on the request thread, not inside
+        // EmailDeliveryWorker — TenantContext is a ThreadLocal, so it's only
+        // readable before the @Async hop, and only some callers even have a
+        // tenant to resolve (PlatformOperatorService's emails run outside
+        // TenantContext entirely, same as before this feature existed).
+        // Empty means "no tenant override" and falls back to the app-wide
+        // fromAddress/JavaMailSender exactly as it always has.
+        Optional<OrganizationMailSettingsService.MailCredentials> override = mailSettingsService.resolveForCurrentTenant();
+        String effectiveFrom = override.map(OrganizationMailSettingsService.MailCredentials::fromAddress)
+                .filter(from -> from != null && !from.isBlank())
+                .orElse(fromAddress);
+
         // Written synchronously, before this method returns — this is the
         // verifiable "what would this email have said" record (see the
         // why-note below), and it should exist immediately, not only after
-        // a background delivery attempt eventually finishes or fails.
-        captureToFile(toEmail, subject, body);
+        // a background delivery attempt eventually finishes or fails. Text
+        // only, not the HTML — the plain-text body already carries every
+        // fact the HTML one does, and this file is a dev-inspection aid,
+        // not the actual delivered artifact.
+        captureToFile(toEmail, subject, textBody, effectiveFrom);
         // Everything past this point runs on a background thread
         // (EmailDeliveryWorker, EmailAsyncConfig's emailTaskExecutor) — this
         // call returns immediately regardless of how long the SMTP
@@ -216,7 +400,9 @@ public class EmailService {
         // enough requests blocked on mail I/O at once could start starving
         // the app's own request-handling thread pool — the same failure
         // mode this split exists to remove.
-        deliveryWorker.deliver(toEmail, subject, body);
+        MailOverride mailOverride = override.map(creds ->
+                new MailOverride(creds.host(), creds.port(), creds.username(), creds.password())).orElse(null);
+        deliveryWorker.deliver(toEmail, subject, textBody, htmlBody, effectiveFrom, mailOverride);
     }
 
     // Local-dev/testing aid: every outbound email is written to disk BEFORE
@@ -227,13 +413,13 @@ public class EmailService {
     // a real deployment would either point app.notifications.capture-dir
     // somewhere it doesn't matter, or this method would be revisited
     // before going to production with real patient-adjacent traffic.
-    private void captureToFile(String toEmail, String subject, String body) {
+    private void captureToFile(String toEmail, String subject, String body, String effectiveFrom) {
         try {
             Files.createDirectories(captureDir);
             String filename = "%s__%s.txt".formatted(
                     FILE_TIMESTAMP.format(clock.instant().atZone(java.time.ZoneOffset.UTC)),
                     toEmail.replaceAll("[^a-zA-Z0-9.@-]", "_"));
-            String content = "To: %s\nFrom: %s\nSubject: %s\n\n%s".formatted(toEmail, fromAddress, subject, body);
+            String content = "To: %s\nFrom: %s\nSubject: %s\n\n%s".formatted(toEmail, effectiveFrom, subject, body);
             Files.writeString(captureDir.resolve(filename), content, StandardCharsets.UTF_8);
         } catch (IOException e) {
             log.warn("Failed to capture outbound email to disk for {}", toEmail, e);

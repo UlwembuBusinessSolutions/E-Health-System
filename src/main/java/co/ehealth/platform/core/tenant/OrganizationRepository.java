@@ -3,6 +3,7 @@ package co.ehealth.platform.core.tenant;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,4 +34,16 @@ public interface OrganizationRepository extends JpaRepository<Organization, UUID
     // request only ever has TenantContext.getCurrentTenant() (the schema
     // name) to identify "which org is this," not the slug or id.
     Optional<Organization> findBySchemaName(String schemaName);
+
+    // TenantCodeGenerator's own collision check at provisioning time.
+    boolean existsByTenantCode(String tenantCode);
+
+    // PatientMigrationService's destination-picker read — every other
+    // ACTIVE organization a tenant could migrate a patient to, excluding
+    // its own (a tenant can't migrate a patient to itself). Deliberately
+    // narrow, unlike listOrganizations()'s own free-text search: this is
+    // reachable by ordinary tenant staff, not just platform operators, so
+    // it never takes a query string or returns anything beyond what the
+    // caller passes here as filters.
+    List<Organization> findByStatusAndIdNot(OrganizationStatus status, UUID excludedId);
 }

@@ -61,6 +61,12 @@ public class Facility {
         this.address = address;
     }
 
+    public void updateDetails(String name, String code, FacilityType type) {
+        this.name = name;
+        this.code = code;
+        this.type = type;
+    }
+
     public void setPhone(String phone) {
         this.phone = phone;
     }

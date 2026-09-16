@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,6 +37,22 @@ public class AuthController {
         User user = userRepository.findByEmail(request.email()).orElseThrow();
         return ResponseEntity.ok(new LoginResponse(issued.token(), issued.expiresAt().toString(),
                 new UserSummary(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName())));
+    }
+
+    // The frontend's own AuthContext (AuthProvider) starts every fresh page
+    // load with no user in memory, even when a valid tenant token is still
+    // sitting in sessionStorage — window.open()'ing a print ticket, or
+    // simply reloading any /app page, is a genuinely new page load with an
+    // empty React tree. This is what that rehydration path calls: given a
+    // still-valid Authorization header, hand back the same identity
+    // login() already returns, so the app can reconstruct its user state
+    // instead of bouncing a legitimately signed-in person back to the
+    // login screen.
+    @GetMapping("/me")
+    public ResponseEntity<UserSummary> me(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        User user = userRepository.findById(principal.userId()).orElseThrow();
+        return ResponseEntity.ok(new UserSummary(user.getId(), user.getEmail(), user.getFirstName(),
+                user.getLastName()));
     }
 
     @PostMapping("/logout")

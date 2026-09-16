@@ -2,6 +2,9 @@ package co.ehealth.platform.patient;
 
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
+import co.ehealth.platform.core.tenant.Organization;
+import co.ehealth.platform.core.tenant.OrganizationRepository;
+import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.identity.DuplicateFieldException;
 import co.ehealth.platform.identity.Gender;
 import co.ehealth.platform.identity.PermissionLevel;
@@ -31,14 +34,24 @@ public class PatientService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
+    // Cross-tenant patient migration's MPI-collision fix — register() reads
+    // the current tenant's own tenantCode to prefix a brand-new MPI with.
+    // No TenantContext switch needed for this lookup: Organization is
+    // @Table(schema="control"), always fully-qualified, reachable regardless
+    // of whatever search_path is currently ambient (OrganizationBrandingService's
+    // own findBySchemaName(TenantContext.getCurrentTenant()) is the exact
+    // same precedent).
+    private final OrganizationRepository organizationRepository;
 
     public PatientService(PatientRepository patientRepository, PatientFieldHistoryRepository fieldHistoryRepository,
-                           AuditLogService auditLogService, Clock clock, PermissionService permissionService) {
+                           AuditLogService auditLogService, Clock clock, PermissionService permissionService,
+                           OrganizationRepository organizationRepository) {
         this.patientRepository = patientRepository;
         this.fieldHistoryRepository = fieldHistoryRepository;
         this.auditLogService = auditLogService;
         this.clock = clock;
         this.permissionService = permissionService;
+        this.organizationRepository = organizationRepository;
     }
 
     // PREG-US-001: "an EPR is created and a unique MPI number is
@@ -48,19 +61,53 @@ public class PatientService {
     // come from SouthAfricanIdNumber.parse(), never from the request
     // directly, so there's no way for a caller to submit a DOB that
     // disagrees with the ID number it was supposedly derived from.
+    //
+    // Reception hitting an idNumber that a patient already self-registered
+    // under (PatientAuthService.register() already ran registerSelf()
+    // below for them) lands on the same DuplicateFieldException as any
+    // other pre-existing patient — that's correct, not a gap: registerSelf()
+    // always creates (or finds and links to) a real Patient row before its
+    // PatientAccount is ever saved, so there's no "account exists but has
+    // no Patient yet" state for this method to catch up on. Only the
+    // reverse order needs reconciling — see registerSelf()'s own why-note.
     @Transactional
     public Patient register(RegisterPatientCommand cmd, UUID registeredByUserId) {
         permissionService.requireAccess(ModuleCode.PREG, PermissionLevel.MANAGE);
+        return createPatient(cmd, registeredByUserId);
+    }
+
+    // The self-service counterpart to register() above — reached only from
+    // PatientAuthService.register() when a patient signs up with an
+    // idNumber no existing Patient row matches, never from a controller
+    // directly, so there's no staff principal to gate: registeredByUserId
+    // is always null here, meaning "this person registered themselves," a
+    // real and already-nullable value on Patient (Patient.registeredByUserId
+    // has no NOT NULL constraint). Shares every other invariant with
+    // register() (ID-number parsing, MPI generation, duplicate check, audit
+    // trail) via the same createPatient() helper — only the permission gate
+    // and the actor differ. Called before the caller ever saves its
+    // PatientAccount row, which is what keeps PatientAccount.patientId from
+    // ever being null in practice: reception registering the same idNumber
+    // later simply hits this Patient row as a normal duplicate (this
+    // method's own why-note above).
+    @Transactional
+    public Patient registerSelf(RegisterPatientCommand cmd) {
+        return createPatient(cmd, null);
+    }
+
+    private Patient createPatient(RegisterPatientCommand cmd, UUID registeredByUserId) {
         if (patientRepository.existsByIdNumber(cmd.idNumber())) {
             throw new DuplicateFieldException("idNumber", "A patient with this ID number is already registered.");
         }
         SouthAfricanIdNumber parsed = SouthAfricanIdNumber.parse(cmd.idNumber());
 
-        String mpiNumber = "MPI-" + String.format("%07d", patientRepository.nextMpiSequenceValue());
+        Organization organization = organizationRepository.findBySchemaName(TenantContext.getCurrentTenant())
+                .orElseThrow(() -> new IllegalStateException("Unknown organization for current tenant"));
+        String mpiNumber = MpiNumberFormat.generate(organization.getTenantCode(), patientRepository.nextMpiSequenceValue());
         Patient patient = new Patient(mpiNumber, cmd.firstName(), cmd.lastName(), parsed.dateOfBirth(),
                 parsed.gender(), parsed.citizenshipStatus(), cmd.idNumber(), cmd.address(), cmd.contactNumber(),
-                cmd.medicalAidProvider(), cmd.medicalAidNumber(), cmd.passportNumber(), cmd.passportExpiry(),
-                registeredByUserId, clock.instant());
+                cmd.email(), cmd.medicalAidProvider(), cmd.medicalAidNumber(), cmd.passportNumber(),
+                cmd.passportExpiry(), registeredByUserId, clock.instant());
         patientRepository.save(patient);
 
         auditLogService.append(registeredByUserId, null, "PATIENT_REGISTERED", "Patient",
@@ -97,6 +144,7 @@ public class PatientService {
         diff(changes, patientId, "address", patient.getAddress(), cmd.address(), cmd.reason(), updatedByUserId);
         diff(changes, patientId, "contactNumber", patient.getContactNumber(), cmd.contactNumber(), cmd.reason(),
                 updatedByUserId);
+        diff(changes, patientId, "email", patient.getEmail(), cmd.email(), cmd.reason(), updatedByUserId);
         diff(changes, patientId, "medicalAidProvider", patient.getMedicalAidProvider(), cmd.medicalAidProvider(),
                 cmd.reason(), updatedByUserId);
         diff(changes, patientId, "medicalAidNumber", patient.getMedicalAidNumber(), cmd.medicalAidNumber(),
@@ -114,6 +162,7 @@ public class PatientService {
         patient.setLastName(cmd.lastName());
         patient.setAddress(cmd.address());
         patient.setContactNumber(cmd.contactNumber());
+        patient.setEmail(cmd.email());
         patient.setMedicalAidProvider(cmd.medicalAidProvider());
         patient.setMedicalAidNumber(cmd.medicalAidNumber());
         patient.setPassportNumber(cmd.passportNumber());
@@ -311,8 +360,8 @@ public class PatientService {
     }
 
     public record RegisterPatientCommand(String firstName, String lastName, String idNumber, String address,
-                                          String contactNumber, String medicalAidProvider, String medicalAidNumber,
-                                          String passportNumber, LocalDate passportExpiry) {
+                                          String contactNumber, String email, String medicalAidProvider,
+                                          String medicalAidNumber, String passportNumber, LocalDate passportExpiry) {
     }
 
     // No idNumber/dateOfBirth/gender/citizenshipStatus/mpiNumber here at
@@ -321,7 +370,7 @@ public class PatientService {
     // why-note on why this doesn't try to classify "clinically
     // significant" fields).
     public record UpdatePatientCommand(String firstName, String lastName, String address, String contactNumber,
-                                        String medicalAidProvider, String medicalAidNumber, String passportNumber,
-                                        LocalDate passportExpiry, String reason) {
+                                        String email, String medicalAidProvider, String medicalAidNumber,
+                                        String passportNumber, LocalDate passportExpiry, String reason) {
     }
 }

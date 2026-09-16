@@ -4,10 +4,10 @@ import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
+import co.ehealth.platform.facility.FacilityNotFoundException;
+import co.ehealth.platform.facility.FacilityRepository;
 import co.ehealth.platform.patient.Patient;
 import co.ehealth.platform.patient.PatientService;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -15,31 +15,35 @@ import org.springframework.util.StringUtils;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class QueueService {
 
     private final QueueTokenRepository queueTokenRepository;
+    private final QueueTokenEventRepository queueTokenEventRepository;
     private final VisitRepository visitRepository;
     private final PatientService patientService;
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
-    private final ObjectMapper objectMapper;
+    private final FacilityRepository facilityRepository;
 
-    public QueueService(QueueTokenRepository queueTokenRepository, VisitRepository visitRepository,
+    public QueueService(QueueTokenRepository queueTokenRepository,
+                         QueueTokenEventRepository queueTokenEventRepository, VisitRepository visitRepository,
                          PatientService patientService, AuditLogService auditLogService, Clock clock,
-                         PermissionService permissionService, ObjectMapper objectMapper) {
+                         PermissionService permissionService, FacilityRepository facilityRepository) {
         this.queueTokenRepository = queueTokenRepository;
+        this.queueTokenEventRepository = queueTokenEventRepository;
         this.visitRepository = visitRepository;
         this.patientService = patientService;
         this.auditLogService = auditLogService;
         this.clock = clock;
         this.permissionService = permissionService;
-        this.objectMapper = objectMapper;
+        this.facilityRepository = facilityRepository;
     }
 
     // RECQ-US-001's automatic path — VisitService.createVisit() calls this
@@ -65,6 +69,16 @@ public class QueueService {
     }
 
     private QueueToken issue(Visit visit, TokenPriority priority, boolean manual, UUID issuedByUserId) {
+        return issue(visit, priority, manual, issuedByUserId, QueueTokenEventType.ISSUED, null);
+    }
+
+    // transferToken()'s destination-side issuance — same status transition
+    // (null -> ISSUED) as any other issue(), but tagged TRANSFERRED_IN and
+    // carrying a reasonNote pointing back at the origin token, same
+    // "distinct event type for the same transition" pattern as
+    // CALLED_OUT_OF_ORDER vs CALLED.
+    private QueueToken issue(Visit visit, TokenPriority priority, boolean manual, UUID issuedByUserId,
+                              QueueTokenEventType eventType, String reasonNote) {
         Instant now = clock.instant();
         int tokenNumber = nextTokenNumber(visit.getFacilityId(), now);
         QueueToken token = new QueueToken(visit.getId(), visit.getFacilityId(), tokenNumber, priority, manual,
@@ -73,6 +87,8 @@ public class QueueService {
         auditLogService.append(issuedByUserId, visit.getFacilityId(),
                 manual ? "QUEUE_TOKEN_ISSUED_MANUAL" : "QUEUE_TOKEN_ISSUED", "QueueToken", token.getId().toString(),
                 null, null);
+        recordEvent(token.getId(), eventType, null, TokenStatus.ISSUED, null, null, null, reasonNote,
+                issuedByUserId, now);
         return token;
     }
 
@@ -88,7 +104,7 @@ public class QueueService {
     // would corrupt patient identity; a skipped/duplicate queue number
     // just means someone re-prints a ticket).
     private int nextTokenNumber(UUID facilityId, Instant now) {
-        DayBounds bounds = dayBounds(now);
+        DayBounds bounds = dayBounds(facilityId, now.atZone(facilityZone(facilityId)).toLocalDate());
         long issuedToday = queueTokenRepository.countByFacilityIdAndIssuedAtBetween(facilityId, bounds.startOfDay(),
                 bounds.startOfNextDay());
         return (int) issuedToday + 1;
@@ -98,11 +114,17 @@ public class QueueService {
     // queue, and the full daily list — used to keep those three from
     // silently drifting apart, not because any of them has a stronger
     // timezone requirement than nextTokenNumber() already had.
-    private static DayBounds dayBounds(Instant now) {
-        LocalDate today = now.atZone(ZoneOffset.UTC).toLocalDate();
-        Instant startOfDay = today.atStartOfDay(ZoneOffset.UTC).toInstant();
-        Instant startOfNextDay = today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+    private DayBounds dayBounds(UUID facilityId, LocalDate date) {
+        ZoneId zone = facilityZone(facilityId);
+        Instant startOfDay = date.atStartOfDay(zone).toInstant();
+        Instant startOfNextDay = date.plusDays(1).atStartOfDay(zone).toInstant();
         return new DayBounds(startOfDay, startOfNextDay);
+    }
+
+    private ZoneId facilityZone(UUID facilityId) {
+        String timezone = facilityRepository.findById(facilityId).orElseThrow(FacilityNotFoundException::new)
+                .getTimezone();
+        return ZoneId.of(timezone);
     }
 
     private record DayBounds(Instant startOfDay, Instant startOfNextDay) {
@@ -117,17 +139,31 @@ public class QueueService {
     // existing "accepted N+1" trade-off below: a single facility's daily
     // queue is realistically a handful of people, not a scale where either
     // the N+1 lookup or an in-memory filter matters yet.
-    public List<QueueEntryView> listActiveQueueView(UUID facilityId, String search) {
+    public QueuePageView listQueueView(UUID facilityId, String search, Set<TokenStatus> statuses,
+                                        TokenPriority priority, LocalDate date, int page, int pageSize) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
-        DayBounds bounds = dayBounds(clock.instant());
+        LocalDate selectedDate = date != null ? date : clock.instant().atZone(facilityZone(facilityId)).toLocalDate();
+        DayBounds bounds = dayBounds(facilityId, selectedDate);
         List<QueueEntryView> views = queueTokenRepository
-                .findTodayQueue(facilityId, bounds.startOfDay(), bounds.startOfNextDay()).stream().map(this::toView)
+                .findFacilityDayQueue(facilityId, bounds.startOfDay(), bounds.startOfNextDay()).stream().map(this::toView)
                 .toList();
-        if (!StringUtils.hasText(search)) {
-            return views;
+        if (statuses != null && !statuses.isEmpty()) {
+            views = views.stream().filter(v -> statuses.contains(v.token().getStatus())).toList();
         }
-        String needle = search.trim().toLowerCase();
-        return views.stream().filter(v -> matchesSearch(v, needle)).toList();
+        if (priority != null) {
+            views = views.stream().filter(v -> v.token().getPriority() == priority).toList();
+        }
+        if (StringUtils.hasText(search)) {
+            String needle = search.trim().toLowerCase();
+            views = views.stream().filter(v -> matchesSearch(v, needle)).toList();
+        }
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(pageSize, 1), 100);
+        int totalElements = views.size();
+        int totalPages = totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / safeSize);
+        int from = Math.min(safePage * safeSize, totalElements);
+        int to = Math.min(from + safeSize, totalElements);
+        return new QueuePageView(views.subList(from, to), safePage, safeSize, totalElements, totalPages, selectedDate);
     }
 
     private boolean matchesSearch(QueueEntryView view, String needle) {
@@ -139,11 +175,28 @@ public class QueueService {
     private QueueEntryView toView(QueueToken token) {
         Visit visit = visitRepository.findById(token.getVisitId()).orElseThrow(VisitNotFoundException::new);
         Patient patient = patientService.get(visit.getPatientId());
-        return new QueueEntryView(token, patient.getFirstName() + " " + patient.getLastName(),
+        return new QueueEntryView(token, patient.getId(), patient.getFirstName() + " " + patient.getLastName(),
                 patient.getMpiNumber());
     }
 
-    public record QueueEntryView(QueueToken token, String patientName, String patientMpi) {
+    // patientId — not previously exposed here — is what lets the queue
+    // page's "Vitals" action link straight to a patient's page (and that
+    // patient's specific visit) without the caller having to search for
+    // them by name mid-workflow.
+    public record QueueEntryView(QueueToken token, UUID patientId, String patientName, String patientMpi) {
+    }
+
+    public record QueuePageView(List<QueueEntryView> items, int page, int pageSize, int totalElements,
+                                int totalPages, LocalDate date) {
+    }
+
+    // RECQ-US-003's ticket print/reprint and a future "what happened to
+    // this ticket" view — the normalized event history (V21) for one
+    // token, oldest first.
+    public List<QueueTokenEvent> getTokenHistory(UUID tokenId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        findToken(tokenId);
+        return queueTokenEventRepository.findByTokenIdOrderByOccurredAtAsc(tokenId);
     }
 
     // RECQ-US-004 — "the highest-priority/longest-waiting token for the
@@ -154,17 +207,16 @@ public class QueueService {
     public QueueEntryView callNext(UUID facilityId, UUID calledByUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
         Instant now = clock.instant();
-        DayBounds bounds = dayBounds(now);
-        List<QueueToken> queue =
-                queueTokenRepository.findCallableQueue(facilityId, bounds.startOfDay(), bounds.startOfNextDay());
-        if (queue.isEmpty()) {
-            throw new EmptyQueueException();
-        }
-        QueueToken next = queue.get(0);
+        DayBounds bounds = dayBounds(facilityId, now.atZone(facilityZone(facilityId)).toLocalDate());
+        QueueToken next = queueTokenRepository
+                .claimNextCallable(facilityId, bounds.startOfDay(), bounds.startOfNextDay())
+                .orElseThrow(EmptyQueueException::new);
         next.call(now);
         queueTokenRepository.save(next);
         auditLogService.append(calledByUserId, facilityId, "QUEUE_TOKEN_CALLED", "QueueToken",
                 next.getId().toString(), null, null);
+        recordEvent(next.getId(), QueueTokenEventType.CALLED, TokenStatus.ISSUED, TokenStatus.CALLED, null, null,
+                null, null, calledByUserId, now);
         return toView(next);
     }
 
@@ -177,13 +229,67 @@ public class QueueService {
     // This mutates the existing token's priority only — no new token, no
     // change to issuedAt or status.
     @Transactional
-    public QueueEntryView updatePriority(UUID tokenId, TokenPriority priority, UUID staffUserId) {
+    public QueueEntryView updatePriority(UUID tokenId, TokenPriority priority, QueueActionReason reasonCode,
+                                         String reasonNote, UUID staffUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        validateReason(reasonCode, reasonNote);
         QueueToken token = findToken(tokenId);
+        TokenPriority previous = token.getPriority();
         token.updatePriority(priority);
         queueTokenRepository.save(token);
+        Instant now = clock.instant();
         auditLogService.append(staffUserId, token.getFacilityId(), "QUEUE_TOKEN_PRIORITY_UPDATED", "QueueToken",
                 token.getId().toString(), null, null);
+        recordEvent(token.getId(), QueueTokenEventType.PRIORITY_CHANGED, token.getStatus(), token.getStatus(),
+                previous, priority, reasonCode, reasonNote, staffUserId, now);
+        return toView(token);
+    }
+
+    @Transactional
+    public QueueEntryView callToken(UUID tokenId, QueueActionReason reasonCode, String reasonNote, UUID staffUserId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        QueueToken token = findToken(tokenId);
+        Instant now = clock.instant();
+        DayBounds bounds = dayBounds(token.getFacilityId(), now.atZone(facilityZone(token.getFacilityId())).toLocalDate());
+        List<QueueToken> callable = queueTokenRepository.findCallableQueue(token.getFacilityId(), bounds.startOfDay(),
+                bounds.startOfNextDay());
+        if (callable.isEmpty() || callable.stream().noneMatch(candidate -> candidate.getId().equals(tokenId))) {
+            throw new InvalidTokenTransitionException(token.getStatus(), TokenStatus.CALLED);
+        }
+        boolean bypassedOrder = !callable.get(0).getId().equals(tokenId);
+        if (bypassedOrder) {
+            validateReason(reasonCode, reasonNote);
+        }
+        token.call(now);
+        queueTokenRepository.save(token);
+        auditLogService.append(staffUserId, token.getFacilityId(),
+                bypassedOrder ? "QUEUE_TOKEN_CALLED_OUT_OF_ORDER" : "QUEUE_TOKEN_CALLED", "QueueToken",
+                token.getId().toString(), null, null);
+        recordEvent(token.getId(),
+                bypassedOrder ? QueueTokenEventType.CALLED_OUT_OF_ORDER : QueueTokenEventType.CALLED,
+                TokenStatus.ISSUED, TokenStatus.CALLED, null, null, bypassedOrder ? reasonCode : null,
+                bypassedOrder ? reasonNote : null, staffUserId, now);
+        return toView(token);
+    }
+
+    @Transactional
+    public QueueEntryView reactivate(UUID tokenId, QueueActionReason reasonCode, String reasonNote, UUID staffUserId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        validateReason(reasonCode, reasonNote);
+        QueueToken token = findToken(tokenId);
+        LocalDate today = clock.instant().atZone(facilityZone(token.getFacilityId())).toLocalDate();
+        LocalDate issuedDate = token.getIssuedAt().atZone(facilityZone(token.getFacilityId())).toLocalDate();
+        if (!issuedDate.equals(today)) {
+            throw new InvalidTokenTransitionException(token.getStatus(), TokenStatus.ISSUED);
+        }
+        TokenStatus previousStatus = token.getStatus();
+        token.reactivate();
+        queueTokenRepository.save(token);
+        Instant now = clock.instant();
+        auditLogService.append(staffUserId, token.getFacilityId(), "QUEUE_TOKEN_REACTIVATED", "QueueToken",
+                token.getId().toString(), null, null);
+        recordEvent(token.getId(), QueueTokenEventType.REACTIVATED, previousStatus, TokenStatus.ISSUED, null, null,
+                reasonCode, reasonNote, staffUserId, now);
         return toView(token);
     }
 
@@ -196,25 +302,13 @@ public class QueueService {
     public QueueEntryView markMissed(UUID tokenId, UUID staffUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
         QueueToken token = findToken(tokenId);
-        token.markMissed(clock.instant());
+        Instant now = clock.instant();
+        token.markMissed(now);
         queueTokenRepository.save(token);
         auditLogService.append(staffUserId, token.getFacilityId(), "QUEUE_TOKEN_MISSED", "QueueToken",
                 token.getId().toString(), null, null);
-        return toView(token);
-    }
-
-    // Step two: the patient is back. Recall re-inserts the token as ISSUED
-    // with its original priority and issuedAt untouched — the whole point
-    // being that stepping out doesn't cost them their place to people who
-    // arrived after them.
-    @Transactional
-    public QueueEntryView recall(UUID tokenId, UUID staffUserId) {
-        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
-        QueueToken token = findToken(tokenId);
-        token.recall();
-        queueTokenRepository.save(token);
-        auditLogService.append(staffUserId, token.getFacilityId(), "QUEUE_TOKEN_RECALLED", "QueueToken",
-                token.getId().toString(), null, null);
+        recordEvent(token.getId(), QueueTokenEventType.MISSED, TokenStatus.CALLED, TokenStatus.MISSED, null, null,
+                null, null, staffUserId, now);
         return toView(token);
     }
 
@@ -224,45 +318,127 @@ public class QueueService {
     public QueueEntryView complete(UUID tokenId, UUID staffUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
         QueueToken token = findToken(tokenId);
-        token.complete(clock.instant());
+        Instant now = clock.instant();
+        token.complete(now);
         queueTokenRepository.save(token);
         auditLogService.append(staffUserId, token.getFacilityId(), "QUEUE_TOKEN_COMPLETED", "QueueToken",
                 token.getId().toString(), null, null);
+        recordEvent(token.getId(), QueueTokenEventType.COMPLETED, TokenStatus.CALLED, TokenStatus.COMPLETED, null,
+                null, null, null, staffUserId, now);
         return toView(token);
     }
 
     // RECQ-US-005 — cancellable from ISSUED, CALLED, or MISSED; the reason
     // is mandatory (validated at the controller) and stored on the token
-    // itself as well as the audit trail, so "why was this cancelled" never
-    // depends on cross-referencing the log separately.
+    // itself (current-episode snapshot, cancel_reason) as well as this
+    // token's own event history — never as a JSON blob shoved into the
+    // generic audit_log the way this used to work (a real bug: audit_log's
+    // before/after_value are jsonb, and a raw string there failed the
+    // insert outright). The properly normalized event row replaces that
+    // workaround entirely.
     @Transactional
     public QueueEntryView cancel(UUID tokenId, String reason, UUID staffUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
         QueueToken token = findToken(tokenId);
-        token.cancel(clock.instant(), reason, staffUserId);
+        TokenStatus previousStatus = token.getStatus();
+        Instant now = clock.instant();
+        token.cancel(now, reason, staffUserId);
         queueTokenRepository.save(token);
         auditLogService.append(staffUserId, token.getFacilityId(), "QUEUE_TOKEN_CANCELLED", "QueueToken",
-                token.getId().toString(), null, serializeCancelReason(reason));
+                token.getId().toString(), null, null);
+        recordEvent(token.getId(), QueueTokenEventType.CANCELLED, previousStatus, TokenStatus.CANCELLED, null, null,
+                null, reason, staffUserId, now);
         return toView(token);
+    }
+
+    // A cross-facility transfer, not a new status: reuses cancel()'s exact
+    // guard (ISSUED, CALLED, or MISSED — terminal tokens can't be
+    // transferred any more than they can be cancelled) rather than teaching
+    // QueueToken a new transition, since "this token is done, a new one
+    // exists elsewhere" is exactly what cancel-and-reissue already means.
+    // The destination gets a genuinely new Visit (Visit.facilityId is
+    // immutable, and QueueToken.facilityId is denormalized from it — see
+    // both entities' own why-notes) linked back via
+    // Visit.transferredFromVisitId, and a fresh token/token-number in the
+    // destination facility's own daily sequence.
+    @Transactional
+    public QueueEntryView transferToken(UUID tokenId, UUID destinationFacilityId, String reason, UUID staffUserId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        QueueToken token = findToken(tokenId);
+        if (destinationFacilityId.equals(token.getFacilityId())) {
+            throw new InvalidTransferException();
+        }
+        var destinationFacility = facilityRepository.findById(destinationFacilityId)
+                .orElseThrow(FacilityNotFoundException::new);
+        Visit originVisit = visitRepository.findById(token.getVisitId()).orElseThrow(VisitNotFoundException::new);
+
+        TokenStatus previousStatus = token.getStatus();
+        Instant now = clock.instant();
+        String cancelReason = "Transferred to " + destinationFacility.getName()
+                + (StringUtils.hasText(reason) ? ": " + reason : "");
+        token.cancel(now, cancelReason, staffUserId);
+        queueTokenRepository.save(token);
+        auditLogService.append(staffUserId, token.getFacilityId(), "QUEUE_TOKEN_TRANSFERRED_OUT", "QueueToken",
+                token.getId().toString(), null, null);
+        recordEvent(token.getId(), QueueTokenEventType.TRANSFERRED_OUT, previousStatus, TokenStatus.CANCELLED, null,
+                null, null, cancelReason, staffUserId, now);
+
+        Visit destinationVisit = new Visit(originVisit.getPatientId(), destinationFacilityId,
+                originVisit.getVisitType(), originVisit.getServiceStream(), now, staffUserId, originVisit.getId());
+        visitRepository.save(destinationVisit);
+        QueueToken newToken = issue(destinationVisit, token.getPriority(), true, staffUserId,
+                QueueTokenEventType.TRANSFERRED_IN, "Transferred from token #" + token.getTokenNumber());
+        auditLogService.append(staffUserId, destinationFacilityId, "QUEUE_TOKEN_TRANSFERRED_IN", "QueueToken",
+                newToken.getId().toString(), null, null);
+
+        return toView(newToken);
+    }
+
+    // ConsultationService.sign()'s "Send to pharmacy" outcome — resolves
+    // whichever token belongs to this visit (there's no visitId index on
+    // the everyday facility/day-scoped queue queries, see
+    // QueueTokenRepository's own why-note) and delegates to transferToken()
+    // above, the same cross-facility transfer staff already use manually
+    // from a visible queue row. An already-terminal token (already
+    // completed/cancelled/transferred) fails here exactly the way a
+    // staff-initiated transfer of a terminal token already would —
+    // QueueToken.cancel()'s own transition guard, not a separate check.
+    @Transactional
+    public QueueEntryView transferVisitToFacility(UUID visitId, UUID destinationFacilityId, String reason,
+                                                   UUID staffUserId) {
+        QueueToken token = queueTokenRepository.findFirstByVisitIdOrderByIssuedAtDesc(visitId)
+                .orElseThrow(QueueTokenNotFoundException::new);
+        return transferToken(token.getId(), destinationFacilityId, reason, staffUserId);
     }
 
     private QueueToken findToken(UUID tokenId) {
         return queueTokenRepository.findById(tokenId).orElseThrow(QueueTokenNotFoundException::new);
     }
 
-    // audit_log.after_value is jsonb (AuthService.serializeLoginState()'s
-    // own why-note) — a raw plain-text reason would fail the insert with
-    // "invalid input syntax for type json", not silently truncate. Same
-    // swallow-on-failure fallback as that method: a malformed audit detail
-    // shouldn't block the cancellation itself.
-    private String serializeCancelReason(String reason) {
-        try {
-            return objectMapper.writeValueAsString(new CancelReasonSnapshot(reason));
-        } catch (JsonProcessingException e) {
-            return null;
+    // RECQ-US-003's ticket print/reprint — the queue page's "Print" button
+    // and the "Visit started" success screen both need to fetch one
+    // specific token's full details (patient name/MPI included) by id, not
+    // a facility-wide list.
+    public QueueEntryView getToken(UUID tokenId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        return toView(findToken(tokenId));
+    }
+
+    private void validateReason(QueueActionReason reasonCode, String reasonNote) {
+        if (reasonCode == null || (reasonCode == QueueActionReason.OTHER && !StringUtils.hasText(reasonNote))) {
+            throw new InvalidQueueReasonException();
         }
     }
 
-    private record CancelReasonSnapshot(String reason) {
+    // The single write path for queue_token_events — every transition
+    // method above calls this rather than constructing QueueTokenEvent
+    // directly, same discipline AuditLogService.append() already
+    // establishes for the generic audit trail.
+    private void recordEvent(UUID tokenId, QueueTokenEventType eventType, TokenStatus fromStatus,
+                              TokenStatus toStatus, TokenPriority fromPriority, TokenPriority toPriority,
+                              QueueActionReason reasonCode, String reasonNote, UUID performedByUserId,
+                              Instant occurredAt) {
+        queueTokenEventRepository.save(new QueueTokenEvent(tokenId, eventType, fromStatus, toStatus, fromPriority,
+                toPriority, reasonCode, reasonNote, performedByUserId, occurredAt));
     }
 }

@@ -111,6 +111,14 @@ public class DevSeedDataRunner implements ApplicationRunner {
                 "12 Cradle Street, Johannesburg", "+27115550101", "Mon-Fri 07:00-17:00");
         Facility satelliteClinic = facilityService.create("Demo Satellite Clinic", "DEMO-02", FacilityType.CLINIC,
                 "44 Baobab Avenue, Soweto", "+27115550102", "Mon-Fri 08:00-16:00");
+        // A genuinely separate destination for ConsultationService's "Send
+        // to pharmacy" outcome (co.ehealth.platform.consultation) — distinct
+        // from the pharmacist staff member seeded below, who dispenses from
+        // the clinic itself under today's PrescriptionService model. This
+        // facility is what a signed consultation's queue-token transfer
+        // actually targets.
+        facilityService.create("Demo Pharmacy", "DEMO-PH", FacilityType.PHARMACY,
+                "12 Cradle Street, Johannesburg", "+27115550103", "Mon-Fri 08:00-17:00");
 
         UUID doctorId = createStaffMember(mainClinic.getId(), "Doctor", "Sipho", "Mahlangu",
                 "EMP-1001", "8501015800083", "s.mahlangu@democlinic.example", "+27821234502",
@@ -180,7 +188,7 @@ public class DevSeedDataRunner implements ApplicationRunner {
                                   String medicalAidNumber, UUID registeredByUserId) {
         String idNumber = southAfricanIdNumber(dateOfBirth, genderSequence);
         patientService.register(new PatientService.RegisterPatientCommand(
-                firstName, lastName, idNumber, address, contactNumber, medicalAidProvider, medicalAidNumber,
+                firstName, lastName, idNumber, address, contactNumber, null, medicalAidProvider, medicalAidNumber,
                 null, null),
                 registeredByUserId);
     }

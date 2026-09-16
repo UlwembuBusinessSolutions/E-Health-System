@@ -57,6 +57,11 @@ public class PlatformAuthService {
         maybeOperator.ifPresent(operator -> autoUnlockIfExpired(operator, now));
 
         if (maybeOperator.isPresent() && maybeOperator.get().getStatus() == PlatformOperatorStatus.LOCKED) {
+            // Denied, not failed: no password was even checked. Attributed
+            // to the real operator id — unlike the unknown-email branch
+            // below, this account definitely exists.
+            platformAuditLogRepository.save(new PlatformAuditLog(maybeOperator.get().getId(),
+                    "PLATFORM_OPERATOR_LOGIN_DENIED", null, "Attempted login while locked", now));
             throw new AccountLockedException(remainingLockoutSeconds(maybeOperator.get(), now));
         }
 
@@ -65,8 +70,22 @@ public class PlatformAuthService {
 
         if (maybeOperator.isEmpty() || !passwordMatches
                 || maybeOperator.get().getStatus() != PlatformOperatorStatus.ACTIVE) {
+            // The one write path here that can run with no real operator id
+            // at all — an unknown email leaves platformOperatorId null
+            // (PlatformAuditLog's own why-note), which is honest: inventing
+            // one would misattribute the attempt, and silence would hide
+            // exactly the account-enumeration probing this exists to catch.
+            String detail = maybeOperator.isEmpty() ? "email: " + email : null;
+            platformAuditLogRepository.save(new PlatformAuditLog(
+                    maybeOperator.map(PlatformOperator::getId).orElse(null),
+                    "PLATFORM_OPERATOR_LOGIN_FAILED", null, detail, now));
             maybeOperator.filter(operator -> operator.getStatus() != PlatformOperatorStatus.DISABLED)
                     .ifPresent(operator -> registerFailedAttempt(operator, now));
+            if (maybeOperator.isPresent() && maybeOperator.get().getStatus() == PlatformOperatorStatus.LOCKED) {
+                platformAuditLogRepository.save(new PlatformAuditLog(maybeOperator.get().getId(),
+                        "PLATFORM_OPERATOR_LOCKED", null,
+                        "failedLoginCount: " + maybeOperator.get().getFailedLoginCount(), now));
+            }
             throw new InvalidCredentialsException();
         }
 

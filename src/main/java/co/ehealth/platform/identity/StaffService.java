@@ -148,13 +148,14 @@ public class StaffService {
         return userRepository.findAll().stream()
                 .map(u -> new StaffRosterEntry(u.getId(), u.getEmployeeNumber(), u.getFirstName(), u.getLastName(),
                         u.getEmail(), u.getContactNumber(), userRepository.findRoleNames(u.getId()),
-                        u.getFacilityId(), u.getStatus(), u.getLastLoginAt()))
+                        u.getFacilityId(), u.getStatus(), u.getLastLoginAt(), u.getEmploymentType(),
+                        u.getEmploymentEndDate()))
                 .toList();
     }
 
     public record StaffRosterEntry(UUID id, String employeeNumber, String firstName, String lastName, String email,
                                     String contactNumber, List<String> roles, UUID facilityId, UserStatus status,
-                                    Instant lastLoginAt) {
+                                    Instant lastLoginAt, EmploymentType employmentType, LocalDate employmentEndDate) {
     }
 
     // PHRM-US-009: "Restrict prescribing/dispensing to licensed users ...
@@ -277,6 +278,23 @@ public class StaffService {
         user.setStatus(UserStatus.DISABLED);
         userRepository.save(user);
         auditLogService.append(actingAdminId, user.getFacilityId(), "STAFF_OFFBOARDED",
+                "User", userId.toString(), null, null);
+    }
+
+    // Changing someone's contract type (permanent/contract/intern/etc.) after
+    // hiring — createStaff() only ever sets this once, at creation, and
+    // there was previously no way to correct or update it afterwards (a
+    // secondment ending, a contract converting to permanent, and so on).
+    // Deliberately doesn't touch UserStatus or employmentEndDate either way
+    // — same "one lever per real-world fact" reasoning as offboardStaff()
+    // and setEnabled() above.
+    @Transactional
+    public void updateEmploymentType(UUID userId, EmploymentType employmentType, UUID actingAdminId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
+        user.setEmploymentType(employmentType);
+        userRepository.save(user);
+        auditLogService.append(actingAdminId, user.getFacilityId(), "STAFF_EMPLOYMENT_TYPE_CHANGED",
                 "User", userId.toString(), null, null);
     }
 

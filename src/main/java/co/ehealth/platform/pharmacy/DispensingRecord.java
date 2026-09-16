@@ -9,9 +9,9 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
-// One row per dispensed prescription — prescriptionId is unique because
-// this slice dispenses in full or not at all (Prescription's own why-note),
-// so there's never more than one DispensingRecord per prescription yet.
+// One row per dispensed prescription ITEM — prescriptionItemId is unique
+// because once dispensed, an item is terminal and can never be dispensed a
+// second time (PrescriptionItem's own why-note).
 @Entity
 @Table(name = "dispensing_records")
 public class DispensingRecord {
@@ -20,8 +20,8 @@ public class DispensingRecord {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "prescription_id", nullable = false, unique = true)
-    private UUID prescriptionId;
+    @Column(name = "prescription_item_id", nullable = false, unique = true)
+    private UUID prescriptionItemId;
 
     @Column(name = "dispensed_by_user_id", nullable = false)
     private UUID dispensedByUserId;
@@ -32,8 +32,8 @@ public class DispensingRecord {
     protected DispensingRecord() {
     }
 
-    public DispensingRecord(UUID prescriptionId, UUID dispensedByUserId, Instant dispensedAt) {
-        this.prescriptionId = prescriptionId;
+    public DispensingRecord(UUID prescriptionItemId, UUID dispensedByUserId, Instant dispensedAt) {
+        this.prescriptionItemId = prescriptionItemId;
         this.dispensedByUserId = dispensedByUserId;
         this.dispensedAt = dispensedAt;
     }
@@ -42,8 +42,8 @@ public class DispensingRecord {
         return id;
     }
 
-    public UUID getPrescriptionId() {
-        return prescriptionId;
+    public UUID getPrescriptionItemId() {
+        return prescriptionItemId;
     }
 
     public UUID getDispensedByUserId() {

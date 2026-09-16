@@ -105,6 +105,7 @@ public class QueueToken {
 
     // RECQ-US-004 — "Called" status + call time recorded.
     public void call(Instant at) {
+        requireStatus(TokenStatus.ISSUED, TokenStatus.CALLED);
         this.status = TokenStatus.CALLED;
         this.calledAt = at;
     }
@@ -118,13 +119,23 @@ public class QueueToken {
         this.missedAt = at;
     }
 
-    // The out-and-back recall (queue-appointments-plan.md §3.8) — moves
+    // The out-and-back scenario (queue-appointments-plan.md §3.8) — moves
     // straight back to ISSUED without touching priority or issuedAt, so a
-    // patient who stepped out regains exactly the place they'd have had if
-    // they'd never missed the call. Only valid from MISSED.
-    public void recall() {
-        requireStatus(TokenStatus.MISSED, TokenStatus.ISSUED);
+    // patient who stepped out (MISSED) or was cancelled in error
+    // (CANCELLED) regains exactly the place they'd have had otherwise.
+    // Supersedes an earlier recall() that only handled MISSED->ISSUED with
+    // no reason captured — removed rather than kept alongside this, since
+    // two ways to do the same thing is exactly the kind of thing that
+    // drifts out of sync with itself over time.
+    public void reactivate() {
+        if (status != TokenStatus.MISSED && status != TokenStatus.CANCELLED) {
+            throw new InvalidTokenTransitionException(status, TokenStatus.ISSUED);
+        }
         this.status = TokenStatus.ISSUED;
+        this.missedAt = null;
+        this.cancelledAt = null;
+        this.cancelReason = null;
+        this.cancelledByUserId = null;
     }
 
     // RECQ-US-005 — service finished. Only valid from CALLED: a token has

@@ -3,8 +3,14 @@ package co.ehealth.platform.core.tenant;
 // Request-scoped current tenant schema name. Read-only outside this
 // package by convention — TenantFilter is the only thing that ever calls
 // setCurrentTenant()/clear() as part of the normal request lifecycle;
-// OrganizationProvisioningService is the one deliberate exception, since it
-// runs before any request has been routed to a tenant at all.
+// OrganizationProvisioningService is one deliberate exception, since it runs
+// before any request has been routed to a tenant at all. patient.PatientMigrationService
+// is a second, different kind of exception: it runs mid-request, already
+// tenant-A-scoped, and switches to tenant B and back — every call there
+// restores the origin schema via setCurrentTenant() in its own finally
+// rather than calling clear(), since the request is still origin-tenant-
+// authenticated and TenantFilter's own outer finally clears it
+// unconditionally at the true end of the request regardless.
 public final class TenantContext {
 
     private static final ThreadLocal<String> CURRENT_TENANT = new ThreadLocal<>();

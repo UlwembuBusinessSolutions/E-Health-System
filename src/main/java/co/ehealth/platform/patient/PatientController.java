@@ -1,6 +1,8 @@
 package co.ehealth.platform.patient;
 
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
+import co.ehealth.platform.core.tenant.Organization;
+import co.ehealth.platform.facility.Facility;
 import co.ehealth.platform.identity.Gender;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -41,22 +43,26 @@ public class PatientController {
     private final PatientService patientService;
     private final PatientDocumentService patientDocumentService;
     private final PatientGuardianService patientGuardianService;
+    private final PatientMigrationService patientMigrationService;
 
     public PatientController(PatientService patientService, PatientDocumentService patientDocumentService,
-                              PatientGuardianService patientGuardianService) {
+                              PatientGuardianService patientGuardianService,
+                              PatientMigrationService patientMigrationService) {
         this.patientService = patientService;
         this.patientDocumentService = patientDocumentService;
         this.patientGuardianService = patientGuardianService;
+        this.patientMigrationService = patientMigrationService;
     }
 
     @PostMapping("/api/v1/patients")
     public ResponseEntity<PatientSummary> register(@Valid @RequestBody RegisterPatientRequest request,
                                                      @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         var command = new PatientService.RegisterPatientCommand(request.firstName(), request.lastName(),
-                request.idNumber(), request.address(), request.contactNumber(), request.medicalAidProvider(),
-                request.medicalAidNumber(), request.passportNumber(), request.passportExpiry());
+                request.idNumber(), request.address(), request.contactNumber(), request.email(),
+                request.medicalAidProvider(), request.medicalAidNumber(), request.passportNumber(),
+                request.passportExpiry());
         Patient patient = patientService.register(command, staff.userId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(PatientSummary.from(patient));
+        return ResponseEntity.status(HttpStatus.CREATED).body(PatientSummary.from(patient, false));
     }
 
     // Multipart, not JSON — same reasoning as StaffController.uploadPhoto():
@@ -154,7 +160,11 @@ public class PatientController {
             @RequestParam(required = false) String createdFrom, @RequestParam(required = false) String createdTo) {
         Page<Patient> result = patientService.list(page, size, sortBy, sortDir, gender, medicalAid, mpiNumber,
                 citizenship, createdFrom, createdTo);
-        List<PatientSummary> items = result.getContent().stream().map(PatientSummary::from).toList();
+        // Never migrated=true here — findFiltered() already excludes
+        // archived patients, and a migrated patient is always archived
+        // (PatientMigrationService.migrate()'s own why-note), so it's cheap
+        // to skip the existsByPatientId() check that get() below has to make.
+        List<PatientSummary> items = result.getContent().stream().map(p -> PatientSummary.from(p, false)).toList();
         Map<String, Object> body = Map.of(
                 "items", items,
                 "page", result.getNumber(),
@@ -168,13 +178,20 @@ public class PatientController {
     // roster; PatientService.search()'s own why-note.
     @GetMapping("/api/v1/patients/search")
     public ResponseEntity<Map<String, Object>> search(@RequestParam(required = false) String q) {
-        List<PatientSummary> items = patientService.search(q).stream().map(PatientSummary::from).toList();
+        // Same "never migrated=true" reasoning as list() above — search()
+        // excludes archived patients too.
+        List<PatientSummary> items = patientService.search(q).stream().map(p -> PatientSummary.from(p, false)).toList();
         return ResponseEntity.ok(Map.of("items", items));
     }
 
+    // The one PatientSummary caller that actually checks migration status —
+    // PatientDetailPage's own single-record view is where the "Migrated to…"
+    // banner (in place of the normal edit view) needs to render.
     @GetMapping("/api/v1/patients/{id}")
     public ResponseEntity<PatientSummary> get(@PathVariable UUID id) {
-        return ResponseEntity.ok(PatientSummary.from(patientService.get(id)));
+        Patient patient = patientService.get(id);
+        boolean migrated = patient.isArchived() && patientMigrationService.isMigrated(id);
+        return ResponseEntity.ok(PatientSummary.from(patient, migrated));
     }
 
     // Admin-only — the one action on this controller that IS admin
@@ -191,10 +208,10 @@ public class PatientController {
                                                    @Valid @RequestBody UpdatePatientRequest request,
                                                    @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         var command = new PatientService.UpdatePatientCommand(request.firstName(), request.lastName(),
-                request.address(), request.contactNumber(), request.medicalAidProvider(),
+                request.address(), request.contactNumber(), request.email(), request.medicalAidProvider(),
                 request.medicalAidNumber(), request.passportNumber(), request.passportExpiry(), request.reason());
         Patient patient = patientService.update(id, command, staff.userId());
-        return ResponseEntity.ok(PatientSummary.from(patient));
+        return ResponseEntity.ok(PatientSummary.from(patient, false));
     }
 
     // The read half of PREG-US-016 AC1 — without this, an append-only
@@ -217,7 +234,57 @@ public class PatientController {
                                                     @Valid @RequestBody ArchivePatientRequest request,
                                                     @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         Patient patient = patientService.archive(id, request.reason(), request.deceasedDate(), staff.userId());
-        return ResponseEntity.ok(PatientSummary.from(patient));
+        return ResponseEntity.ok(PatientSummary.from(patient, false));
+    }
+
+    // Cross-tenant patient migration's destination picker — id + displayName
+    // only, never slug/schemaName/sector: the narrowest slice of another
+    // tenant's existence this feature needs to expose to ordinary (ORG_ADMIN)
+    // tenant staff, who today have zero visibility into other tenants at all.
+    @GetMapping("/api/v1/admin/migration/organizations")
+    public ResponseEntity<Map<String, Object>> listMigrationDestinationOrganizations() {
+        List<MigrationOrganizationSummary> items = patientMigrationService.listDestinationOrganizations().stream()
+                .map(MigrationOrganizationSummary::from).toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    @GetMapping("/api/v1/admin/migration/organizations/{organizationId}/facilities")
+    public ResponseEntity<Map<String, Object>> listMigrationDestinationFacilities(
+            @PathVariable UUID organizationId) {
+        List<MigrationFacilitySummary> items = patientMigrationService.listDestinationFacilities(organizationId)
+                .stream().map(MigrationFacilitySummary::from).toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    // The migration itself — see PatientMigrationService.migrate()'s own
+    // why-note for the full cross-tenant flow this kicks off.
+    @PostMapping("/api/v1/admin/patients/{id}/migrate")
+    public ResponseEntity<MigrationResultResponse> migrate(@PathVariable UUID id,
+                                                             @Valid @RequestBody MigratePatientRequest request,
+                                                             @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        var command = new PatientMigrationService.MigratePatientCommand(request.destinationOrganizationId(),
+                request.destinationFacilityId(), request.reason());
+        PatientMigrationService.MigrationResult result = patientMigrationService.migrate(id, command, staff.userId());
+        return ResponseEntity.ok(MigrationResultResponse.from(result));
+    }
+
+    // The origin tenant's "full ongoing access" read — see
+    // PatientMigrationService.getDestinationView()'s own why-note for why
+    // this is safe: {id} only ever resolves within the caller's own schema,
+    // and a real patient_migrations row for this exact patient is also
+    // required, so there's no way to point this endpoint at an arbitrary
+    // other tenant's data.
+    @GetMapping("/api/v1/admin/patients/{id}/migration/destination-view")
+    public ResponseEntity<MigrationDestinationViewResponse> getMigrationDestinationView(@PathVariable UUID id) {
+        PatientMigrationService.DestinationView view = patientMigrationService.getDestinationView(id);
+        return ResponseEntity.ok(MigrationDestinationViewResponse.from(view));
+    }
+
+    @GetMapping("/api/v1/admin/patients/{id}/migration/destination-view/documents/{documentId}/download-url")
+    public ResponseEntity<Map<String, String>> getMigrationDestinationDocumentDownloadUrl(@PathVariable UUID id,
+                                                                                             @PathVariable UUID documentId) {
+        String url = patientMigrationService.getDestinationDocumentDownloadUrl(id, documentId);
+        return ResponseEntity.ok(Map.of("url", url));
     }
 
     public record RegisterPatientRequest(
@@ -225,6 +292,10 @@ public class PatientController {
             @NotBlank @Pattern(regexp = "^\\d{13}$", message = "ID number must be 13 digits") String idNumber,
             @NotBlank String address,
             @NotBlank @Pattern(regexp = "^\\+?[0-9]{9,15}$") String contactNumber,
+            // Optional — cross-tenant patient migration's own notification
+            // email is the first thing that actually reads this; nothing
+            // required it at registration before that feature existed.
+            @Email String email,
             String medicalAidProvider, String medicalAidNumber,
             // Supplementary — see Patient.passportNumber's own why-note.
             // Loosely validated (length only): passport number formats vary
@@ -236,19 +307,22 @@ public class PatientController {
     // idNumber is included, not masked — reception/admin staff handle ID
     // numbers routinely as part of registration and lookup, unlike a
     // password hash there's no leaked-credential risk in returning it back
-    // to the same tenant's own authenticated staff.
+    // to the same tenant's own authenticated staff. migrated is computed by
+    // the caller (get() below), not stored on Patient itself — see that
+    // method's own why-note.
     public record PatientSummary(UUID id, String mpiNumber, String firstName, String lastName,
                                   LocalDate dateOfBirth, Gender gender, CitizenshipStatus citizenshipStatus,
-                                  String idNumber, String address, String contactNumber, String medicalAidProvider,
-                                  String medicalAidNumber, String passportNumber, LocalDate passportExpiry,
-                                  Instant createdAt, boolean archived, String archivedReason, Instant archivedAt,
-                                  LocalDate deceasedDate) {
-        static PatientSummary from(Patient p) {
+                                  String idNumber, String address, String contactNumber, String email,
+                                  String medicalAidProvider, String medicalAidNumber, String passportNumber,
+                                  LocalDate passportExpiry, Instant createdAt, boolean archived,
+                                  String archivedReason, Instant archivedAt, LocalDate deceasedDate,
+                                  boolean migrated) {
+        static PatientSummary from(Patient p, boolean migrated) {
             return new PatientSummary(p.getId(), p.getMpiNumber(), p.getFirstName(), p.getLastName(),
                     p.getDateOfBirth(), p.getGender(), p.getCitizenshipStatus(), p.getIdNumber(), p.getAddress(),
-                    p.getContactNumber(), p.getMedicalAidProvider(), p.getMedicalAidNumber(), p.getPassportNumber(),
-                    p.getPassportExpiry(), p.getCreatedAt(), p.isArchived(), p.getArchivedReason(),
-                    p.getArchivedAt(), p.getDeceasedDate());
+                    p.getContactNumber(), p.getEmail(), p.getMedicalAidProvider(), p.getMedicalAidNumber(),
+                    p.getPassportNumber(), p.getPassportExpiry(), p.getCreatedAt(), p.isArchived(),
+                    p.getArchivedReason(), p.getArchivedAt(), p.getDeceasedDate(), migrated);
         }
     }
 
@@ -291,10 +365,52 @@ public class PatientController {
     // classify "clinically significant" fields per PREG-US-016 AC3).
     public record UpdatePatientRequest(
             @NotBlank String firstName, @NotBlank String lastName, @NotBlank String address,
-            @NotBlank @Pattern(regexp = "^\\+?[0-9]{9,15}$") String contactNumber,
+            @NotBlank @Pattern(regexp = "^\\+?[0-9]{9,15}$") String contactNumber, @Email String email,
             String medicalAidProvider, String medicalAidNumber,
             @Size(max = 20) String passportNumber, LocalDate passportExpiry,
             @NotBlank String reason) {
+    }
+
+    // Cross-tenant patient migration's destination picker — see
+    // listMigrationDestinationOrganizations()'s own why-note on why this is
+    // deliberately narrower than PlatformController's own OrganizationSummary.
+    public record MigrationOrganizationSummary(UUID id, String displayName) {
+        static MigrationOrganizationSummary from(Organization organization) {
+            return new MigrationOrganizationSummary(organization.getId(), organization.getDisplayName());
+        }
+    }
+
+    public record MigrationFacilitySummary(UUID id, String name) {
+        static MigrationFacilitySummary from(Facility facility) {
+            return new MigrationFacilitySummary(facility.getId(), facility.getName());
+        }
+    }
+
+    public record MigratePatientRequest(@NotNull UUID destinationOrganizationId,
+                                         @NotNull UUID destinationFacilityId, @NotBlank String reason) {
+    }
+
+    public record MigrationResultResponse(UUID destinationPatientId, String destinationMpiNumber) {
+        static MigrationResultResponse from(PatientMigrationService.MigrationResult result) {
+            return new MigrationResultResponse(result.destinationPatientId(), result.destinationMpiNumber());
+        }
+    }
+
+    // The origin tenant's "full ongoing access" view — patient is the same
+    // PatientSummary shape as every other patient response (migrated is
+    // always false here: this IS the destination record, it hasn't itself
+    // been migrated anywhere), documents reuse PatientDocumentSummary.
+    // Deliberately no visits/vitals/prescriptions field — decision #2's own
+    // "fresh clinical history" line already draws this boundary.
+    public record MigrationDestinationViewResponse(PatientSummary patient, List<PatientDocumentSummary> documents,
+                                                     String destinationOrganizationDisplayName,
+                                                     String destinationFacilityName) {
+        static MigrationDestinationViewResponse from(PatientMigrationService.DestinationView view) {
+            List<PatientDocumentSummary> documents =
+                    view.documents().stream().map(PatientDocumentSummary::from).toList();
+            return new MigrationDestinationViewResponse(PatientSummary.from(view.patient(), false), documents,
+                    view.destinationOrganizationDisplayName(), view.destinationFacilityName());
+        }
     }
 
     public record FieldHistoryEntry(UUID id, String fieldName, String oldValue, String newValue, String reason,

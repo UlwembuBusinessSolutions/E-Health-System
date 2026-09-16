@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 // Deliberately no delete(...) call site anywhere in this codebase and no
@@ -17,6 +18,12 @@ import java.util.UUID;
 public interface PatientRepository extends JpaRepository<Patient, UUID> {
 
     boolean existsByIdNumber(String idNumber);
+
+    // PatientMigrationWriter's "returning patient" check — id_number is
+    // tenant-wide UNIQUE (V8__patients.sql), never released on archive (no
+    // delete anywhere in this module), so a hit here can only be this exact
+    // person's own earlier record at this tenant.
+    Optional<Patient> findByIdNumber(String idNumber);
 
     // PatientService.register()'s MPI source — a real Postgres sequence,
     // not an application-side max()+1 or UUID substring: concurrent

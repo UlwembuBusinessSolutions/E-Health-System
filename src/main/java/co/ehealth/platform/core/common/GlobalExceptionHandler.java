@@ -1,5 +1,8 @@
 package co.ehealth.platform.core.common;
 
+import co.ehealth.platform.consultation.ConsultationNotFoundException;
+import co.ehealth.platform.consultation.InvalidConsultationException;
+import co.ehealth.platform.consultation.InvalidConsultationStateException;
 import co.ehealth.platform.core.security.InvalidTokenException;
 import co.ehealth.platform.identity.AccountLockedException;
 import co.ehealth.platform.identity.DuplicateFieldException;
@@ -7,6 +10,7 @@ import co.ehealth.platform.identity.InvalidCredentialsException;
 import co.ehealth.platform.identity.InvalidResetCodeException;
 import co.ehealth.platform.identity.LastRemainingAdminException;
 import co.ehealth.platform.identity.NotAnOrgAdminException;
+import co.ehealth.platform.identity.NotAClinicalRoleException;
 import co.ehealth.platform.identity.NotAuthorizedException;
 import co.ehealth.platform.identity.RateLimitExceededException;
 import co.ehealth.platform.platform.FoundationModuleException;
@@ -15,20 +19,30 @@ import co.ehealth.platform.platform.OrganizationNotFoundException;
 import co.ehealth.platform.platform.OrganizationSuspendedException;
 import co.ehealth.platform.platform.PlatformOperatorNotFoundException;
 import co.ehealth.platform.patient.InvalidIdNumberException;
+import co.ehealth.platform.patient.InvalidMigrationDestinationException;
+import co.ehealth.platform.patient.MigrationNotFoundException;
 import co.ehealth.platform.patient.PatientAlreadyArchivedException;
+import co.ehealth.platform.patient.PatientAlreadyExistsAtDestinationException;
 import co.ehealth.platform.patient.PatientArchivedException;
 import co.ehealth.platform.patient.PatientDocumentNotFoundException;
 import co.ehealth.platform.patient.PatientGuardianNotFoundException;
 import co.ehealth.platform.patient.PatientNotFoundException;
 import co.ehealth.platform.patient.TooManyGuardiansException;
 import co.ehealth.platform.facility.FacilityNotFoundException;
+import co.ehealth.platform.facility.PharmacyFacilityNotConfiguredException;
 import co.ehealth.platform.pharmacy.NotLicensedException;
 import co.ehealth.platform.pharmacy.PrescriptionAlreadyDispensedException;
+import co.ehealth.platform.pharmacy.InvalidPrescriberMessageException;
+import co.ehealth.platform.pharmacy.PrescriptionItemNotFoundException;
 import co.ehealth.platform.pharmacy.PrescriptionNotFoundException;
 import co.ehealth.platform.visit.EmptyQueueException;
 import co.ehealth.platform.visit.InvalidTokenTransitionException;
+import co.ehealth.platform.visit.InvalidQueueReasonException;
+import co.ehealth.platform.visit.InvalidTransferException;
 import co.ehealth.platform.visit.QueueTokenNotFoundException;
 import co.ehealth.platform.visit.VisitNotFoundException;
+import co.ehealth.platform.triage.InvalidTriageCaptureException;
+import co.ehealth.platform.triage.TriageAssessmentNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -266,9 +280,41 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
+    // PatientMigrationService — the chosen destination organization/facility
+    // isn't available (unknown, suspended, or the caller's own tenant). A
+    // client input problem, not a server error.
+    @ExceptionHandler(InvalidMigrationDestinationException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidMigrationDestination(InvalidMigrationDestinationException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // PatientMigrationService.getDestinationView() — this patient exists but
+    // was never migrated out. Same shape as PatientNotFoundException.
+    @ExceptionHandler(MigrationNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleMigrationNotFound(MigrationNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // PatientMigrationWriter.writeDestination() — a specific, actionable
+    // message in place of the generic DataIntegrityViolationException 409
+    // this would otherwise fall through to on the id_number UNIQUE
+    // constraint (this handler runs first since it's the more specific
+    // type).
+    @ExceptionHandler(PatientAlreadyExistsAtDestinationException.class)
+    public ResponseEntity<ApiErrorResponse> handlePatientAlreadyExistsAtDestination(
+            PatientAlreadyExistsAtDestinationException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     @ExceptionHandler(FacilityNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleFacilityNotFound(FacilityNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PharmacyFacilityNotConfiguredException.class)
+    public ResponseEntity<ApiErrorResponse> handlePharmacyFacilityNotConfigured(
+            PharmacyFacilityNotConfiguredException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(VisitNotFoundException.class)
@@ -301,6 +347,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
+    @ExceptionHandler(InvalidQueueReasonException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidQueueReason(InvalidQueueReasonException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // QueueService.transferToken() — destination facility chosen is the same
+    // one the token is already at.
+    @ExceptionHandler(InvalidTransferException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidTransfer(InvalidTransferException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     // PHRM-US-009 — the acting user lacks a current, non-expired
     // professional registration for the action they're attempting. 403,
     // not 409/401: they're correctly authenticated and the target resource
@@ -318,14 +376,69 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
+    // TriageService — holds RECQ:MANAGE but isn't one of the specific
+    // clinical roles allowed to capture/correct triage data (a Queue
+    // Marshall or Admin Staff, say). Same 403 shape as NotAuthorizedException
+    // above, same reasoning: a role mismatch, not a missing resource.
+    @ExceptionHandler(NotAClinicalRoleException.class)
+    public ResponseEntity<ApiErrorResponse> handleNotAClinicalRole(NotAClinicalRoleException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(TriageAssessmentNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleTriageAssessmentNotFound(TriageAssessmentNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // TriageService's capture-time validation — an emergency capture with
+    // no note, an incomplete non-emergency vitals set, or a correction
+    // targeting the wrong/already-resolved assessment. A client input
+    // problem, not a server error, same shape as InvalidQueueReasonException.
+    @ExceptionHandler(InvalidTriageCaptureException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidTriageCapture(InvalidTriageCaptureException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     @ExceptionHandler(PrescriptionNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handlePrescriptionNotFound(PrescriptionNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
+    @ExceptionHandler(PrescriptionItemNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handlePrescriptionItemNotFound(PrescriptionItemNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidPrescriberMessageException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidPrescriberMessage(InvalidPrescriberMessageException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     @ExceptionHandler(PrescriptionAlreadyDispensedException.class)
     public ResponseEntity<ApiErrorResponse> handlePrescriptionAlreadyDispensed(
             PrescriptionAlreadyDispensedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(ConsultationNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleConsultationNotFound(ConsultationNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // ConsultationService's input validation — blank diagnosis text, a
+    // sign()/amend() call missing a required field. A client input
+    // problem, not a server error, same shape as InvalidTriageCaptureException.
+    @ExceptionHandler(InvalidConsultationException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidConsultation(InvalidConsultationException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // ConsultationService's lifecycle-state guards — editing a consultation
+    // that's no longer a draft, or amending/entering-in-error one that
+    // isn't currently signed. Same "conflicts with current state" shape as
+    // PrescriptionAlreadyDispensedException above.
+    @ExceptionHandler(InvalidConsultationStateException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidConsultationState(InvalidConsultationStateException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 

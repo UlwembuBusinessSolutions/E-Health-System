@@ -2,6 +2,7 @@ package co.ehealth.platform.facility;
 
 import co.ehealth.platform.identity.DuplicateFieldException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -46,6 +47,20 @@ public class FacilityService {
         return facilityRepository.findById(id).orElseThrow(FacilityNotFoundException::new);
     }
 
+    @Transactional
+    public Facility update(UUID id, String name, String code, FacilityType type, String address, String phone,
+                           String operatingHours) {
+        Facility facility = get(id);
+        if (facilityRepository.existsByCodeAndIdNot(code, id)) {
+            throw new DuplicateFieldException("code", "A facility with this code already exists.");
+        }
+        facility.updateDetails(name, code, type);
+        facility.setAddress(address);
+        facility.setPhone(phone);
+        facility.setOperatingHours(operatingHours);
+        return facilityRepository.save(facility);
+    }
+
     // SADM-US-006's read half, for the platform console's clinic list —
     // includes inactive facilities deliberately (unlike GET
     // /api/v1/facilities, which is the tenant-side staff-creation dropdown
@@ -54,5 +69,14 @@ public class FacilityService {
     // needs to see the whole thing, not just what's currently assignable.
     public List<Facility> list() {
         return facilityRepository.findAll();
+    }
+
+    // ConsultationService's "Send to pharmacy" outcome. One pharmacy
+    // facility is assumed per organization for this slice — if more than
+    // one is ever configured, the first active one found is used; there's
+    // no picker for a clinician to choose between several yet.
+    public Facility findPharmacyFacility() {
+        return facilityRepository.findByTypeAndActiveTrue(FacilityType.PHARMACY).stream().findFirst()
+                .orElseThrow(PharmacyFacilityNotConfiguredException::new);
     }
 }
