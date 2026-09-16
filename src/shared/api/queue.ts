@@ -9,6 +9,7 @@ export interface QueueToken {
   id: string;
   visitId: string;
   facilityId: string;
+  stationId: string | null;
   tokenNumber: number;
   priority: TokenPriority;
   status: TokenStatus;
@@ -72,4 +73,15 @@ export function cancellationReasons(): Promise<string[]> {
 export function transitionToken(id: string, action: TokenAction, reasonCode?: string): Promise<QueueToken> {
   return apiClient.post<QueueToken>(`/api/v1/queue/tokens/${encodeURIComponent(id)}/transition`,
     { action, reasonCode }, { headers: tenantAuthHeaders() });
+}
+
+export async function transferToken(
+  tokenId: string,
+  targetStationId: string,
+): Promise<QueueToken> {
+  return apiClient.post<QueueToken>(
+    `/api/v1/queue/tokens/${encodeURIComponent(tokenId)}/transfer`,
+    { targetStationId },
+    { headers: tenantAuthHeaders() },
+  );
 }

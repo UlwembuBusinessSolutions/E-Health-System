@@ -1,9 +1,12 @@
 // Lihle | 2026-09-09 | Initialize the queue from the active clinic and switch through ClinicProvider so queue selection follows the shared clinic context.
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpCircle, PhoneCall, Ticket } from "lucide-react";
-import { callNext, issueManualToken, listOpenQueue, cancellationReasons, transitionToken, type TokenAction } from "@/shared/api/queue";
-import { getFacilities } from "@/shared/api/facilities";
+import { ArrowLeftRight, ArrowUpCircle, PhoneCall, Ticket } from "lucide-react";
+import {
+  callNext, issueManualToken, listOpenQueue, cancellationReasons, transitionToken,
+  transferToken, type TokenAction, type QueueEntry,
+} from "@/shared/api/queue";
+import { getFacilities, getStations, type CareService } from "@/shared/api/facilities";
 import { useClinic } from "@/app/ClinicProvider";
 import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
@@ -15,11 +18,16 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" });
 }
 
-// RECQ-US-001/002/004's staff-facing queue console — facility-scoped (no
-// Station entity exists yet, RECQ-US-012 is Sprint 4, so a facility stands
-// in for "which queue"), same reasoning QueueController's own why-note
-// gives for why facilityId is always explicit rather than assumed from the
-// caller's own profile.
+const careServices: Array<{ value: CareService; label: string; description: string }> = [
+  { value: "MEDICAL", label: "Medical", description: "General clinical care" },
+  { value: "SURGICAL", label: "Surgical", description: "Procedures and theatre" },
+  { value: "DIAGNOSTIC", label: "Diagnostic", description: "Testing and imaging" },
+  { value: "LONG_TERM_CARE", label: "Long-term care", description: "Ongoing support" },
+];
+
+// RECQ-US-001/002/004/006's staff-facing queue console — facility-scoped,
+// with transfer targets limited to stations belonging to the selected
+// clinic or hospital.
 export function QueuePage() {
   const queryClient = useQueryClient();
   const { activeClinicId, switchClinic } = useClinic();
@@ -28,8 +36,16 @@ export function QueuePage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const reasonsQuery = useQuery({ queryKey: ["queue-reasons"], queryFn: cancellationReasons });
+  const [transferEntry, setTransferEntry] = useState<QueueEntry | null>(null);
+  const [careService, setCareService] = useState<CareService | "">("");
 
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
+
+  const stationsQuery = useQuery({
+    queryKey: ["stations", facilityId],
+    queryFn: () => getStations(facilityId),
+    enabled: !!facilityId,
+  });
 
   useEffect(() => {
     if (!facilityId && facilitiesQuery.data && facilitiesQuery.data.length > 0) {
@@ -83,9 +99,45 @@ export function QueuePage() {
     },
   });
 
+  const transferMutation = useMutation({
+    mutationFn: ({ tokenId, targetId }: { tokenId: string; targetId: string }) =>
+      transferToken(tokenId, targetId),
+    onMutate: () => setActionError(null),
+    onSuccess: () => {
+      setTransferEntry(null);
+      setCareService("");
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
+    },
+    onError: (error) => {
+      setActionError(error instanceof ApiError ? error.message : "Couldn't transfer that token. Try again.");
+    },
+  });
+
   const facilities = facilitiesQuery.data ?? [];
+  const stations = stationsQuery.data ?? [];
+  const resolvedTargetStationId =
+    transferEntry && careService
+      ? stations.find(
+          (station) => station.id !== transferEntry.token.stationId && station.careService === careService,
+        )?.id ?? ""
+      : "";
+
   const queue = queueQuery.data ?? [];
   const justCalled = queue.find(entry => entry.token.status === "CALLED" || entry.token.status === "IN_SERVICE");
+
+  const openTransfer = (entry: QueueEntry) => {
+    setActionError(null);
+
+    const defaultCareService =
+      careServices.find((service) =>
+        stations.some(
+          (station) => station.careService === service.value && station.id !== entry.token.stationId,
+        ),
+      )?.value ?? "";
+
+    setCareService(defaultCareService);
+    setTransferEntry(entry);
+  };
 
   return (
     <div>
@@ -143,6 +195,50 @@ export function QueuePage() {
         <span>Cancellation reasons could not be loaded.</span>
         <Button variant="secondary" onClick={() => void reasonsQuery.refetch()}>Retry reasons</Button>
       </div>}
+      {transferEntry && (
+        <Card className="mb-6 border-brand-200 p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-[15px] font-semibold text-text-primary">Transfer token</h2>
+              <p className="mt-1 text-[13.5px] text-text-secondary">
+                Move #{transferEntry.token.tokenNumber} for {transferEntry.patientName} to a matching station in this
+                facility. The original issue time will be retained, and the target station is resolved automatically
+                from the selected care service.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:min-w-72 sm:flex-row sm:items-end">
+              <label className="flex-1 text-[12px] font-medium text-text-secondary">
+                Care service
+                <select
+                  value={careService}
+                  onChange={(event) => setCareService(event.target.value as CareService | "")}
+                  className="mt-1 h-11 w-full rounded-lg border border-border-strong bg-surface-raised px-3 text-[14px] text-text-primary outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                >
+                  <option value="">Select a service</option>
+                  {careServices.map((service) => (
+                    <option key={service.value} value={service.value}>
+                      {service.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <Button
+                  loading={transferMutation.isPending}
+                  disabled={!careService || !resolvedTargetStationId || stationsQuery.isLoading}
+                  onClick={() => transferMutation.mutate({ tokenId: transferEntry.token.id, targetId: resolvedTargetStationId })}
+                >
+                  Transfer token
+                </Button>
+                <Button variant="secondary" onClick={() => setTransferEntry(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card className="overflow-hidden p-0">
         {actionError && (
           <div role="alert" className="border-b border-danger-500/30 bg-danger-50 px-5 py-2.5 text-[13.5px] text-danger-600">
@@ -205,6 +301,16 @@ export function QueuePage() {
                     </td>
                     <td className="col-span-2 block min-w-0 border-t border-border-subtle px-1 py-3 lg:table-cell lg:border-0 lg:px-5 lg:py-3.5 lg:text-right">
                       <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                        {entry.token.status === "ISSUED" && (
+                          <Button
+                            variant="secondary"
+                            size="md"
+                            icon={<ArrowLeftRight className="size-3.5" aria-hidden />}
+                            onClick={() => openTransfer(entry)}
+                          >
+                            Transfer
+                          </Button>
+                        )}
                         {entry.token.status === "CALLED" && (
                           <Button disabled={transition.isPending} onClick={() => transition.mutate({ id: entry.token.id, action: "START_SERVICE" })}>Start service</Button>
                         )}
