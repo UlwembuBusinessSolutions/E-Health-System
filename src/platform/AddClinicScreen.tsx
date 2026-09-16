@@ -17,6 +17,7 @@ const TYPE_OPTIONS: { value: FacilityType; label: string }[] = [
   { value: "CLINIC", label: "Clinic" },
   { value: "HOSPITAL", label: "Hospital" },
   { value: "STORE", label: "Store" },
+  { value: "PHARMACY", label: "Pharmacy" },
 ];
 
 // SADM-US-006 — a platform operator adding a clinic to a tenant, from the

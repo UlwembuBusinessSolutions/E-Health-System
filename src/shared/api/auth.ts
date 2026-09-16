@@ -1,10 +1,6 @@
 import type { AuthenticatedUser } from "./types";
 import { apiClient } from "./client";
 
-// login() is wired to the real backend; requestPasswordReset()/resetPassword()
-// below are still TEMP mocks — out of scope for the staff-creation/photo/
-// logo-upload testing pass this was wired up for. Swap those two the same
-// way once needed.
 
 const TENANT_TOKEN_KEY = "ulwembu.tenantToken";
 const TENANT_SLUG_KEY = "ulwembu.tenantSlug";
@@ -83,10 +79,32 @@ export interface LoginPayload {
   tenantSlug: string;
 }
 
+interface UserSummary {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
 interface LoginResponse {
   accessToken: string;
   expiresAt: string;
-  user: { id: string; email: string; firstName: string; lastName: string };
+  user: UserSummary;
+}
+
+// Shared by login() and getCurrentUser() below — the real LoginResponse/
+// UserSummary has no role field at all (the known drift api-reference.html
+// already flags, "Tenant auth" section); both read it from the token's own
+// roles claim instead of leaving it hardcoded.
+function buildAuthenticatedUser(summary: UserSummary, token: string): AuthenticatedUser {
+  const roles = decodeRolesFromToken(token);
+  return {
+    id: summary.id,
+    email: summary.email,
+    firstName: summary.firstName,
+    lastName: summary.lastName,
+    role: roles.includes("ORG_ADMIN") ? "ORG_ADMIN" : (roles[0] ?? "STAFF"),
+  };
 }
 
 export async function login(payload: LoginPayload): Promise<AuthenticatedUser> {
@@ -97,18 +115,21 @@ export async function login(payload: LoginPayload): Promise<AuthenticatedUser> {
     { headers: { "X-Tenant-ID": payload.tenantSlug } },
   );
   setTenantToken(response.accessToken);
+  return buildAuthenticatedUser(response.user, response.accessToken);
+}
 
-  const roles = decodeRolesFromToken(response.accessToken);
-  return {
-    id: response.user.id,
-    email: response.user.email,
-    firstName: response.user.firstName,
-    lastName: response.user.lastName,
-    // The real LoginResponse has no role field at all — this is the known
-    // drift api-reference.html already flags (Section "Tenant auth"). Read
-    // from the token's own roles claim instead of leaving this hardcoded.
-    role: roles.includes("ORG_ADMIN") ? "ORG_ADMIN" : (roles[0] ?? "STAFF"),
-  };
+// AuthProvider's own rehydration on a fresh page load (AuthContext.tsx's
+// own why-note) — a stored tenant token proves someone was signed in, but
+// carries no name/email of its own (JwtService only embeds sub/tenant/
+// roles/tokenVersion), so this round-trips to the server for the same
+// identity login() already returned. Throws (ApiError, typically 401) if
+// the token's expired or invalid — the caller's job to catch that and
+// clear it, not this function's.
+export async function getCurrentUser(): Promise<AuthenticatedUser> {
+  const token = getTenantToken();
+  if (!token) throw new Error("No stored session to rehydrate");
+  const summary = await apiClient.get<UserSummary>("/api/v1/auth/me", { headers: tenantAuthHeaders() });
+  return buildAuthenticatedUser(summary, token);
 }
 
 // Real from here on — PasswordResetService (api-reference.html, "Tenant

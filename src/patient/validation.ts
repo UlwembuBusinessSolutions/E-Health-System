@@ -14,6 +14,11 @@ export const registerPatientSchema = z.object({
     .string()
     .trim()
     .regex(/^\+?[0-9]{9,15}$/, "Enter a valid contact number, e.g. +27821234567"),
+  // Optional — cross-tenant patient migration's own notification email is
+  // the first thing that actually reads this; an empty string is valid
+  // (RegisterPatientPayload's own optional field), a non-empty one must
+  // still look like an email.
+  email: z.string().trim().email("Enter a valid email address").optional().or(z.literal("")),
   medicalAidProvider: z.string().trim().max(100),
   medicalAidNumber: z.string().trim().max(50),
   // Supplementary to idNumber above, not an alternative to it — see

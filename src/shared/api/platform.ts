@@ -1,5 +1,5 @@
 import type { Gender } from "./types";
-import { apiClient } from "./client";
+import { apiClient, ApiError } from "./client";
 
 // Real backend calls — api/'s /platform/** endpoints (api-reference.html,
 // Platform organizations module). No more MOCK_ORGANIZATIONS/delay(): this
@@ -196,6 +196,46 @@ export async function uploadOrganizationLogo(organizationId: string, file: File)
   return response.logoUrl;
 }
 
+// The platform-side counterpart to shared/api/organization.ts's own
+// getOrganizationMailSettings()/updateOrganizationMailSettings() — lets a
+// platform operator configure a tenant's outbound-email (SMTP) account on
+// its behalf, same reasoning as uploadOrganizationLogo() above being the
+// platform-side counterpart to the tenant's own logo upload. password is
+// never returned by the GET; passwordSet is the only signal the form gets.
+export interface OrganizationMailSettings {
+  host: string | null;
+  port: number | null;
+  username: string | null;
+  passwordSet: boolean;
+  fromAddress: string | null;
+}
+
+export interface UpdateOrganizationMailSettingsPayload {
+  host: string;
+  port: number;
+  username: string;
+  // Omit (or send blank) to keep the currently stored password.
+  password?: string;
+  fromAddress: string;
+}
+
+export async function getOrganizationMailSettings(organizationId: string): Promise<OrganizationMailSettings> {
+  return apiClient.get<OrganizationMailSettings>(`/platform/organizations/${organizationId}/mail-settings`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function updateOrganizationMailSettings(
+  organizationId: string,
+  payload: UpdateOrganizationMailSettingsPayload,
+): Promise<OrganizationMailSettings> {
+  return apiClient.patch<OrganizationMailSettings>(
+    `/platform/organizations/${organizationId}/mail-settings`,
+    payload,
+    { headers: authHeaders() },
+  );
+}
+
 // SADM-US-010. Matches ModuleCode field-for-field — all 20 codes always
 // come back, not just the ones this org has an opinion about (see
 // OrganizationProvisioningService.listModuleEntitlements()'s own why-note).
@@ -233,7 +273,7 @@ export async function toggleOrganizationModule(
 }
 
 // SADM-US-006. Matches PlatformController.FacilityResponse field-for-field.
-export type FacilityType = "CLINIC" | "HOSPITAL" | "STORE";
+export type FacilityType = "CLINIC" | "HOSPITAL" | "STORE" | "PHARMACY";
 
 export interface Facility {
   id: string;
@@ -416,7 +456,10 @@ export interface PlatformAuditEntry {
   detail: string | null;
   createdAt: string;
   operatorName: string;
-  operatorEmail: string;
+  // Null for "Unknown actor" rows — a login attempt against an email with
+  // no matching operator (PlatformAuthService's own why-note); distinct
+  // from "Unknown operator" (a real operator id whose row is now gone).
+  operatorEmail: string | null;
   organizationId: string | null;
   organizationName: string | null;
   ipAddress: string | null;
@@ -428,20 +471,33 @@ export interface ListPlatformAuditParams {
   organizationId?: string;
   from?: string;
   to?: string;
+  page?: number;
+  size?: number;
 }
 
-export async function listPlatformAudit(params: ListPlatformAuditParams = {}): Promise<PlatformAuditEntry[]> {
+// Bounded, unlike the previous unlimited response this replaced — page/size
+// mirror PlatformAuditService's own contract (default 50, capped at 100).
+export interface PagedResult<T> {
+  items: T[];
+  page: number;
+  size: number;
+  totalItems: number;
+  hasMore: boolean;
+}
+
+export async function listPlatformAudit(
+  params: ListPlatformAuditParams = {},
+): Promise<PagedResult<PlatformAuditEntry>> {
   const search = new URLSearchParams();
   if (params.action) search.set("action", params.action);
   if (params.organizationId) search.set("organizationId", params.organizationId);
   if (params.from) search.set("from", params.from);
   if (params.to) search.set("to", params.to);
-  const queryString = search.toString();
-  const response = await apiClient.get<{ items: PlatformAuditEntry[] }>(
-    `/platform/audit${queryString ? `?${queryString}` : ""}`,
-    { headers: authHeaders() },
-  );
-  return response.items;
+  search.set("page", String(params.page ?? 0));
+  search.set("size", String(params.size ?? 50));
+  return apiClient.get<PagedResult<PlatformAuditEntry>>(`/platform/audit?${search.toString()}`, {
+    headers: authHeaders(),
+  });
 }
 
 // One organization's own trail (its tenant-schema audit_log), viewed by a
@@ -465,10 +521,53 @@ export interface TenantAuditEntry {
   deviceSignature: string | null;
 }
 
-export async function listOrganizationAudit(organizationId: string): Promise<TenantAuditEntry[]> {
-  const response = await apiClient.get<{ items: TenantAuditEntry[] }>(
-    `/platform/organizations/${organizationId}/audit`,
+export async function listOrganizationAudit(
+  organizationId: string,
+  page = 0,
+  size = 50,
+): Promise<PagedResult<TenantAuditEntry>> {
+  return apiClient.get<PagedResult<TenantAuditEntry>>(
+    `/platform/organizations/${organizationId}/audit?page=${page}&size=${size}`,
     { headers: authHeaders() },
   );
-  return response.items;
+}
+
+// Triggers a browser download of a CSV response — apiClient always parses
+// JSON, so this bypasses it for the one response shape that isn't. The
+// filename comes from the server's own Content-Disposition (both export
+// endpoints set one), not guessed here.
+async function downloadCsv(path: string): Promise<void> {
+  const res = await fetch(path, { headers: authHeaders() });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(body?.message ?? res.statusText, res.status);
+  }
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  const filename = match?.[1] ?? "export.csv";
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+// The entire filtered result, not the current page — same filters as
+// listPlatformAudit(), no page/size (PlatformAuditController.export()'s own
+// why-note on why export has no pages).
+export async function exportPlatformAudit(params: ListPlatformAuditParams = {}): Promise<void> {
+  const search = new URLSearchParams();
+  if (params.action) search.set("action", params.action);
+  if (params.organizationId) search.set("organizationId", params.organizationId);
+  if (params.from) search.set("from", params.from);
+  if (params.to) search.set("to", params.to);
+  await downloadCsv(`/platform/audit/export?${search.toString()}`);
+}
+
+export async function exportOrganizationAudit(organizationId: string): Promise<void> {
+  await downloadCsv(`/platform/organizations/${organizationId}/audit/export`);
 }

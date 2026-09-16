@@ -20,6 +20,22 @@ export type EmploymentType =
   | "EXTENDED_PUBLIC_WORKS"
   | "SECONDED";
 
+// Single source of truth for the label text — shared by AddStaffScreen's
+// create form and StaffListPage's post-hire edit control, so the two never
+// drift apart.
+export const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
+  { value: "PERMANENT", label: "Permanent" },
+  { value: "CONTRACT", label: "Contract" },
+  { value: "INTERN", label: "Intern" },
+  { value: "COMMUNITY_SERVICE", label: "Community service" },
+  { value: "EXTENDED_PUBLIC_WORKS", label: "Extended public works" },
+  { value: "SECONDED", label: "Seconded" },
+];
+
+export function employmentTypeLabel(type: EmploymentType | null): string {
+  return EMPLOYMENT_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? "—";
+}
+
 export interface CreateStaffPayload {
   firstName: string;
   lastName: string;
@@ -81,6 +97,8 @@ export interface StaffRosterEntry {
   facilityId: string | null;
   status: StaffStatus;
   lastLoginAt: string | null;
+  employmentType: EmploymentType | null;
+  employmentEndDate: string | null;
 }
 
 // ORG_ADMIN-only server-side (SecurityConfig's /api/v1/admin/** matcher) —
@@ -112,6 +130,24 @@ export async function resetStaffPassword(staffId: string): Promise<ResetPassword
 // StaffService.setEnabled()'s own guard.
 export async function setStaffEnabled(staffId: string, enabled: boolean): Promise<void> {
   await apiClient.post<void>(`/api/v1/admin/staff/${staffId}/${enabled ? "enable" : "disable"}`, undefined, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+// "This person left" — stamps employmentEndDate and disables login in the
+// same backend transaction (StaffService.offboardStaff()). Distinct from
+// setStaffEnabled(false): that one is reversible and says nothing about why;
+// this one is a real HR fact.
+export async function offboardStaff(staffId: string, employmentEndDate: string): Promise<void> {
+  await apiClient.post<void>(`/api/v1/admin/staff/${staffId}/offboard`, { employmentEndDate }, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+// "Their contract type changed while they're still here" — never touches
+// status or employmentEndDate either way (StaffService.updateEmploymentType()).
+export async function updateStaffEmploymentType(staffId: string, employmentType: EmploymentType): Promise<void> {
+  await apiClient.post<void>(`/api/v1/admin/staff/${staffId}/employment-type`, { employmentType }, {
     headers: tenantAuthHeaders(),
   });
 }

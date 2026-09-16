@@ -18,6 +18,9 @@ export interface RegisterPatientPayload {
   idNumber: string;
   address: string;
   contactNumber: string;
+  // Optional — cross-tenant patient migration's own notification email is
+  // the first thing that actually reads this; nothing required it before.
+  email?: string;
   medicalAidProvider?: string;
   medicalAidNumber?: string;
   // Supplementary to idNumber, not an alternative — see
@@ -40,6 +43,7 @@ export interface Patient {
   idNumber: string;
   address: string;
   contactNumber: string;
+  email: string | null;
   medicalAidProvider: string | null;
   medicalAidNumber: string | null;
   passportNumber: string | null;
@@ -52,6 +56,11 @@ export interface Patient {
   archivedReason: string | null;
   archivedAt: string | null;
   deceasedDate: string | null;
+  // Cross-tenant patient migration — true only for the single-record GET
+  // (PatientController.get()'s own why-note); always false on the list/
+  // search endpoints below, since a migrated patient is always archived and
+  // therefore already excluded from both of those.
+  migrated: boolean;
 }
 
 export async function registerPatient(payload: RegisterPatientPayload): Promise<Patient> {
@@ -142,6 +151,7 @@ export interface UpdatePatientPayload {
   lastName: string;
   address: string;
   contactNumber: string;
+  email?: string;
   medicalAidProvider?: string;
   medicalAidNumber?: string;
   passportNumber?: string;
@@ -188,7 +198,7 @@ export async function archivePatient(id: string, payload: ArchivePatientPayload)
 }
 
 // Matches PatientDocumentType field-for-field.
-export type PatientDocumentType = "ID_COPY" | "MEDICAL_AID_CARD";
+export type PatientDocumentType = "ID_COPY" | "MEDICAL_AID_CARD" | "PATIENT_PHOTO" | "BIRTH_CERTIFICATE";
 
 // Mirrors PatientDocumentService.ALLOWED_CONTENT_TYPES and application.yml's
 // spring.servlet.multipart.max-file-size exactly — the backend is still the
@@ -197,12 +207,12 @@ export type PatientDocumentType = "ID_COPY" | "MEDICAL_AID_CARD";
 // rejection before a round trip: at file-selection time, where it also
 // covers drag-and-drop (the <input accept> attribute is browse-dialog-only
 // and silently does nothing for a dropped file).
-export const ALLOWED_DOCUMENT_CONTENT_TYPES = ["application/pdf", "image/jpeg", "image/png"] as const;
+export const ALLOWED_DOCUMENT_CONTENT_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as const;
 export const MAX_DOCUMENT_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
 export function validateDocumentFile(file: File): string | null {
   if (!ALLOWED_DOCUMENT_CONTENT_TYPES.includes(file.type as (typeof ALLOWED_DOCUMENT_CONTENT_TYPES)[number])) {
-    return "Only PDF, JPEG, or PNG files are allowed.";
+    return "Only PDF, JPEG, PNG, or WebP files are allowed.";
   }
   if (file.size > MAX_DOCUMENT_FILE_SIZE_BYTES) {
     return "File is too large. Maximum size is 5MB.";
@@ -317,6 +327,89 @@ export async function uploadGuardianSignature(
 export async function getGuardianSignatureDownloadUrl(patientId: string, guardianId: string): Promise<string> {
   const response = await apiClient.get<{ url: string }>(
     `/api/v1/patients/${patientId}/guardians/${guardianId}/signature/download-url`,
+    { headers: tenantAuthHeaders() },
+  );
+  return response.url;
+}
+
+// Cross-tenant patient migration — the destination picker's first step:
+// every other ACTIVE organization this tenant could migrate a patient to.
+// id + displayName only, matching PatientController.MigrationOrganizationSummary's
+// own deliberately narrow shape — this is the first endpoint that gives
+// ordinary tenant staff any visibility into another tenant's existence at
+// all, so it stays that narrow on purpose.
+export interface MigrationDestinationOrganization {
+  id: string;
+  displayName: string;
+}
+
+export async function listMigrationDestinationOrganizations(): Promise<MigrationDestinationOrganization[]> {
+  const response = await apiClient.get<{ items: MigrationDestinationOrganization[] }>(
+    "/api/v1/admin/migration/organizations",
+    { headers: tenantAuthHeaders() },
+  );
+  return response.items;
+}
+
+// The dependent second step, once an organization is chosen.
+export interface MigrationDestinationFacility {
+  id: string;
+  name: string;
+}
+
+export async function listMigrationDestinationFacilities(
+  organizationId: string,
+): Promise<MigrationDestinationFacility[]> {
+  const response = await apiClient.get<{ items: MigrationDestinationFacility[] }>(
+    `/api/v1/admin/migration/organizations/${organizationId}/facilities`,
+    { headers: tenantAuthHeaders() },
+  );
+  return response.items;
+}
+
+export interface MigratePatientPayload {
+  destinationOrganizationId: string;
+  destinationFacilityId: string;
+  reason: string;
+}
+
+export interface MigrationResult {
+  destinationPatientId: string;
+  destinationMpiNumber: string;
+}
+
+// PREG's cross-tenant migration — admin-only server-side, same
+// /api/v1/admin/** -> ORG_ADMIN matcher as archivePatient/updatePatient
+// above. One-way, same as archiving: the origin record is locked
+// (archived: true, migrated: true) the moment this succeeds.
+export async function migratePatient(id: string, payload: MigratePatientPayload): Promise<MigrationResult> {
+  return apiClient.post<MigrationResult>(`/api/v1/admin/patients/${id}/migrate`, payload, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+// The origin tenant's "full ongoing access" view — a live read of the
+// destination record, not a frozen snapshot taken at migration time.
+// Deliberately no visits/vitals/prescriptions field: migration only ever
+// moves the core record (demographics, MPI, documents) — the destination
+// starts a fresh clinical history for this person — so there's nothing of
+// that kind to show here.
+export interface PatientMigrationDestinationView {
+  patient: Patient;
+  documents: PatientDocument[];
+  destinationOrganizationDisplayName: string;
+  destinationFacilityName: string;
+}
+
+export async function getPatientMigrationDestinationView(id: string): Promise<PatientMigrationDestinationView> {
+  return apiClient.get<PatientMigrationDestinationView>(`/api/v1/admin/patients/${id}/migration/destination-view`, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export async function getMigrationDestinationDocumentDownloadUrl(id: string, documentId: string): Promise<string> {
+  const response = await apiClient.get<{ url: string }>(
+    `/api/v1/admin/patients/${id}/migration/destination-view/documents/${documentId}/download-url`,
     { headers: tenantAuthHeaders() },
   );
   return response.url;

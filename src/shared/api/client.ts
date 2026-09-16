@@ -52,9 +52,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-// Typed client every module's api/ folder is expected to call through —
-// mock modules (facilities.ts, auth.ts, roles.ts) exist only until their
-// matching backend endpoint (Section 4 of the Phase 1 spec) ships.
+// Typed client every module's api/ folder calls through.
 // Optional `init` on each method — platform.ts needs it to attach
 // X-Platform-Key, tenant modules will need it for Authorization/X-Tenant-ID
 // the same way once they're wired up too.

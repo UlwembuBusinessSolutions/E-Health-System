@@ -8,6 +8,7 @@ import clsx from "clsx";
 import {
   AlertCircle,
   ArrowLeft,
+  Baby,
   BookUser,
   CheckCircle2,
   CreditCard,
@@ -16,6 +17,7 @@ import {
   HeartPulse,
   Image as ImageIcon,
   Loader2,
+  Mail,
   MapPin,
   Phone,
   Plus,
@@ -43,6 +45,7 @@ import { FormRow } from "@/shared/components/FormRow";
 import { Select } from "@/shared/components/Select";
 import { Switch } from "@/shared/components/Switch";
 import { SignaturePad } from "@/shared/components/SignaturePad";
+import { PhotoCapture } from "@/shared/components/PhotoCapture";
 
 const MAX_GUARDIANS = 5;
 
@@ -324,7 +327,9 @@ function GuardianEntry({
 export function RegisterPatientScreen() {
   const navigate = useNavigate();
   const [formError, setFormError] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [idCopyFile, setIdCopyFile] = useState<File | null>(null);
+  const [birthCertificateFile, setBirthCertificateFile] = useState<File | null>(null);
   const [medicalAidCardFile, setMedicalAidCardFile] = useState<File | null>(null);
   const [documentUploadStatus, setDocumentUploadStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [documentUploadError, setDocumentUploadError] = useState<string | null>(null);
@@ -354,6 +359,7 @@ export function RegisterPatientScreen() {
       idNumber: "",
       address: "",
       contactNumber: "",
+      email: "",
       medicalAidProvider: "",
       medicalAidNumber: "",
       passportNumber: "",
@@ -369,6 +375,7 @@ export function RegisterPatientScreen() {
         idNumber: values.idNumber,
         address: values.address,
         contactNumber: values.contactNumber,
+        email: values.email || undefined,
         medicalAidProvider: values.medicalAidProvider || undefined,
         medicalAidNumber: values.medicalAidNumber || undefined,
         passportNumber: values.passportNumber || undefined,
@@ -376,7 +383,9 @@ export function RegisterPatientScreen() {
       }),
     onSuccess: (patient: Patient) => {
       const staged: { documentType: PatientDocumentType; file: File }[] = [];
+      if (photoFile) staged.push({ documentType: "PATIENT_PHOTO", file: photoFile });
       if (idCopyFile) staged.push({ documentType: "ID_COPY", file: idCopyFile });
+      if (birthCertificateFile) staged.push({ documentType: "BIRTH_CERTIFICATE", file: birthCertificateFile });
       if (medicalAidCardFile) staged.push({ documentType: "MEDICAL_AID_CARD", file: medicalAidCardFile });
       if (staged.length > 0) {
         // Best-effort, after the patient itself already exists — a document
@@ -525,7 +534,9 @@ export function RegisterPatientScreen() {
                 className="w-full"
                 onClick={() => {
                   mutation.reset();
+                  setPhotoFile(null);
                   setIdCopyFile(null);
+                  setBirthCertificateFile(null);
                   setMedicalAidCardFile(null);
                   setDocumentUploadStatus("idle");
                   setDocumentUploadError(null);
@@ -558,6 +569,21 @@ export function RegisterPatientScreen() {
                 {formError}
               </div>
             )}
+
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-border-subtle bg-surface-sunken p-4">
+              <p className="text-[13px] font-semibold text-text-secondary">Patient photo (optional)</p>
+              <PhotoCapture
+                file={photoFile}
+                onChange={setPhotoFile}
+                disabled={mutation.isPending}
+                uploadLabel="Upload photo"
+                replaceLabel="Replace photo"
+              />
+              <p className="max-w-xs text-center text-[12.5px] text-text-secondary">
+                Uploaded automatically once the record is created — no separate step. Helps front-desk and clinical
+                staff confirm identity at a glance.
+              </p>
+            </div>
 
             <FormRow>
               <Input
@@ -629,6 +655,17 @@ export function RegisterPatientScreen() {
               {...register("contactNumber")}
             />
 
+            <Input
+              label="Email"
+              type="email"
+              icon={<Mail className="size-4" aria-hidden />}
+              placeholder="Optional"
+              autoComplete="email"
+              hint={!errors.email ? "Used to notify this patient if their record is ever migrated to another facility." : undefined}
+              error={errors.email?.message}
+              {...register("email")}
+            />
+
             <FormRow>
               <Input
                 label="Medical aid provider"
@@ -692,6 +729,12 @@ export function RegisterPatientScreen() {
               </p>
               <FormRow>
                 <DocumentPickerField label="ID copy" icon={CreditCard} file={idCopyFile} onChange={setIdCopyFile} />
+                <DocumentPickerField
+                  label="Birth certificate"
+                  icon={Baby}
+                  file={birthCertificateFile}
+                  onChange={setBirthCertificateFile}
+                />
                 <DocumentPickerField
                   label="Medical aid card"
                   icon={HeartPulse}

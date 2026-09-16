@@ -37,3 +37,23 @@ export interface VisitWithToken {
 export async function createVisit(payload: CreateVisitPayload): Promise<VisitWithToken> {
   return apiClient.post<VisitWithToken>("/api/v1/visits", payload, { headers: tenantAuthHeaders() });
 }
+
+// The patient record's Visits tab — every visit this patient has ever had,
+// across every facility, newest first. facilityName travels with each row
+// (resolved server-side) so the page never has to look it up itself.
+export interface PatientVisit {
+  id: string;
+  facilityId: string;
+  facilityName: string | null;
+  visitType: VisitType;
+  serviceStream: ServiceStream;
+  visitDateTime: string;
+  transferredFromVisitId: string | null;
+}
+
+export async function getPatientVisitHistory(patientId: string): Promise<PatientVisit[]> {
+  const response = await apiClient.get<{ items: PatientVisit[] }>(`/api/v1/patients/${patientId}/visits`, {
+    headers: tenantAuthHeaders(),
+  });
+  return response.items;
+}

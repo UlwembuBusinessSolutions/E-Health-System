@@ -1,19 +1,46 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Check, Copy, KeyRound, Plus, Search } from "lucide-react";
-import { listStaff, resetStaffPassword, setStaffEnabled } from "@/shared/api/staff";
+import { Check, Copy, KeyRound, LogOut, Plus, Search, ShieldOff, ShieldCheck, Briefcase } from "lucide-react";
+import {
+  listStaff,
+  resetStaffPassword,
+  setStaffEnabled,
+  offboardStaff,
+  updateStaffEmploymentType,
+  EMPLOYMENT_TYPE_OPTIONS,
+  employmentTypeLabel,
+  type EmploymentType,
+} from "@/shared/api/staff";
 import { getFacilities } from "@/shared/api/facilities";
 import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
 import { Input } from "@/shared/components/Input";
 import { PageHeader } from "@/shared/components/PageHeader";
+import { Select } from "@/shared/components/Select";
 import { StatusPill } from "@/shared/components/StatusPill";
+import { RowActionsMenu, type RowActionItem } from "@/shared/components/RowActionsMenu";
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "ALL", label: "All statuses" },
+  { value: "ACTIVE", label: "Active" },
+  { value: "LOCKED", label: "Locked" },
+  { value: "DISABLED", label: "Disabled" },
+];
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "Never";
   return new Date(iso).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function formatDate(isoDate: string | null): string | null {
+  if (!isoDate) return null;
+  return new Date(isoDate).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function initials(firstName: string, lastName: string): string {
@@ -52,9 +79,24 @@ function CopyButton({ text }: { text: string }) {
 export function StaffListPage() {
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [confirmResetId, setConfirmResetId] = useState<string | null>(null);
   const [revealedPassword, setRevealedPassword] = useState<{ id: string; password: string } | null>(null);
+  const [employmentTypeEditId, setEmploymentTypeEditId] = useState<string | null>(null);
+  const [employmentTypeDraft, setEmploymentTypeDraft] = useState<EmploymentType | "">("");
+  const [offboardId, setOffboardId] = useState<string | null>(null);
+  const [offboardDateDraft, setOffboardDateDraft] = useState(todayIsoDate());
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Only one inline row-edit open at a time — opening any of these clears
+  // whichever of the others was open, same as the pre-existing
+  // confirmResetId/revealedPassword pair already did for each other.
+  function closeAllRowEditors() {
+    setConfirmResetId(null);
+    setRevealedPassword(null);
+    setEmploymentTypeEditId(null);
+    setOffboardId(null);
+  }
 
   const staffQuery = useQuery({ queryKey: ["staff", "list"], queryFn: listStaff });
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
@@ -68,14 +110,16 @@ export function StaffListPage() {
   const staff = staffQuery.data ?? [];
   const filtered = useMemo(() => {
     const q = searchInput.trim().toLowerCase();
-    if (!q) return staff;
-    return staff.filter(
-      (s) =>
+    return staff.filter((s) => {
+      if (statusFilter !== "ALL" && s.status !== statusFilter) return false;
+      if (!q) return true;
+      return (
         `${s.firstName} ${s.lastName}`.toLowerCase().includes(q) ||
         s.email.toLowerCase().includes(q) ||
-        s.employeeNumber.toLowerCase().includes(q),
-    );
-  }, [staff, searchInput]);
+        s.employeeNumber.toLowerCase().includes(q)
+      );
+    });
+  }, [staff, searchInput, statusFilter]);
 
   const resetPassword = useMutation({
     mutationFn: (id: string) => resetStaffPassword(id),
@@ -99,6 +143,32 @@ export function StaffListPage() {
     },
   });
 
+  const changeEmploymentType = useMutation({
+    mutationFn: ({ id, employmentType }: { id: string; employmentType: EmploymentType }) =>
+      updateStaffEmploymentType(id, employmentType),
+    onMutate: () => setActionError(null),
+    onSuccess: () => {
+      setEmploymentTypeEditId(null);
+      queryClient.invalidateQueries({ queryKey: ["staff", "list"] });
+    },
+    onError: (error) => {
+      setActionError(error instanceof ApiError ? error.message : "Couldn't update employment type. Try again.");
+    },
+  });
+
+  const offboard = useMutation({
+    mutationFn: ({ id, employmentEndDate }: { id: string; employmentEndDate: string }) =>
+      offboardStaff(id, employmentEndDate),
+    onMutate: () => setActionError(null),
+    onSuccess: () => {
+      setOffboardId(null);
+      queryClient.invalidateQueries({ queryKey: ["staff", "list"] });
+    },
+    onError: (error) => {
+      setActionError(error instanceof ApiError ? error.message : "Couldn't offboard that staff member. Try again.");
+    },
+  });
+
   return (
     <div>
       <PageHeader
@@ -115,14 +185,24 @@ export function StaffListPage() {
         }
       />
 
-      <div className="mb-4">
-        <Input
-          label="Search"
-          placeholder="Search by name, email, or employee number…"
-          icon={<Search className="size-4" aria-hidden />}
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-        />
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <Input
+            label="Search"
+            placeholder="Search by name, email, or employee number…"
+            icon={<Search className="size-4" aria-hidden />}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+        </div>
+        <div className="sm:w-48">
+          <Select
+            label="Status"
+            options={STATUS_FILTER_OPTIONS}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          />
+        </div>
       </div>
 
       <Card className="overflow-hidden p-0">
@@ -135,7 +215,9 @@ export function StaffListPage() {
           <p className="px-5 py-10 text-center text-[14px] text-text-secondary">Loading staff…</p>
         ) : filtered.length === 0 ? (
           <p className="px-5 py-10 text-center text-[14px] text-text-secondary">
-            {staff.length === 0 ? "No staff yet — add the first one." : "No staff match your search."}
+            {staff.length === 0
+              ? "No staff yet — add the first one."
+              : "No staff match your search and filter."}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -150,6 +232,9 @@ export function StaffListPage() {
                   </th>
                   <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
                     Facility
+                  </th>
+                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
+                    Employment
                   </th>
                   <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
                     Status
@@ -185,6 +270,44 @@ export function StaffListPage() {
                       {s.facilityId ? (facilityNames.get(s.facilityId) ?? "—") : "—"}
                     </td>
                     <td className="px-5 py-3.5">
+                      {employmentTypeEditId === s.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={employmentTypeDraft}
+                            onChange={(e) => setEmploymentTypeDraft(e.target.value as EmploymentType)}
+                            className="h-9 rounded-md border border-border-strong bg-surface-raised px-2 text-[13px] text-text-primary outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                          >
+                            {EMPLOYMENT_TYPE_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                          <Button size="md" variant="secondary" onClick={() => setEmploymentTypeEditId(null)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            size="md"
+                            loading={changeEmploymentType.isPending}
+                            disabled={!employmentTypeDraft}
+                            onClick={() =>
+                              employmentTypeDraft &&
+                              changeEmploymentType.mutate({ id: s.id, employmentType: employmentTypeDraft })
+                            }
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-[13.5px] text-text-primary">{employmentTypeLabel(s.employmentType)}</p>
+                          {s.employmentEndDate && (
+                            <p className="text-[12px] text-text-secondary">Left {formatDate(s.employmentEndDate)}</p>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5">
                       <StatusPill tone={s.status === "ACTIVE" ? "success" : s.status === "LOCKED" ? "warning" : "neutral"}>
                         {s.status === "ACTIVE" ? "Active" : s.status === "LOCKED" ? "Locked" : "Disabled"}
                       </StatusPill>
@@ -213,25 +336,79 @@ export function StaffListPage() {
                             Confirm
                           </Button>
                         </div>
-                      ) : (
+                      ) : offboardId === s.id ? (
                         <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="secondary"
-                            size="md"
-                            icon={<KeyRound className="size-3.5" aria-hidden />}
-                            onClick={() => setConfirmResetId(s.id)}
-                          >
-                            Reset password
+                          <span className="text-[12.5px] text-text-secondary">Last day?</span>
+                          <input
+                            type="date"
+                            value={offboardDateDraft}
+                            onChange={(e) => setOffboardDateDraft(e.target.value)}
+                            className="h-9 rounded-md border border-border-strong bg-surface-raised px-2 text-[13px] text-text-primary outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                          />
+                          <Button size="md" variant="secondary" onClick={() => setOffboardId(null)}>
+                            Cancel
                           </Button>
                           <Button
-                            variant="secondary"
                             size="md"
-                            loading={toggleEnabled.isPending && toggleEnabled.variables?.id === s.id}
-                            onClick={() => toggleEnabled.mutate({ id: s.id, enabled: s.status === "DISABLED" })}
+                            loading={offboard.isPending}
+                            onClick={() => offboard.mutate({ id: s.id, employmentEndDate: offboardDateDraft })}
                           >
-                            {s.status === "DISABLED" ? "Enable" : "Disable"}
+                            Confirm offboard
                           </Button>
                         </div>
+                      ) : (
+                        (() => {
+                          const alreadyOffboarded = !!s.employmentEndDate;
+                          const items: RowActionItem[] = [
+                            {
+                              key: "reset-password",
+                              label: "Reset password",
+                              icon: <KeyRound className="size-4" aria-hidden />,
+                              onClick: () => {
+                                closeAllRowEditors();
+                                setConfirmResetId(s.id);
+                              },
+                            },
+                            {
+                              key: "toggle-enabled",
+                              label: s.status === "DISABLED" ? "Enable" : "Disable",
+                              icon:
+                                s.status === "DISABLED" ? (
+                                  <ShieldCheck className="size-4" aria-hidden />
+                                ) : (
+                                  <ShieldOff className="size-4" aria-hidden />
+                                ),
+                              onClick: () => toggleEnabled.mutate({ id: s.id, enabled: s.status === "DISABLED" }),
+                            },
+                            {
+                              key: "change-employment-type",
+                              label: "Change employment type",
+                              icon: <Briefcase className="size-4" aria-hidden />,
+                              onClick: () => {
+                                closeAllRowEditors();
+                                setEmploymentTypeDraft(s.employmentType ?? "PERMANENT");
+                                setEmploymentTypeEditId(s.id);
+                              },
+                            },
+                            {
+                              key: "offboard",
+                              label: alreadyOffboarded ? "Already offboarded" : "Offboard",
+                              icon: <LogOut className="size-4" aria-hidden />,
+                              disabled: alreadyOffboarded,
+                              variant: "danger",
+                              onClick: () => {
+                                closeAllRowEditors();
+                                setOffboardDateDraft(todayIsoDate());
+                                setOffboardId(s.id);
+                              },
+                            },
+                          ];
+                          return (
+                            <div className="flex justify-end">
+                              <RowActionsMenu items={items} label={`Actions for ${s.firstName} ${s.lastName}`} />
+                            </div>
+                          );
+                        })()
                       )}
                     </td>
                   </tr>

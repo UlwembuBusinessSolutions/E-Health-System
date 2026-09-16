@@ -12,6 +12,7 @@ import {
   checkStaffEmailAvailable,
   checkStaffContactAvailable,
   uploadStaffPhoto,
+  EMPLOYMENT_TYPE_OPTIONS,
   type EmploymentType,
   type StaffSummary,
 } from "@/shared/api/staff";
@@ -33,15 +34,6 @@ const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: "MALE", label: "Male" },
   { value: "FEMALE", label: "Female" },
   { value: "OTHER", label: "Other" },
-];
-
-const EMPLOYMENT_TYPE_OPTIONS = [
-  { value: "PERMANENT", label: "Permanent" },
-  { value: "CONTRACT", label: "Contract" },
-  { value: "INTERN", label: "Intern" },
-  { value: "COMMUNITY_SERVICE", label: "Community service" },
-  { value: "EXTENDED_PUBLIC_WORKS", label: "Extended public works" },
-  { value: "SECONDED", label: "Seconded" },
 ];
 
 // Admin-only — the account this creates is usable immediately with a
