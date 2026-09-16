@@ -10,6 +10,12 @@ import java.util.UUID;
 
 public interface QueueTokenRepository extends JpaRepository<QueueToken, UUID> {
 
+    java.util.Optional<QueueToken> findByIdAndFacilityId(UUID id, UUID facilityId);
+
+    @Query("SELECT qt FROM QueueToken qt WHERE qt.facilityId = :facilityId AND qt.status NOT IN ('COMPLETED', 'CANCELLED') "
+            + "ORDER BY CASE WHEN qt.priority = 'PRIORITY' THEN 0 ELSE 1 END, qt.issuedAt ASC")
+    List<QueueToken> findOpenQueue(@Param("facilityId") UUID facilityId);
+
     // QueueService.nextTokenNumber()'s daily-reset-per-facility — counts
     // today's tokens for this facility so far, not a real sequence (this
     // entity's own why-note on that trade-off).

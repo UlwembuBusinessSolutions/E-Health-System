@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -31,10 +32,13 @@ public class PrescriptionController {
 
     private final PrescriptionService prescriptionService;
     private final PatientService patientService;
+    private final PrescriptionQueryRepository prescriptionQueries;
 
-    public PrescriptionController(PrescriptionService prescriptionService, PatientService patientService) {
+    public PrescriptionController(PrescriptionService prescriptionService, PatientService patientService,
+                                  PrescriptionQueryRepository prescriptionQueries) {
         this.prescriptionService = prescriptionService;
         this.patientService = patientService;
+        this.prescriptionQueries = prescriptionQueries;
     }
 
     @PostMapping("/api/v1/prescriptions")
@@ -43,7 +47,7 @@ public class PrescriptionController {
         var items = request.items().stream()
                 .map(i -> new PrescriptionService.PrescriptionItemInput(i.drugName(), i.dosage(), i.quantity()))
                 .toList();
-        var command = new PrescriptionService.CreatePrescriptionCommand(request.visitId(), items);
+        var command = new PrescriptionService.CreatePrescriptionCommand(request.visitId(), items, request.overrideReason());
         Prescription prescription = prescriptionService.create(command, staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(prescription));
     }
@@ -73,9 +77,37 @@ public class PrescriptionController {
 
     @PostMapping("/api/v1/prescriptions/{id}/dispense")
     public ResponseEntity<Void> dispense(@PathVariable UUID id,
+                                          @RequestBody(required = false) DispenseRequest request,
                                           @AuthenticationPrincipal AuthenticatedPrincipal staff) {
-        prescriptionService.dispense(id, staff.userId());
+        prescriptionService.dispense(id, staff.userId(), request == null ? null : request.overrideReason(),
+                request == null ? null : request.coverageUntil());
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/api/v1/prescriptions/{id}/duplicate-warnings")
+    public Map<String, Object> duplicateWarnings(@PathVariable UUID id) {
+        return Map.of("items", prescriptionService.duplicateWarnings(id));
+    }
+
+    @PostMapping("/api/v1/prescriptions/{id}/decline")
+    public ResponseEntity<PrescriptionDecline> decline(@PathVariable UUID id, @Valid @RequestBody DeclineRequest request,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                prescriptionService.decline(id, staff.userId(), request.reasonCode(), request.reasonDetail()));
+    }
+
+    @GetMapping("/api/v1/prescriptions/{id}/decline")
+    public PrescriptionDecline getDecline(@PathVariable UUID id) { return prescriptionService.getDecline(id); }
+
+    @GetMapping("/api/v1/prescription-decline-notifications")
+    public Map<String, Object> declineNotifications(@AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return Map.of("items", prescriptionService.declineNotifications(staff.userId()));
+    }
+
+    @PostMapping("/api/v1/prescriptions/safety-check")
+    public ResponseEntity<Map<String, Object>> safetyCheck(@Valid @RequestBody SafetyCheckRequest request) {
+        var items = request.items().stream().map(i -> new PrescriptionService.PrescriptionItemInput(i.drugName(), i.dosage(), i.quantity())).toList();
+        return ResponseEntity.ok(Map.of("alerts", prescriptionService.check(request.patientId(), items)));
     }
 
     @GetMapping("/api/v1/prescriptions/manual-verification")
@@ -95,13 +127,22 @@ public class PrescriptionController {
         List<PrescriptionItemResponse> items = prescriptionService.getItems(p.getId()).stream()
                 .map(i -> new PrescriptionItemResponse(i.getDrugName(), i.getDosage(), i.getQuantity())).toList();
         Patient patient = patientService.get(p.getPatientId());
+        PrescriptionQuerySummary latestQuery = prescriptionQueries
+                .findFirstByPrescriptionIdAndStatusOrderByRaisedAtDesc(p.getId(), PrescriptionQueryStatus.RESPONDED)
+                .map(q -> new PrescriptionQuerySummary(q.getId(), q.getStatus(), q.getReason(), q.getGuidelineWarning(),
+                        q.getPrescriberResponse(), q.getRespondedAt()))
+                .orElse(null);
         return new PrescriptionResponse(p.getId(), p.getSerialNumber(), p.getVisitId(), p.getPatientId(),
                 patient.getFirstName() + " " + patient.getLastName(), patient.getMpiNumber(), p.getFacilityId(),
-                p.getPrescriberId(), p.getStatus(), items, p.getCreatedAt());
+                p.getPrescriberId(), p.getStatus(), items, p.getCreatedAt(), latestQuery);
     }
 
-    public record CreatePrescriptionRequest(@NotNull UUID visitId, @NotEmpty List<@Valid ItemRequest> items) {
+    public record CreatePrescriptionRequest(@NotNull UUID visitId, @NotEmpty List<@Valid ItemRequest> items, String overrideReason) {
     }
+
+    public record DispenseRequest(String overrideReason, LocalDate coverageUntil) { }
+    public record DeclineRequest(@NotNull DeclineReasonCode reasonCode, String reasonDetail) { }
+    public record SafetyCheckRequest(@NotNull UUID patientId, @NotEmpty List<@Valid ItemRequest> items) { }
 
     public record ItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity) {
     }
@@ -116,6 +157,10 @@ public class PrescriptionController {
     public record PrescriptionResponse(UUID id, String serialNumber, UUID visitId, UUID patientId,
                                         String patientName, String patientMpi, UUID facilityId, UUID prescriberId,
                                         PrescriptionStatus status, List<PrescriptionItemResponse> items,
-                                        Instant createdAt) {
+                                        Instant createdAt, PrescriptionQuerySummary latestQuery) {
     }
+
+    /** Included on queue/detail reads so pharmacy can see the response without opening a separate inbox. */
+    public record PrescriptionQuerySummary(UUID id, PrescriptionQueryStatus status, String reason, String guidelineWarning,
+                                           String prescriberResponse, Instant respondedAt) { }
 }

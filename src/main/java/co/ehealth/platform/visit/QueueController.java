@@ -56,6 +56,31 @@ public class QueueController {
         return ResponseEntity.ok(QueueEntryResponse.from(called));
     }
 
+    @GetMapping("/api/v1/queue/open")
+    public ResponseEntity<Map<String, Object>> open(@RequestParam UUID facilityId) {
+        return ResponseEntity.ok(Map.of("items", queueService.listOpenQueueView(facilityId).stream()
+                .map(QueueEntryResponse::from).toList()));
+    }
+
+    @GetMapping("/api/v1/queue/cancellation-reasons")
+    public List<CancellationReason> cancellationReasons() {
+        return List.of(CancellationReason.values());
+    }
+
+    @PostMapping("/api/v1/queue/tokens/{tokenId}/transition")
+    public QueueTokenResponse transition(@org.springframework.web.bind.annotation.PathVariable UUID tokenId,
+            @Valid @RequestBody TransitionRequest request,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return QueueTokenResponse.from(queueService.transition(tokenId, request.action(), request.reasonCode(), staff.userId()));
+    }
+
+    public record TransitionRequest(@NotNull QueueService.TokenAction action, CancellationReason reasonCode) {
+        @jakarta.validation.constraints.AssertTrue(message = "A cancellation reason code is required")
+        public boolean isCancellationReasonValid() {
+            return action != QueueService.TokenAction.CANCEL || reasonCode != null;
+        }
+    }
+
     public record IssueManualTokenRequest(@NotNull UUID visitId, @NotNull TokenPriority priority) {
     }
 

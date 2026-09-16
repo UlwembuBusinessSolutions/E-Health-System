@@ -59,6 +59,55 @@ public class QueueToken {
     @Column(name = "issued_by_user_id")
     private UUID issuedByUserId;
 
+    @jakarta.persistence.Version
+    private long version;
+    @Column(name = "completed_at")
+    private Instant completedAt;
+    @Column(name = "stopped_at")
+    private Instant stoppedAt;
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cancellation_reason", length = 40)
+    private CancellationReason cancellationReason;
+
+    public Instant getCompletedAt() { return completedAt; }
+    public Instant getStoppedAt() { return stoppedAt; }
+    public Instant getCancelledAt() { return cancelledAt; }
+    public CancellationReason getCancellationReason() { return cancellationReason; }
+
+    private void require(TokenStatus... allowed) {
+        if (java.util.Arrays.stream(allowed).noneMatch(value -> value == status))
+            throw new TokenTransitionException("Action is not allowed for token in " + status + " state");
+    }
+    public void startService() {
+        require(TokenStatus.CALLED);
+        status = TokenStatus.IN_SERVICE;
+    }
+    public void complete(Instant at) {
+        require(TokenStatus.CALLED, TokenStatus.IN_SERVICE);
+        status = TokenStatus.COMPLETED;
+        completedAt = at;
+    }
+    public void stop(Instant at) {
+        require(TokenStatus.ISSUED, TokenStatus.CALLED, TokenStatus.IN_SERVICE);
+        status = TokenStatus.STOPPED;
+        stoppedAt = at;
+    }
+    public void resume() {
+        require(TokenStatus.STOPPED);
+        status = TokenStatus.ISSUED;
+        calledAt = null;
+        stoppedAt = null;
+    }
+    public void cancel(Instant at, CancellationReason reason) {
+        require(TokenStatus.ISSUED, TokenStatus.CALLED, TokenStatus.IN_SERVICE, TokenStatus.STOPPED);
+        if (reason == null) throw new TokenTransitionException("A cancellation reason code is required");
+        status = TokenStatus.CANCELLED;
+        cancelledAt = at;
+        cancellationReason = reason;
+    }
+
     protected QueueToken() {
     }
 
@@ -76,6 +125,7 @@ public class QueueToken {
 
     // RECQ-US-004 — "Called" status + call time recorded.
     public void call(Instant at) {
+        require(TokenStatus.ISSUED);
         this.status = TokenStatus.CALLED;
         this.calledAt = at;
     }

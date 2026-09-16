@@ -74,6 +74,17 @@ public class Prescription {
         this.status = PrescriptionStatus.DISPENSED;
     }
 
+    public void decline() { this.status = PrescriptionStatus.DECLINED; }
+
+    /** A clinical query stops dispensing until its author has responded. */
+    public void hold() {
+        this.status = PrescriptionStatus.HELD;
+    }
+
+    public void returnToQueue() {
+        this.status = PrescriptionStatus.PENDING;
+    }
+
     public UUID getId() {
         return id;
     }

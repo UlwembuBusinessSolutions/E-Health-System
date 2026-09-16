@@ -21,8 +21,12 @@ import co.ehealth.platform.patient.PatientNotFoundException;
 import co.ehealth.platform.facility.FacilityNotFoundException;
 import co.ehealth.platform.pharmacy.NotLicensedException;
 import co.ehealth.platform.pharmacy.PrescriptionAlreadyDispensedException;
+import co.ehealth.platform.pharmacy.ClinicalSafetyBlockedException;
 import co.ehealth.platform.pharmacy.PrescriptionNotFoundException;
 import co.ehealth.platform.pharmacy.PatientIdentityNotVerifiedException;
+import co.ehealth.platform.pharmacy.PrescriptionOnHoldException;
+import co.ehealth.platform.pharmacy.PrescriptionQueryNotFoundException;
+import co.ehealth.platform.pharmacy.PrescriptionQueryResponseForbiddenException;
 import co.ehealth.platform.visit.EmptyQueueException;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import org.slf4j.Logger;
@@ -386,6 +390,34 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             HttpHeaders headers, HttpStatusCode statusCode, WebRequest request) {
         return ResponseEntity.status(statusCode).headers(headers)
                 .body(new ApiErrorResponse("Request could not be processed.", null));
+    }
+
+    @ExceptionHandler({co.ehealth.platform.visit.TokenTransitionException.class,
+            org.springframework.orm.ObjectOptimisticLockingFailureException.class})
+    public ResponseEntity<ApiErrorResponse> handleTokenConflict(RuntimeException ex) {
+        String message = ex instanceof co.ehealth.platform.visit.TokenTransitionException
+                ? ex.getMessage() : "Token changed. Refresh the queue and try again.";
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(message, null));
+    }
+
+    @ExceptionHandler(PrescriptionOnHoldException.class)
+    public ResponseEntity<ApiErrorResponse> handlePrescriptionOnHold(PrescriptionOnHoldException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PrescriptionQueryNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handlePrescriptionQueryNotFound(PrescriptionQueryNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PrescriptionQueryResponseForbiddenException.class)
+    public ResponseEntity<ApiErrorResponse> handlePrescriptionQueryResponseForbidden(PrescriptionQueryResponseForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(ClinicalSafetyBlockedException.class)
+    public ResponseEntity<ApiErrorResponse> handleClinicalSafetyBlocked(ClinicalSafetyBlockedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(Exception.class)

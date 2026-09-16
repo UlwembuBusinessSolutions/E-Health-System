@@ -5,6 +5,7 @@ package co.ehealth.platform.pharmacy;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.clinic.ClinicContext;
 import co.ehealth.platform.core.tenant.ModuleCode;
+import co.ehealth.platform.facility.FacilityRepository;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.identity.StaffService;
@@ -14,6 +15,7 @@ import co.ehealth.platform.visit.Visit;
 import co.ehealth.platform.visit.VisitService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -37,7 +39,12 @@ public class PrescriptionService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
+    private final ClinicalSafetyService clinicalSafetyService;
+    @Autowired private PrescriptionDeclineRepository declineRepository;
+    @Autowired private PrescriptionDeclineNotificationRepository declineNotifications;
+    @Autowired private FacilityRepository facilityRepository;
 
+    @Autowired
     public PrescriptionService(PrescriptionRepository prescriptionRepository,
                                 PrescriptionItemRepository prescriptionItemRepository,
                                 DispensingRecordRepository dispensingRecordRepository,
@@ -45,7 +52,7 @@ public class PrescriptionService {
                                 PatientService patientService, ManualVerificationCaseRepository manualVerificationCases,
                                 ManualVerificationService manualVerificationService, StaffService staffService,
                                 AuditLogService auditLogService, Clock clock,
-                                PermissionService permissionService) {
+                                PermissionService permissionService, ClinicalSafetyService clinicalSafetyService) {
         this.prescriptionRepository = prescriptionRepository;
         this.prescriptionItemRepository = prescriptionItemRepository;
         this.dispensingRecordRepository = dispensingRecordRepository;
@@ -58,6 +65,19 @@ public class PrescriptionService {
         this.auditLogService = auditLogService;
         this.clock = clock;
         this.permissionService = permissionService;
+        this.clinicalSafetyService = clinicalSafetyService;
+    }
+
+    // Retains the constructor used by earlier module tests/integrations. Production always receives
+    // the clinical-safety service through the @Autowired constructor above.
+    public PrescriptionService(PrescriptionRepository prescriptionRepository, PrescriptionItemRepository prescriptionItemRepository,
+                               DispensingRecordRepository dispensingRecordRepository, StockMovementRepository stockMovementRepository,
+                               VisitService visitService, PatientService patientService, ManualVerificationCaseRepository manualVerificationCases,
+                               ManualVerificationService manualVerificationService, StaffService staffService, AuditLogService auditLogService,
+                               Clock clock, PermissionService permissionService) {
+        this(prescriptionRepository, prescriptionItemRepository, dispensingRecordRepository, stockMovementRepository, visitService,
+                patientService, manualVerificationCases, manualVerificationService, staffService, auditLogService, clock,
+                permissionService, null);
     }
 
     //  patientId/facilityId come from the visit,
@@ -75,6 +95,8 @@ public class PrescriptionService {
         Visit visit = visitService.get(cmd.visitId());
         requireValidMpi(visit.getPatientId());
 
+        List<ClinicalSafetyAlert> alerts = validateSafety(visit.getPatientId(), itemNames(cmd.items()), cmd.overrideReason(),
+                prescriberId, visit.getFacilityId(), "PRESCRIBING");
         String serialNumber = "RX-" + String.format("%07d", prescriptionRepository.nextSerialSequenceValue());
         Prescription prescription = new Prescription(serialNumber, visit.getId(), visit.getPatientId(),
                 visit.getFacilityId(), prescriberId, clock.instant());
@@ -127,13 +149,29 @@ public class PrescriptionService {
     // registration.
     @Transactional
     public void dispense(UUID prescriptionId, UUID dispenserId) {
+        dispense(prescriptionId, dispenserId, null);
+    }
+
+    @Transactional
+    public void dispense(UUID prescriptionId, UUID dispenserId, String overrideReason) {
+        dispense(prescriptionId, dispenserId, overrideReason, null);
+    }
+
+    @Transactional
+    public void dispense(UUID prescriptionId, UUID dispenserId, String overrideReason, LocalDate coverageUntil) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.MANAGE);
         if (!staffService.getLicenseStatus(dispenserId).canDispense()) {
             throw new NotLicensedException("You need a current SAPC registration to dispense.");
         }
         Prescription prescription = get(prescriptionId);
-        if (prescription.getStatus() == PrescriptionStatus.DISPENSED) {
+        if (prescription.getStatus() == PrescriptionStatus.HELD) {
+            throw new PrescriptionOnHoldException();
+        }
+        if (prescription.getStatus() == PrescriptionStatus.DISPENSED || prescription.getStatus() == PrescriptionStatus.DECLINED) {
             throw new PrescriptionAlreadyDispensedException();
+        }
+        if (coverageUntil != null && coverageUntil.isBefore(LocalDate.now(clock.withZone(ZoneOffset.UTC)))) {
+            throw new IllegalArgumentException("Coverage end date cannot be in the past.");
         }
 
         Patient patient;
@@ -143,11 +181,13 @@ public class PrescriptionService {
             manualVerificationService.route(prescription, dispenserId, ex.getMessage(), clock.instant());
             throw ex;
         }
+        validateSafety(patient.getId(), itemNames(prescriptionItemRepository.findByPrescriptionId(prescriptionId)), overrideReason,
+                dispenserId, prescription.getFacilityId(), "DISPENSING");
 
         prescription.markDispensed();
         prescriptionRepository.save(prescription);
         dispensingRecordRepository.save(new DispensingRecord(prescriptionId, patient.getId(), patient.getMpiNumber(),
-                dispenserId, clock.instant()));
+                dispenserId, clock.instant(), coverageUntil));
         for (PrescriptionItem item : prescriptionItemRepository.findByPrescriptionId(prescriptionId)) {
             stockMovementRepository.save(new StockMovement(prescriptionId, patient.getId(), patient.getMpiNumber(),
                     item.getDrugName(), item.getQuantity(), clock.instant()));
@@ -157,7 +197,64 @@ public class PrescriptionService {
                 prescriptionId.toString(), null, null);
     }
 
-    public record CreatePrescriptionCommand(UUID visitId, List<PrescriptionItemInput> items) {
+    public List<ClinicalSafetyAlert> check(UUID patientId, List<PrescriptionItemInput> items) {
+        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        requireValidMpi(patientId);
+        return clinicalSafetyService == null ? List.of() : clinicalSafetyService.check(patientId, itemNames(items));
+    }
+
+    public record DuplicateDispensingWarning(UUID prescriptionId, String drugName, Instant dispensedAt,
+                                              UUID facilityId, String facilityName, LocalDate coverageUntil) { }
+
+    public List<DuplicateDispensingWarning> duplicateWarnings(UUID prescriptionId) {
+        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        Prescription prescription = get(prescriptionId);
+        List<String> requested = itemNames(prescriptionItemRepository.findByPrescriptionId(prescriptionId));
+        return dispensingRecordRepository.findActiveForPatient(prescription.getPatientId(), prescriptionId,
+                LocalDate.now(clock.withZone(ZoneOffset.UTC))).stream().flatMap(record -> {
+            Prescription prior = prescriptionRepository.findById(record.getPrescriptionId()).orElseThrow();
+            return prescriptionItemRepository.findByPrescriptionId(record.getPrescriptionId()).stream()
+                    .filter(item -> requested.stream().anyMatch(name -> name.equalsIgnoreCase(item.getDrugName())))
+                    .map(item -> new DuplicateDispensingWarning(record.getPrescriptionId(), item.getDrugName(),
+                            record.getDispensedAt(), prior.getFacilityId(),
+                            facilityRepository.findById(prior.getFacilityId()).map(f -> f.getName()).orElse("Unknown facility"),
+                            record.getCoverageUntil()));
+        }).toList();
+    }
+
+    @Transactional
+    public PrescriptionDecline decline(UUID prescriptionId, UUID pharmacistId, DeclineReasonCode reasonCode, String detail) {
+        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.MANAGE);
+        if (!staffService.getLicenseStatus(pharmacistId).canDispense()) throw new NotLicensedException("You need a current SAPC registration to decline dispensing.");
+        if (reasonCode == null) throw new IllegalArgumentException("A decline reason code is required.");
+        if (reasonCode == DeclineReasonCode.OTHER && (detail == null || detail.isBlank())) throw new IllegalArgumentException("A reason detail is required for OTHER.");
+        if (detail != null && detail.length() > 1000) throw new IllegalArgumentException("Reason detail exceeds 1000 characters.");
+        Prescription prescription = get(prescriptionId);
+        if (prescription.getStatus() != PrescriptionStatus.PENDING) throw new IllegalStateException("Only pending prescriptions can be declined.");
+        prescription.decline();
+        prescriptionRepository.save(prescription);
+        Instant now = clock.instant();
+        PrescriptionDecline decline = declineRepository.save(new PrescriptionDecline(prescription, pharmacistId, reasonCode,
+                detail == null ? null : detail.trim(), now));
+        declineNotifications.save(new PrescriptionDeclineNotification(decline.getId(), prescriptionId, prescription.getPrescriberId(), now));
+        auditLogService.append(pharmacistId, prescription.getFacilityId(), "PRESCRIPTION_DECLINED", "Prescription",
+                prescriptionId.toString(), null, "{\"reasonCode\":\"" + reasonCode + "\"}");
+        return decline;
+    }
+
+    public PrescriptionDecline getDecline(UUID prescriptionId) {
+        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        get(prescriptionId);
+        return declineRepository.findByPrescriptionIdAndFacilityId(prescriptionId, ClinicContext.require()).orElseThrow();
+    }
+
+    public List<PrescriptionDeclineNotification> declineNotifications(UUID prescriberId) {
+        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        return declineNotifications.findByRecipientUserIdOrderByCreatedAtDesc(prescriberId);
+    }
+
+    public record CreatePrescriptionCommand(UUID visitId, List<PrescriptionItemInput> items, String overrideReason) {
+        public CreatePrescriptionCommand(UUID visitId, List<PrescriptionItemInput> items) { this(visitId, items, null); }
     }
 
     public record PrescriptionItemInput(String drugName, String dosage, int quantity) {
@@ -176,5 +273,23 @@ public class PrescriptionService {
         }
         return patient;
     }
+
+    private List<ClinicalSafetyAlert> validateSafety(UUID patientId, List<String> drugNames, String overrideReason,
+                                                       UUID actorId, UUID facilityId, String stage) {
+        if (clinicalSafetyService == null) return List.of();
+        List<ClinicalSafetyAlert> alerts = clinicalSafetyService.check(patientId, drugNames);
+        boolean blocked = alerts.stream().anyMatch(alert -> alert.severity().requiresOverride());
+        if (blocked && (overrideReason == null || overrideReason.isBlank())) throw new ClinicalSafetyBlockedException(alerts);
+        if (!alerts.isEmpty()) {
+            String action = blocked ? "CLINICAL_ALERT_OVERRIDDEN" : "CLINICAL_ALERT_REVIEWED";
+            String after = "{\"stage\":\"" + stage + "\",\"overrideReason\":"
+                    + (blocked ? "\"" + overrideReason.trim().replace("\"", "\\\"") + "\"" : "null") + "}";
+            auditLogService.append(actorId, facilityId, action, "ClinicalSafetyAlert", patientId.toString(), null, after);
+        }
+        return alerts;
+    }
+
+    private List<String> itemNames(List<PrescriptionItemInput> items) { return items.stream().map(PrescriptionItemInput::drugName).toList(); }
+    private List<String> itemNames(java.util.Collection<PrescriptionItem> items) { return items.stream().map(PrescriptionItem::getDrugName).toList(); }
 
 }

@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "checks": [
+    "Prescriber signed in through the live frontend",
+    "Pharmacist sees prior dispensing date, facility, and active supply before deciding",
+    "Decline saves the reason and removes dispensing actions",
+    "Prescriber receives a navigable decline notification",
+    "No JavaScript errors or unexpected API failures"
+  ],
+  "screenshots": [
+    {
+      "label": "Cross-clinic unexpired dispensing warning",
+      "file": "PHRM-US-005-browser-screenshots/01-duplicate-warning.png"
+    },
+    {
+      "label": "Decline form with mandatory reason code",
+      "file": "PHRM-US-005-browser-screenshots/02-decline-reason.png"
+    },
+    {
+      "label": "Saved decline decision",
+      "file": "PHRM-US-005-browser-screenshots/03-declined.png"
+    },
+    {
+      "label": "Prescriber notification in the browser",
+      "file": "PHRM-US-005-browser-screenshots/04-prescriber-notification.png"
+    }
+  ]
+}

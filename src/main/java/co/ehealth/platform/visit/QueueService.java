@@ -139,4 +139,37 @@ public class QueueService {
                 next.getId().toString(), null, null);
         return toView(next);
     }
+    public List<QueueEntryView> listOpenQueueView(UUID facilityId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        ClinicContext.requireFacility(facilityId);
+        return queueTokenRepository.findOpenQueue(facilityId).stream().map(this::toView).toList();
+    }
+
+    public enum TokenAction { START_SERVICE, COMPLETE, STOP, RESUME, CANCEL }
+
+    @Transactional
+    public QueueToken transition(UUID tokenId, TokenAction action, CancellationReason reason, UUID actor) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        QueueToken token = queueTokenRepository.findByIdAndFacilityId(tokenId, ClinicContext.require())
+                .orElseThrow(() -> new TokenTransitionException("Token not found in the active clinic"));
+        String before = token.getStatus().name();
+        switch (action) {
+            case START_SERVICE -> token.startService();
+            case COMPLETE -> token.complete(clock.instant());
+            case STOP -> token.stop(clock.instant());
+            case RESUME -> token.resume();
+            case CANCEL -> token.cancel(clock.instant(), reason);
+        }
+        queueTokenRepository.saveAndFlush(token);
+        String after = "{\"status\":\"" + token.getStatus().name() + "\""
+                + (action == TokenAction.CANCEL ? ",\"reasonCode\":\"" + token.getCancellationReason() + "\"" : "") + "}";
+        auditLogService.append(actor, token.getFacilityId(), "QUEUE_TOKEN_" + switch (action) {
+            case START_SERVICE -> "SERVICE_STARTED";
+            case COMPLETE -> "COMPLETED";
+            case STOP -> "STOPPED";
+            case RESUME -> "RESUMED";
+            case CANCEL -> "CANCELLED";
+        }, "QueueToken", token.getId().toString(), "{\"status\":\"" + before + "\"}", after);
+        return token;
+    }
 }

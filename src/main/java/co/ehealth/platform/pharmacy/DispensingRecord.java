@@ -7,6 +7,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 // One row per dispensed prescription — prescriptionId is unique because
@@ -37,16 +38,25 @@ public class DispensingRecord {
     @Column(name = "dispensed_at", nullable = false)
     private Instant dispensedAt;
 
+    @Column(name = "coverage_until")
+    private LocalDate coverageUntil;
+
     protected DispensingRecord() {
     }
 
     public DispensingRecord(UUID prescriptionId, UUID patientId, String patientMpi, UUID dispensedByUserId,
                             Instant dispensedAt) {
+        this(prescriptionId, patientId, patientMpi, dispensedByUserId, dispensedAt, null);
+    }
+
+    public DispensingRecord(UUID prescriptionId, UUID patientId, String patientMpi, UUID dispensedByUserId,
+                            Instant dispensedAt, LocalDate coverageUntil) {
         this.prescriptionId = prescriptionId;
         this.patientId = patientId;
         this.patientMpi = patientMpi;
         this.dispensedByUserId = dispensedByUserId;
         this.dispensedAt = dispensedAt;
+        this.coverageUntil = coverageUntil;
     }
 
     public UUID getId() {
@@ -72,4 +82,6 @@ public class DispensingRecord {
     public Instant getDispensedAt() {
         return dispensedAt;
     }
+
+    public LocalDate getCoverageUntil() { return coverageUntil; }
 }
