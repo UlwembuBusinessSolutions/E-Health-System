@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpCircle, PhoneCall, Ticket } from "lucide-react";
+import { ArrowUpCircle, PhoneCall, Search, Ticket } from "lucide-react";
 import { callNext, issueManualToken, listQueue, type QueueEntry } from "@/shared/api/queue";
 import { getFacilities } from "@/shared/api/facilities";
 import { ApiError } from "@/shared/api/client";
@@ -35,6 +35,7 @@ function announcePatient(entry: QueueEntry): void {
 export function QueuePage() {
   const queryClient = useQueryClient();
   const [facilityId, setFacilityId] = useState("");
+  const [search, setSearch] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [justCalled, setJustCalled] = useState<QueueEntry | null>(null);
 
@@ -47,8 +48,8 @@ export function QueuePage() {
   }, [facilityId, facilitiesQuery.data]);
 
   const queueQuery = useQuery({
-    queryKey: ["queue", facilityId],
-    queryFn: () => listQueue(facilityId),
+    queryKey: ["queue", facilityId, search],
+    queryFn: () => listQueue(facilityId, search),
     enabled: !!facilityId,
     refetchInterval: 5000,
   });
@@ -129,6 +130,26 @@ export function QueuePage() {
         </Card>
       </div>
 
+      <div className="mb-4">
+        <label htmlFor="queue-search" className="sr-only">
+          Search active queue
+        </label>
+        <div className="relative max-w-xl">
+          <Search
+            className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-text-secondary"
+            aria-hidden
+          />
+          <input
+            id="queue-search"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search by token number, patient name or MPI"
+            className="h-11 w-full rounded-lg border border-border-strong bg-surface-raised pl-10 pr-3.5 text-[14px] text-text-primary outline-none placeholder:text-text-secondary focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+          />
+        </div>
+      </div>
+
       <Card className="overflow-hidden p-0">
         {actionError && (
           <div role="alert" className="border-b border-danger-500/30 bg-danger-50 px-5 py-2.5 text-[13.5px] text-danger-600">
@@ -142,7 +163,9 @@ export function QueuePage() {
         ) : queue.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
             <Ticket className="size-6 text-text-secondary" aria-hidden />
-            <p className="text-[14px] text-text-secondary">No one is waiting right now.</p>
+            <p className="text-[14px] text-text-secondary">
+              {search.trim() ? "No active queue entries match your search." : "No one is waiting right now."}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -157,6 +180,9 @@ export function QueuePage() {
                   </th>
                   <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
                     Priority
+                  </th>
+                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
+                    Status
                   </th>
                   <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
                     Issued
@@ -179,6 +205,11 @@ export function QueuePage() {
                     <td className="px-5 py-3.5">
                       <StatusPill tone={entry.token.priority === "PRIORITY" ? "warning" : "neutral"}>
                         {entry.token.priority === "PRIORITY" ? "Priority" : "Normal"}
+                      </StatusPill>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <StatusPill tone={entry.token.status === "CALLED" ? "success" : "neutral"}>
+                        {entry.token.status === "CALLED" ? "Called" : "Issued"}
                       </StatusPill>
                     </td>
                     <td className="px-5 py-3.5 font-mono text-[13px] text-text-secondary tabular-nums">

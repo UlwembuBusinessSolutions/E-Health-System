@@ -14,6 +14,7 @@ export interface Visit {
   id: string;
   patientId: string;
   facilityId: string;
+  stationId: string;
   visitType: VisitType;
   serviceStream: ServiceStream;
   visitDateTime: string;
@@ -22,6 +23,7 @@ export interface Visit {
 export interface CreateVisitPayload {
   patientId: string;
   facilityId: string;
+  stationId: string;
   visitType: VisitType;
   serviceStream: ServiceStream;
 }

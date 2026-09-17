@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, CheckCircle2, CreditCard, Hash, MapPin, Phone, Plus, Trash2, User } from "lucide-react";
 import { registerPatientSchema, type RegisterPatientValues } from "./validation";
 import { registerPatient } from "@/shared/api/patients";
+import { getOrganizationSelf } from "@/shared/api/organization";
 import { ApiError } from "@/shared/api/client";
 import { Input } from "@/shared/components/Input";
 import { Button } from "@/shared/components/Button";
@@ -24,6 +25,9 @@ import { FormRow } from "@/shared/components/FormRow";
 export function RegisterPatientScreen() {
   const navigate = useNavigate();
   const [formError, setFormError] = useState<string | null>(null);
+  const organizationQuery = useQuery({ queryKey: ["organization", "self"], queryFn: getOrganizationSelf });
+  const isOccupationalTenant = organizationQuery.data?.sector === "OCCUPATIONAL";
+  const schema = useMemo(() => registerPatientSchema(isOccupationalTenant), [isOccupationalTenant]);
 
   const {
     register,
@@ -31,7 +35,7 @@ export function RegisterPatientScreen() {
     formState: { errors, isSubmitting },
     control,
   } = useForm<RegisterPatientValues>({
-    resolver: zodResolver(registerPatientSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       firstName: "",
       lastName: "",
@@ -40,6 +44,10 @@ export function RegisterPatientScreen() {
       contactNumber: "",
       medicalAidProvider: "",
       medicalAidNumber: "",
+      employer: "",
+      employeeNumber: "",
+      occupation: "",
+      department: "",
       nextOfKin: [{ name: "", relationship: "", contactNumber: "" }],
     },
   });
@@ -55,6 +63,10 @@ export function RegisterPatientScreen() {
         contactNumber: values.contactNumber,
         medicalAidProvider: values.medicalAidProvider || undefined,
         medicalAidNumber: values.medicalAidNumber || undefined,
+        employer: values.employer || undefined,
+        employeeNumber: values.employeeNumber || undefined,
+        occupation: values.occupation || undefined,
+        department: values.department || undefined,
         nextOfKin: values.nextOfKin,
       }),
     onError: (error) => {
@@ -146,6 +158,47 @@ export function RegisterPatientScreen() {
                 {...register("lastName")}
               />
             </FormRow>
+
+            <div className="flex flex-col gap-3 border-t border-border-subtle pt-4">
+              <div>
+                <h2 className="text-[14.5px] font-semibold text-text-primary">Employment details</h2>
+                <p className="mt-1 text-[13px] text-text-secondary">
+                  {isOccupationalTenant
+                    ? "Employer and employee number are required for this occupational health tenant."
+                    : "Optional workforce information."}
+                </p>
+              </div>
+              <FormRow>
+                <Input
+                  label="Employer"
+                  required={isOccupationalTenant}
+                  placeholder="Company or department"
+                  error={errors.employer?.message}
+                  {...register("employer")}
+                />
+                <Input
+                  label="Employee number"
+                  required={isOccupationalTenant}
+                  placeholder="EMP-00123"
+                  error={errors.employeeNumber?.message}
+                  {...register("employeeNumber")}
+                />
+              </FormRow>
+              <FormRow>
+                <Input
+                  label="Occupation"
+                  placeholder="Nurse"
+                  error={errors.occupation?.message}
+                  {...register("occupation")}
+                />
+                <Input
+                  label="Department"
+                  placeholder="Operations"
+                  error={errors.department?.message}
+                  {...register("department")}
+                />
+              </FormRow>
+            </div>
 
             <Input
               label="SA ID number"

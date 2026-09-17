@@ -52,9 +52,21 @@ export function PharmacyQueuePage() {
       setActionError(null);
       setDispensingId(id);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pharmacy", "queue", facilityId] }),
+    onSuccess: (_, { id }) => {
+      setScannedBarcodes((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      void queryClient.invalidateQueries({ queryKey: ["pharmacy", "queue", facilityId] });
+      void queryClient.invalidateQueries({ queryKey: ["pharmacy", "stock", facilityId] });
+    },
     onError: (error) => {
-      setActionError(error instanceof ApiError ? error.message : "Couldn't dispense that prescription. Try again.");
+      setActionError(error instanceof ApiError
+        ? error.message
+        : error instanceof Error
+          ? `Dispensing failed: ${error.message}`
+          : "Dispensing failed. Check the server connection and try again.");
     },
     onSettled: () => setDispensingId(null),
   });

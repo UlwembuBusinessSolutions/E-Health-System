@@ -7,6 +7,7 @@ import { createVisit, recordTriage, type ServiceStream, type VisitType, type Vis
 import { listQueue } from "@/shared/api/queue";
 import { createPrescription, type Prescription, type PrescriptionItem } from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
+import { listStations } from "@/shared/api/clinicConfiguration";
 import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
@@ -74,6 +75,7 @@ export function PatientDetailPage() {
   const patientId = id ?? "";
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const [facilityId, setFacilityId] = useState("");
+  const [stationId, setStationId] = useState("");
   const [visitType, setVisitType] = useState<VisitType | "">("");
   const [serviceStream, setServiceStream] = useState<ServiceStream | "">("");
   const [visitError, setVisitError] = useState<string | null>(null);
@@ -93,6 +95,7 @@ export function PatientDetailPage() {
   });
 
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities, enabled: isStartingVisit });
+  const stationsQuery = useQuery({ queryKey: ["stations", facilityId], queryFn: () => listStations(facilityId), enabled: isStartingVisit && !!facilityId });
 
   const ticketQueueQuery = useQuery({
     queryKey: ["queue", "ticket", startedVisit?.token.facilityId],
@@ -105,6 +108,7 @@ export function PatientDetailPage() {
       createVisit({
         patientId,
         facilityId,
+        stationId,
         visitType: visitType as VisitType,
         serviceStream: serviceStream as ServiceStream,
       }),
@@ -119,8 +123,8 @@ export function PatientDetailPage() {
 
   const handleStartVisit = () => {
     setVisitError(null);
-    if (!facilityId || !visitType || !serviceStream) {
-      setVisitError("Select a facility, visit type, and service stream.");
+    if (!facilityId || !stationId || !visitType || !serviceStream) {
+      setVisitError("Select a facility, service station, visit type, and service stream.");
       return;
     }
     startVisit.mutate();
@@ -293,6 +297,7 @@ export function PatientDetailPage() {
                       value={facilityId}
                       onChange={(e) => setFacilityId(e.target.value)}
                     />
+                    <Select label="Service station" required options={(stationsQuery.data ?? []).map((s) => ({ value: s.id, label: s.counterLabel ? `${s.name} · ${s.counterLabel}` : s.name }))} value={stationId} onChange={(e) => setStationId(e.target.value)} />
                     <Select
                       label="Visit type"
                       required
@@ -451,6 +456,16 @@ export function PatientDetailPage() {
               <Field label="Medical aid provider" value={patient.medicalAidProvider ?? "—"} />
               <Field label="Medical aid number" value={patient.medicalAidNumber ?? "—"} />
               <Field label="Registered" value={formatDateTime(patient.createdAt)} />
+            </div>
+          </Card>
+
+          <Card className="mt-6 p-6">
+            <h2 className="mb-4 text-[14.5px] font-semibold text-text-primary">Employment details</h2>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Employer" value={patient.employer ?? "—"} />
+              <Field label="Employee number" value={patient.employeeNumber ?? "—"} />
+              <Field label="Occupation" value={patient.occupation ?? "—"} />
+              <Field label="Department" value={patient.department ?? "—"} />
             </div>
           </Card>
 

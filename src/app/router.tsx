@@ -13,6 +13,7 @@ import { RegisterPatientScreen } from "@/patient/RegisterPatientScreen";
 import { PatientDetailPage } from "@/patient/PatientDetailPage";
 import { AddDependantScreen } from "@/patient/AddDependantScreen";
 import { QueuePage } from "@/queue/QueuePage";
+import { QueueDisplayPage } from "@/queue/QueueDisplayPage";
 import { PharmacyQueuePage } from "@/pharmacy/PharmacyQueuePage";
 import { AppShell } from "./AppShell";
 import { DashboardPage } from "./DashboardPage";
@@ -32,6 +33,8 @@ import { AddClinicScreen } from "@/platform/AddClinicScreen";
 import { UsersPage } from "@/platform/UsersPage";
 import { CreateOperatorScreen } from "@/platform/CreateOperatorScreen";
 import { AuditPage } from "@/platform/AuditPage";
+import { ClinicConfigurationPage } from "@/facility/ClinicConfigurationPage";
+import { StockControlPage } from "@/pharmacy/StockControlPage";
 
 export function AppRouter() {
   return (
@@ -76,6 +79,7 @@ export function AppRouter() {
             </RequireRole>
           }
         />
+        <Route path="clinic-configuration" element={<RequireRole roles={["ORG_ADMIN", "Facility Manager"]}><ClinicConfigurationPage /></RequireRole>} />
         {/* No RequireRole — registering and finding a patient is front-line
             reception/clinical work, not admin territory, same gating as the
             backend's own PatientController (falls through to
@@ -86,7 +90,16 @@ export function AppRouter() {
         <Route path="patients/:id/dependants/new" element={<AddDependantScreen />} />
         <Route path="queue" element={<QueuePage />} />
         <Route path="pharmacy" element={<PharmacyQueuePage />} />
+        <Route path="pharmacy/stock" element={<StockControlPage />} />
       </Route>
+      <Route
+        path="/queue-display"
+        element={
+          <RequireAuth>
+            <QueueDisplayPage />
+          </RequireAuth>
+        }
+      />
       {/* Deliberately not RequireAuth/RequireRole — a platform operator
           isn't a staff/org-admin login (backend-auth-guide.html Section 1),
           it's a completely separate identity space with its own login

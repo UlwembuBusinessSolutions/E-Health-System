@@ -20,6 +20,10 @@ export interface RegisterPatientPayload {
   contactNumber: string;
   medicalAidProvider?: string;
   medicalAidNumber?: string;
+  employer?: string;
+  employeeNumber?: string;
+  occupation?: string;
+  department?: string;
   nextOfKin: NextOfKin[];
 }
 
@@ -45,6 +49,10 @@ export interface Patient {
   contactNumber: string;
   medicalAidProvider: string | null;
   medicalAidNumber: string | null;
+  employer: string | null;
+  employeeNumber: string | null;
+  occupation: string | null;
+  department: string | null;
   nextOfKin: NextOfKin[];
   createdAt: string;
 }

@@ -62,3 +62,49 @@ export interface StockScan {
 export async function dispensePrescription(id: string, scans: StockScan[]): Promise<void> {
   await apiClient.post<void>(`/api/v1/prescriptions/${id}/dispense`, { scans }, { headers: tenantAuthHeaders() });
 }
+
+export interface StockItem {
+  drugName: string;
+  quantityOnHand: number;
+  reorderLevel: number;
+  reorderAlert: boolean;
+}
+
+export interface StockMovement {
+  id: string;
+  facilityId: string;
+  drugName: string;
+  batchId: string | null;
+  movementType: "RECEIPT" | "DISPENSE" | "ADJUSTMENT" | "WRITE_OFF";
+  quantityDelta: number;
+  quantityBefore: number;
+  quantityAfter: number;
+  referenceId: string | null;
+  performedByUserId: string | null;
+  createdAt: string;
+}
+
+export interface StockOverview {
+  facilityId: string;
+  items: StockItem[];
+  movements: StockMovement[];
+}
+
+export async function getStockOverview(facilityId: string): Promise<StockOverview> {
+  return apiClient.get<StockOverview>(`/api/v1/pharmacy/stock?facilityId=${encodeURIComponent(facilityId)}`, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export interface ReceiveStockPayload {
+  facilityId: string;
+  drugName: string;
+  batchNumber: string;
+  barcode: string;
+  expiryDate: string;
+  quantity: number;
+}
+
+export async function receiveStock(payload: ReceiveStockPayload): Promise<void> {
+  await apiClient.post<void>("/api/v1/pharmacy/stock", payload, { headers: tenantAuthHeaders() });
+}

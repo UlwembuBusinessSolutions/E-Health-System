@@ -9,6 +9,7 @@ export interface QueueToken {
   id: string;
   visitId: string;
   facilityId: string;
+  stationId: string;
   tokenNumber: number;
   priority: TokenPriority;
   status: TokenStatus;
@@ -26,9 +27,21 @@ export interface QueueEntry {
   patientMpi: string;
 }
 
-export async function listQueue(facilityId: string): Promise<QueueEntry[]> {
+export async function listQueue(facilityId: string, search = ""): Promise<QueueEntry[]> {
+  const params = new URLSearchParams({ facilityId });
+  if (search.trim()) {
+    params.set("search", search.trim());
+  }
   const response = await apiClient.get<{ items: QueueEntry[] }>(
-    `/api/v1/queue?facilityId=${encodeURIComponent(facilityId)}`,
+    `/api/v1/queue?${params.toString()}`,
+    { headers: tenantAuthHeaders() },
+  );
+  return response.items;
+}
+
+export async function listQueueDisplay(facilityId: string): Promise<QueueToken[]> {
+  const response = await apiClient.get<{ items: QueueToken[] }>(
+    `/api/v1/queue/display?facilityId=${encodeURIComponent(facilityId)}`,
     { headers: tenantAuthHeaders() },
   );
   return response.items;
