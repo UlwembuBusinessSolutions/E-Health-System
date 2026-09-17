@@ -204,7 +204,7 @@ public class DevSeedDataRunner implements ApplicationRunner {
         String idNumber = southAfricanIdNumber(dateOfBirth, genderSequence);
         patientService.register(new PatientService.RegisterPatientCommand(
                 firstName, lastName, idNumber, address, contactNumber, medicalAidProvider, medicalAidNumber,
-                List.of()),
+                null, null, null, null, List.of()),
                 registeredByUserId);
     }
 

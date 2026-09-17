@@ -36,9 +36,17 @@ public class QueueController {
     }
 
     @GetMapping("/api/v1/queue")
-    public ResponseEntity<Map<String, Object>> list(@RequestParam UUID facilityId) {
+    public ResponseEntity<Map<String, Object>> list(@RequestParam UUID facilityId,
+                                                     @RequestParam(required = false) String search) {
         List<QueueEntryResponse> items =
-                queueService.listActiveQueueView(facilityId).stream().map(QueueEntryResponse::from).toList();
+                queueService.listActiveQueueView(facilityId, search).stream().map(QueueEntryResponse::from).toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    @GetMapping("/api/v1/queue/display")
+    public ResponseEntity<Map<String, Object>> display(@RequestParam UUID facilityId) {
+        List<QueueTokenResponse> items =
+                queueService.listDisplayQueue(facilityId).stream().map(QueueTokenResponse::from).toList();
         return ResponseEntity.ok(Map.of("items", items));
     }
 

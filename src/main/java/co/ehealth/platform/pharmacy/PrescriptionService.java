@@ -34,13 +34,14 @@ public class PrescriptionService {
     private final PermissionService permissionService;
     private final QueueTokenRepository queueTokenRepository;
     private final StockBatchRepository stockBatchRepository;
+    private final StockMovementRepository stockMovementRepository;
 
     public PrescriptionService(PrescriptionRepository prescriptionRepository,
                                 PrescriptionItemRepository prescriptionItemRepository,
                                 DispensingRecordRepository dispensingRecordRepository, VisitService visitService,
                                 StaffService staffService, AuditLogService auditLogService, Clock clock,
                                 PermissionService permissionService, QueueTokenRepository queueTokenRepository,
-                                StockBatchRepository stockBatchRepository) {
+                                StockBatchRepository stockBatchRepository, StockMovementRepository stockMovementRepository) {
         this.prescriptionRepository = prescriptionRepository;
         this.prescriptionItemRepository = prescriptionItemRepository;
         this.dispensingRecordRepository = dispensingRecordRepository;
@@ -51,6 +52,7 @@ public class PrescriptionService {
         this.permissionService = permissionService;
         this.queueTokenRepository = queueTokenRepository;
         this.stockBatchRepository = stockBatchRepository;
+        this.stockMovementRepository = stockMovementRepository;
     }
 
     // PHRM-US-018 + PHRM-US-009 — patientId/facilityId come from the visit,
@@ -156,8 +158,12 @@ public class PrescriptionService {
         for (StockScan scan : scans) {
             StockBatch batch = stockBatchRepository.findByBarcodeForUpdate(scan.barcode())
                     .orElseThrow(() -> new StockBatchNotFoundException(scan.barcode()));
+            int before = batch.getQuantityOnHand();
             batch.removeQuantity(scan.quantity());
             stockBatchRepository.save(batch);
+            stockMovementRepository.save(new StockMovement(batch.getFacilityId(), batch.getDrugName(), batch.getId(),
+                    StockMovementType.DISPENSE, -scan.quantity(), before, batch.getQuantityOnHand(),
+                    prescriptionId.toString(), dispenserId, clock.instant()));
         }
 
         prescription.markDispensed();

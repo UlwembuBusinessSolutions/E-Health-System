@@ -12,6 +12,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -93,6 +94,28 @@ public class PrescriptionController {
         return ResponseEntity.ok(stockService.expiryWarnings(facilityId).stream().map(StockBatchResponse::from).toList());
     }
 
+    @GetMapping("/api/v1/pharmacy/stock")
+    public ResponseEntity<StockService.StockOverview> stockOverview(@RequestParam UUID facilityId) {
+        return ResponseEntity.ok(stockService.overview(facilityId));
+    }
+
+    @PostMapping("/api/v1/pharmacy/stock/reorder-level")
+    public ResponseEntity<StockReorderLevelResponse> setReorderLevel(
+            @Valid @RequestBody ReorderLevelRequest request,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        StockReorderLevel level = stockService.setReorderLevel(request.facilityId(), request.drugName(),
+                request.reorderLevel(), staff.userId());
+        return ResponseEntity.ok(StockReorderLevelResponse.from(level));
+    }
+
+    @PostMapping("/api/v1/pharmacy/stock/{id}/count")
+    public ResponseEntity<StockBatchResponse> count(@PathVariable UUID id,
+                                                     @Valid @RequestBody CountRequest request,
+                                                     @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return ResponseEntity.ok(StockBatchResponse.from(stockService.count(id, request.countedQuantity(),
+                request.reason(), staff.userId())));
+    }
+
     @PostMapping("/api/v1/pharmacy/stock/{id}/write-off")
     public ResponseEntity<StockBatchResponse> writeOff(@PathVariable UUID id,
                                                         @Valid @RequestBody WriteOffRequest request,
@@ -137,6 +160,13 @@ public class PrescriptionController {
     public record WriteOffRequest(@Positive int quantity, @NotBlank String reason) {
     }
 
+    public record CountRequest(@PositiveOrZero int countedQuantity, @NotBlank String reason) {
+    }
+
+    public record ReorderLevelRequest(@NotNull UUID facilityId, @NotBlank String drugName,
+                                      @PositiveOrZero int reorderLevel) {
+    }
+
     public record ItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity) {
     }
 
@@ -150,5 +180,12 @@ public class PrescriptionController {
                                         co.ehealth.platform.visit.TokenPriority priority, Integer tokenNumber,
                                         PrescriptionStatus status, List<PrescriptionItemResponse> items,
                                         Instant createdAt) {
+    }
+
+    public record StockReorderLevelResponse(UUID id, UUID facilityId, String drugName, int reorderLevel) {
+        static StockReorderLevelResponse from(StockReorderLevel level) {
+            return new StockReorderLevelResponse(level.getId(), level.getFacilityId(), level.getDrugName(),
+                    level.getReorderLevel());
+        }
     }
 }

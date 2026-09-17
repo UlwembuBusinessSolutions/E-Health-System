@@ -62,7 +62,7 @@ public class QueueService {
     private QueueToken issue(Visit visit, TokenPriority priority, boolean manual, UUID issuedByUserId) {
         Instant now = clock.instant();
         int tokenNumber = nextTokenNumber(visit.getFacilityId(), now);
-        QueueToken token = new QueueToken(visit.getId(), visit.getFacilityId(), tokenNumber, priority, manual,
+        QueueToken token = new QueueToken(visit.getId(), visit.getFacilityId(), visit.getStationId(), tokenNumber, priority, manual,
                 now, issuedByUserId);
         queueTokenRepository.save(token);
         auditLogService.append(issuedByUserId, visit.getFacilityId(),
@@ -102,8 +102,27 @@ public class QueueService {
     // fetch: an active queue at a single facility is realistically a
     // handful of people, not a scale where N+1 here matters yet.
     public List<QueueEntryView> listActiveQueueView(UUID facilityId) {
+        return listActiveQueueView(facilityId, null);
+    }
+
+    public List<QueueEntryView> listActiveQueueView(UUID facilityId, String search) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
-        return queueTokenRepository.findActiveQueue(facilityId).stream().map(this::toView).toList();
+        String normalizedSearch = search == null ? "" : search.trim().toLowerCase();
+        return queueTokenRepository.findActiveQueue(facilityId).stream()
+                .map(this::toView)
+                .filter(entry -> normalizedSearch.isEmpty() || matchesSearch(entry, normalizedSearch))
+                .toList();
+    }
+
+    public List<QueueToken> listDisplayQueue(UUID facilityId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        return queueTokenRepository.findDisplayQueue(facilityId);
+    }
+
+    private boolean matchesSearch(QueueEntryView entry, String search) {
+        return String.valueOf(entry.token().getTokenNumber()).contains(search)
+                || entry.patientName().toLowerCase().contains(search)
+                || entry.patientMpi().toLowerCase().contains(search);
     }
 
     private QueueEntryView toView(QueueToken token) {

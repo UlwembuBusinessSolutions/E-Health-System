@@ -33,6 +33,9 @@ public class QueueToken {
     @Column(name = "facility_id", nullable = false)
     private UUID facilityId;
 
+    @Column(name = "station_id")
+    private UUID stationId;
+
     @Column(name = "token_number", nullable = false)
     private int tokenNumber;
 
@@ -62,16 +65,21 @@ public class QueueToken {
     protected QueueToken() {
     }
 
-    public QueueToken(UUID visitId, UUID facilityId, int tokenNumber, TokenPriority priority, boolean manual,
+    public QueueToken(UUID visitId, UUID facilityId, UUID stationId, int tokenNumber, TokenPriority priority, boolean manual,
                        Instant issuedAt, UUID issuedByUserId) {
         this.visitId = visitId;
         this.facilityId = facilityId;
+        this.stationId = stationId;
         this.tokenNumber = tokenNumber;
         this.priority = priority;
         this.status = TokenStatus.ISSUED;
         this.manual = manual;
         this.issuedAt = issuedAt;
         this.issuedByUserId = issuedByUserId;
+    }
+    public QueueToken(UUID visitId, UUID facilityId, int tokenNumber, TokenPriority priority, boolean manual,
+                       Instant issuedAt, UUID issuedByUserId) {
+        this(visitId, facilityId, null, tokenNumber, priority, manual, issuedAt, issuedByUserId);
     }
 
     // RECQ-US-004 — "Called" status + call time recorded.
@@ -95,6 +103,7 @@ public class QueueToken {
     public UUID getFacilityId() {
         return facilityId;
     }
+    public UUID getStationId() { return stationId; }
 
     public int getTokenNumber() {
         return tokenNumber;

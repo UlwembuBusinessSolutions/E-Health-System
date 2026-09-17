@@ -3,6 +3,7 @@ package co.ehealth.platform.visit;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.facility.FacilityService;
+import co.ehealth.platform.facility.ServiceStationRepository;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.patient.PatientService;
@@ -22,10 +23,12 @@ public class VisitService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
+    private final ServiceStationRepository stationRepository;
 
     public VisitService(VisitRepository visitRepository, PatientService patientService,
                          FacilityService facilityService, QueueService queueService,
-                         AuditLogService auditLogService, Clock clock, PermissionService permissionService) {
+                         AuditLogService auditLogService, Clock clock, PermissionService permissionService,
+                         ServiceStationRepository stationRepository) {
         this.visitRepository = visitRepository;
         this.patientService = patientService;
         this.facilityService = facilityService;
@@ -33,6 +36,7 @@ public class VisitService {
         this.auditLogService = auditLogService;
         this.clock = clock;
         this.permissionService = permissionService;
+        this.stationRepository = stationRepository;
     }
 
     // PREG-US-019 + RECQ-US-001 in one atomic call — "Visit w/ valid MPI ->
@@ -48,8 +52,10 @@ public class VisitService {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
         patientService.get(cmd.patientId());
         facilityService.get(cmd.facilityId());
+        stationRepository.findByIdAndFacilityId(cmd.stationId(), cmd.facilityId())
+                .orElseThrow(() -> new IllegalArgumentException("Station does not belong to this clinic"));
 
-        Visit visit = new Visit(cmd.patientId(), cmd.facilityId(), cmd.visitType(), cmd.serviceStream(),
+        Visit visit = new Visit(cmd.patientId(), cmd.facilityId(), cmd.stationId(), cmd.visitType(), cmd.serviceStream(),
                 clock.instant(), staffUserId);
         visitRepository.save(visit);
 
@@ -66,7 +72,7 @@ public class VisitService {
         return visitRepository.findById(id).orElseThrow(VisitNotFoundException::new);
     }
 
-    public record CreateVisitCommand(UUID patientId, UUID facilityId, VisitType visitType,
+    public record CreateVisitCommand(UUID patientId, UUID facilityId, UUID stationId, VisitType visitType,
                                       ServiceStream serviceStream) {
     }
 

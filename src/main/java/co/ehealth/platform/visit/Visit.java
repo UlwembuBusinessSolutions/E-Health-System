@@ -32,6 +32,9 @@ public class Visit {
     @Column(name = "facility_id", nullable = false)
     private UUID facilityId;
 
+    @Column(name = "station_id")
+    private UUID stationId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "visit_type", nullable = false, length = 20)
     private VisitType visitType;
@@ -49,14 +52,19 @@ public class Visit {
     protected Visit() {
     }
 
-    public Visit(UUID patientId, UUID facilityId, VisitType visitType, ServiceStream serviceStream,
+    public Visit(UUID patientId, UUID facilityId, UUID stationId, VisitType visitType, ServiceStream serviceStream,
                  Instant visitDateTime, UUID createdByUserId) {
         this.patientId = patientId;
         this.facilityId = facilityId;
+        this.stationId = stationId;
         this.visitType = visitType;
         this.serviceStream = serviceStream;
         this.visitDateTime = visitDateTime;
         this.createdByUserId = createdByUserId;
+    }
+    public Visit(UUID patientId, UUID facilityId, VisitType visitType, ServiceStream serviceStream,
+                 Instant visitDateTime, UUID createdByUserId) {
+        this(patientId, facilityId, null, visitType, serviceStream, visitDateTime, createdByUserId);
     }
 
     public UUID getId() {
@@ -70,6 +78,7 @@ public class Visit {
     public UUID getFacilityId() {
         return facilityId;
     }
+    public UUID getStationId() { return stationId; }
 
     public VisitType getVisitType() {
         return visitType;

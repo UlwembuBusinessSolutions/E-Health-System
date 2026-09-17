@@ -34,7 +34,7 @@ public class VisitController {
     @PostMapping("/api/v1/visits")
     public ResponseEntity<VisitWithTokenResponse> create(@Valid @RequestBody CreateVisitRequest request,
                                                            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
-        var command = new VisitService.CreateVisitCommand(request.patientId(), request.facilityId(),
+        var command = new VisitService.CreateVisitCommand(request.patientId(), request.facilityId(), request.stationId(),
                 request.visitType(), request.serviceStream());
         VisitService.VisitWithToken result = visitService.createVisit(command, staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(VisitWithTokenResponse.from(result));
@@ -45,14 +45,14 @@ public class VisitController {
         return ResponseEntity.ok(VisitResponse.from(visitService.get(id)));
     }
 
-    public record CreateVisitRequest(@NotNull UUID patientId, @NotNull UUID facilityId,
+    public record CreateVisitRequest(@NotNull UUID patientId, @NotNull UUID facilityId, @NotNull UUID stationId,
                                       @NotNull VisitType visitType, @NotNull ServiceStream serviceStream) {
     }
 
-    public record VisitResponse(UUID id, UUID patientId, UUID facilityId, VisitType visitType,
+    public record VisitResponse(UUID id, UUID patientId, UUID facilityId, UUID stationId, VisitType visitType,
                                  ServiceStream serviceStream, Instant visitDateTime) {
         static VisitResponse from(Visit v) {
-            return new VisitResponse(v.getId(), v.getPatientId(), v.getFacilityId(), v.getVisitType(),
+            return new VisitResponse(v.getId(), v.getPatientId(), v.getFacilityId(), v.getStationId(), v.getVisitType(),
                     v.getServiceStream(), v.getVisitDateTime());
         }
     }

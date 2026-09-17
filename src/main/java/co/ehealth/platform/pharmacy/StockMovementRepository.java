@@ -1,0 +1,10 @@
+package co.ehealth.platform.pharmacy;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.UUID;
+
+public interface StockMovementRepository extends JpaRepository<StockMovement, UUID> {
+    List<StockMovement> findTop100ByFacilityIdOrderByCreatedAtDesc(UUID facilityId);
+}

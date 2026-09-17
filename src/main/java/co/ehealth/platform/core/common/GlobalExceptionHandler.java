@@ -20,8 +20,10 @@ import co.ehealth.platform.platform.PlatformOperatorNotFoundException;
 import co.ehealth.platform.platform.InvalidPlatformResetTokenException;
 import co.ehealth.platform.patient.InvalidIdNumberException;
 import co.ehealth.platform.patient.MinorNextOfKinRequiredException;
+import co.ehealth.platform.patient.OccupationalEmploymentRequiredException;
 import co.ehealth.platform.patient.PatientNotFoundException;
 import co.ehealth.platform.facility.FacilityNotFoundException;
+import co.ehealth.platform.facility.StationInUseException;
 import co.ehealth.platform.pharmacy.NotLicensedException;
 import co.ehealth.platform.pharmacy.ExpiredStockException;
 import co.ehealth.platform.pharmacy.PrescriptionAlreadyDispensedException;
@@ -138,6 +140,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleMinorNextOfKinRequired(MinorNextOfKinRequiredException ex) {
         return ResponseEntity.badRequest()
                 .body(new ApiErrorResponse(ex.getMessage(), Map.of("nextOfKin", ex.getMessage())));
+    }
+
+    @ExceptionHandler(OccupationalEmploymentRequiredException.class)
+    public ResponseEntity<ApiErrorResponse> handleOccupationalEmploymentRequired(OccupationalEmploymentRequiredException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(),
+                Map.of("employer", ex.getMessage(), "employeeNumber", ex.getMessage())));
     }
 
     // A unique-constraint violation that slipped past the application-level
@@ -265,6 +273,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(FacilityNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleFacilityNotFound(FacilityNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(StationInUseException.class)
+    public ResponseEntity<ApiErrorResponse> handleStationInUse(StationInUseException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(VisitNotFoundException.class)

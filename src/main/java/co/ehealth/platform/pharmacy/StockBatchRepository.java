@@ -16,6 +16,12 @@ public interface StockBatchRepository extends JpaRepository<StockBatch, UUID> {
     @Query("select b from StockBatch b where b.barcode = :barcode")
     java.util.Optional<StockBatch> findByBarcodeForUpdate(@Param("barcode") String barcode);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from StockBatch b where b.id = :id")
+    java.util.Optional<StockBatch> findByIdForUpdate(@Param("id") UUID id);
+
+    List<StockBatch> findByFacilityId(UUID facilityId);
+
     List<StockBatch> findByFacilityIdAndExpiryDateBetweenAndQuantityOnHandGreaterThan(
             UUID facilityId, LocalDate from, LocalDate through, int quantity);
 }

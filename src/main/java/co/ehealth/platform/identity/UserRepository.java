@@ -69,4 +69,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query(value = "insert into user_facilities (user_id, facility_id) values (:userId, :facilityId) "
             + "on conflict do nothing", nativeQuery = true)
     void assignFacility(@Param("userId") UUID userId, @Param("facilityId") UUID facilityId);
+
+    @Query(value = "select exists (select 1 from user_facilities where user_id = :userId and facility_id = :facilityId)",
+           nativeQuery = true)
+    boolean existsFacilityAssignment(@Param("userId") UUID userId, @Param("facilityId") UUID facilityId);
 }

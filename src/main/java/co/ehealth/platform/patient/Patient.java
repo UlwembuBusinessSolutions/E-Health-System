@@ -76,6 +76,18 @@ public class Patient {
     @Column(name = "medical_aid_number", length = 50)
     private String medicalAidNumber;
 
+    @Column(length = 200)
+    private String employer;
+
+    @Column(name = "employee_number", length = 100)
+    private String employeeNumber;
+
+    @Column(length = 200)
+    private String occupation;
+
+    @Column(length = 200)
+    private String department;
+
     @Column(name = "registered_by_user_id")
     private UUID registeredByUserId;
 
@@ -91,7 +103,8 @@ public class Patient {
 
     public Patient(String mpiNumber, String firstName, String lastName, LocalDate dateOfBirth, Gender gender,
                    CitizenshipStatus citizenshipStatus, String idNumber, String address, String contactNumber,
-                   String medicalAidProvider, String medicalAidNumber, List<NextOfKin> nextOfKin,
+                   String medicalAidProvider, String medicalAidNumber, String employer, String employeeNumber,
+                   String occupation, String department, List<NextOfKin> nextOfKin,
                    UUID registeredByUserId, Instant createdAt) {
         this.mpiNumber = mpiNumber;
         this.firstName = firstName;
@@ -104,6 +117,10 @@ public class Patient {
         this.contactNumber = contactNumber;
         this.medicalAidProvider = medicalAidProvider;
         this.medicalAidNumber = medicalAidNumber;
+        this.employer = employer;
+        this.employeeNumber = employeeNumber;
+        this.occupation = occupation;
+        this.department = department;
         this.nextOfKin = List.copyOf(nextOfKin);
         this.registeredByUserId = registeredByUserId;
         this.createdAt = createdAt;
@@ -155,6 +172,22 @@ public class Patient {
 
     public String getMedicalAidNumber() {
         return medicalAidNumber;
+    }
+
+    public String getEmployer() {
+        return employer;
+    }
+
+    public String getEmployeeNumber() {
+        return employeeNumber;
+    }
+
+    public String getOccupation() {
+        return occupation;
+    }
+
+    public String getDepartment() {
+        return department;
     }
 
     public UUID getRegisteredByUserId() {

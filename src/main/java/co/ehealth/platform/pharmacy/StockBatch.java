@@ -55,6 +55,13 @@ public class StockBatch {
         quantityOnHand -= quantity;
     }
 
+    public void adjustQuantity(int quantityOnHand) {
+        if (quantityOnHand < 0) {
+            throw new IllegalArgumentException("Counted stock cannot be negative.");
+        }
+        this.quantityOnHand = quantityOnHand;
+    }
+
     public UUID getId() { return id; }
     public UUID getFacilityId() { return facilityId; }
     public String getDrugName() { return drugName; }

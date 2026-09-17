@@ -2,6 +2,9 @@ package co.ehealth.platform.patient;
 
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
+import co.ehealth.platform.core.tenant.OrganizationRepository;
+import co.ehealth.platform.core.tenant.OrganizationSector;
+import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.identity.DuplicateFieldException;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
@@ -20,13 +23,15 @@ public class PatientService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
+    private final OrganizationRepository organizationRepository;
 
     public PatientService(PatientRepository patientRepository, AuditLogService auditLogService, Clock clock,
-                           PermissionService permissionService) {
+                           PermissionService permissionService, OrganizationRepository organizationRepository) {
         this.patientRepository = patientRepository;
         this.auditLogService = auditLogService;
         this.clock = clock;
         this.permissionService = permissionService;
+        this.organizationRepository = organizationRepository;
     }
 
     // PREG-US-001: "an EPR is created and a unique MPI number is
@@ -39,6 +44,14 @@ public class PatientService {
     @Transactional
     public Patient register(RegisterPatientCommand cmd, UUID registeredByUserId) {
         permissionService.requireAccess(ModuleCode.PREG, PermissionLevel.MANAGE);
+        OrganizationSector sector = organizationRepository.findBySchemaName(TenantContext.getCurrentTenant())
+                .orElseThrow(() -> new IllegalStateException("Unknown organization for current tenant"))
+                .getSector();
+        if (sector == OrganizationSector.OCCUPATIONAL
+                && (cmd.employer() == null || cmd.employer().isBlank()
+                || cmd.employeeNumber() == null || cmd.employeeNumber().isBlank())) {
+            throw new OccupationalEmploymentRequiredException();
+        }
         if (patientRepository.existsByIdNumber(cmd.idNumber())) {
             throw new DuplicateFieldException("idNumber", "A patient with this ID number is already registered.");
         }
@@ -50,7 +63,8 @@ public class PatientService {
         String mpiNumber = "MPI-" + String.format("%07d", patientRepository.nextMpiSequenceValue());
         Patient patient = new Patient(mpiNumber, cmd.firstName(), cmd.lastName(), parsed.dateOfBirth(),
                 parsed.gender(), parsed.citizenshipStatus(), cmd.idNumber(), cmd.address(), cmd.contactNumber(),
-                cmd.medicalAidProvider(), cmd.medicalAidNumber(), cmd.nextOfKin(), registeredByUserId, clock.instant());
+                cmd.medicalAidProvider(), cmd.medicalAidNumber(), cmd.employer(), cmd.employeeNumber(),
+                cmd.occupation(), cmd.department(), cmd.nextOfKin(), registeredByUserId, clock.instant());
         patientRepository.save(patient);
 
         auditLogService.append(registeredByUserId, null, "PATIENT_REGISTERED", "Patient",
@@ -79,6 +93,7 @@ public class PatientService {
 
     public record RegisterPatientCommand(String firstName, String lastName, String idNumber, String address,
                                           String contactNumber, String medicalAidProvider,
-                                          String medicalAidNumber, List<NextOfKin> nextOfKin) {
+                                          String medicalAidNumber, String employer, String employeeNumber,
+                                          String occupation, String department, List<NextOfKin> nextOfKin) {
     }
 }
