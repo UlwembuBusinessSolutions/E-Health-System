@@ -1,5 +1,7 @@
 package co.ehealth.platform.platform;
 
+// lihle | 2026-09-09 | Retained remote compatibility changes during integration to preserve the published backend contract.
+
 import co.ehealth.platform.core.tenant.TenantAccessTracker;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -58,8 +60,6 @@ public class CrossTenantAccessFilter extends OncePerRequestFilter {
 
         UUID operatorId = currentPlatformOperatorId(request);
         String detail = "path=%s; schemas=%s".formatted(request.getRequestURI(), String.join(",", touchedSchemas));
-        // The explicit-ip/device constructor, not the auto-deriving one —
-        // see PlatformAuditLog's own why-note on why.
         platformAuditLogRepository.save(new PlatformAuditLog(operatorId, "CROSS_TENANT_ACCESS", null, detail,
                 clock.instant()));
     }

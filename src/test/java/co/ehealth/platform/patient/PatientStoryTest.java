@@ -1,5 +1,7 @@
 package co.ehealth.platform.patient;
 
+// lihle | 2026-09-09 | Updated regression coverage and fixtures to verify clinic isolation and clinical workflows.
+
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.identity.Gender;
 import co.ehealth.platform.identity.PermissionService;
@@ -25,6 +27,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PatientStoryTest {
+
+    private static final UUID CLINIC_ID = UUID.randomUUID();
+
+    @org.junit.jupiter.api.BeforeEach
+    void selectClinic() { co.ehealth.platform.core.clinic.ClinicContext.set(CLINIC_ID); }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearClinic() { co.ehealth.platform.core.clinic.ClinicContext.clear(); }
 
     private static final UUID PATIENT_ID = UUID.fromString("a0e0b36e-b9c5-4f95-8bd6-4474c49de0e9");
     private static final UUID STAFF_ID = UUID.fromString("dcbb12c5-b7bb-437c-9cf0-8f747d2a2e19");
@@ -64,7 +74,7 @@ class PatientStoryTest {
         AuditLogService auditLog = mock(AuditLogService.class);
         PermissionService permissions = mock(PermissionService.class);
         Patient patient = patient();
-        when(repository.findById(PATIENT_ID)).thenReturn(java.util.Optional.of(patient));
+        when(repository.findByIdAndFacilityId(PATIENT_ID, CLINIC_ID)).thenReturn(java.util.Optional.of(patient));
 
         PatientService service = new PatientService(repository, auditLog,
                 Clock.fixed(Instant.parse("2026-08-25T08:00:00Z"), ZoneOffset.UTC), permissions, objectMapper());
@@ -86,7 +96,7 @@ class PatientStoryTest {
         AuditLogService auditLog = mock(AuditLogService.class);
         PermissionService permissions = mock(PermissionService.class);
         Patient patient = patient();
-        when(repository.findById(PATIENT_ID)).thenReturn(java.util.Optional.of(patient));
+        when(repository.findByIdAndFacilityId(PATIENT_ID, CLINIC_ID)).thenReturn(java.util.Optional.of(patient));
 
         PatientService service = new PatientService(repository, auditLog, Clock.systemUTC(), permissions,
                 objectMapper());

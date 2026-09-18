@@ -37,6 +37,10 @@ public class TriageAssessment {
     @Enumerated(EnumType.STRING)
     @Column(name = "avpu", nullable = false, length = 20)
     private AvpuLevel avpu;
+    @Column(name = "mobility_assessment")
+    private String mobilityAssessment;
+    @Column(name = "urine_test_findings")
+    private String urineTestFindings;
     @Column(name = "captured_at", nullable = false, updatable = false)
     private Instant capturedAt;
     @Column(name = "captured_by_user_id", nullable = false, updatable = false)
@@ -47,6 +51,13 @@ public class TriageAssessment {
     public TriageAssessment(UUID visitId, UUID patientId, int systolicBloodPressure, int diastolicBloodPressure,
                             int heartRate, BigDecimal temperatureCelsius, int respiratoryRate, AvpuLevel avpu,
                             Instant capturedAt, UUID capturedByUserId) {
+        this(visitId, patientId, systolicBloodPressure, diastolicBloodPressure, heartRate, temperatureCelsius,
+                respiratoryRate, avpu, null, null, capturedAt, capturedByUserId);
+    }
+
+    public TriageAssessment(UUID visitId, UUID patientId, int systolicBloodPressure, int diastolicBloodPressure,
+                            int heartRate, BigDecimal temperatureCelsius, int respiratoryRate, AvpuLevel avpu,
+                            String mobilityAssessment, String urineTestFindings, Instant capturedAt, UUID capturedByUserId) {
         this.visitId = visitId;
         this.patientId = patientId;
         this.systolicBloodPressure = systolicBloodPressure;
@@ -55,6 +66,8 @@ public class TriageAssessment {
         this.temperatureCelsius = temperatureCelsius;
         this.respiratoryRate = respiratoryRate;
         this.avpu = avpu;
+        this.mobilityAssessment = mobilityAssessment;
+        this.urineTestFindings = urineTestFindings;
         this.capturedAt = capturedAt;
         this.capturedByUserId = capturedByUserId;
     }
@@ -68,6 +81,8 @@ public class TriageAssessment {
     public BigDecimal getTemperatureCelsius() { return temperatureCelsius; }
     public int getRespiratoryRate() { return respiratoryRate; }
     public AvpuLevel getAvpu() { return avpu; }
+    public String getMobilityAssessment() { return mobilityAssessment; }
+    public String getUrineTestFindings() { return urineTestFindings; }
     public Instant getCapturedAt() { return capturedAt; }
     public UUID getCapturedByUserId() { return capturedByUserId; }
 }

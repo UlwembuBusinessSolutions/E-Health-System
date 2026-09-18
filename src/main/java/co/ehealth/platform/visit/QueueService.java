@@ -1,6 +1,9 @@
 package co.ehealth.platform.visit;
 
+// lihle | 2026-09-09 | Aligned visit responses and scoped visit/queue access to the active clinic for connected clinical screens.
+
 import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.core.clinic.ClinicContext;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
@@ -60,11 +63,12 @@ public class QueueService {
     @Transactional
     public QueueToken issueManualToken(UUID visitId, TokenPriority priority, UUID issuedByUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
-        Visit visit = visitRepository.findById(visitId).orElseThrow(VisitNotFoundException::new);
+        Visit visit = visitRepository.findByIdAndFacilityId(visitId, ClinicContext.require()).orElseThrow(VisitNotFoundException::new);
         return issue(visit, priority, true, issuedByUserId);
     }
 
     private QueueToken issue(Visit visit, TokenPriority priority, boolean manual, UUID issuedByUserId) {
+        ClinicContext.requireFacility(visit.getFacilityId());
         Instant now = clock.instant();
         int tokenNumber = nextTokenNumber(visit.getFacilityId(), now);
         QueueToken token = new QueueToken(visit.getId(), visit.getFacilityId(), tokenNumber, priority, manual,
@@ -112,6 +116,7 @@ public class QueueService {
 
     public List<QueueEntryView> listActiveQueueView(UUID facilityId, UUID stationId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        ClinicContext.requireFacility(facilityId);
         List<QueueToken> queue = stationId == null
                 ? queueTokenRepository.findActiveQueue(facilityId)
                 : queueTokenRepository.findActiveQueueByFacilityAndStation(facilityId, stationId);
@@ -119,7 +124,7 @@ public class QueueService {
     }
 
     private QueueEntryView toView(QueueToken token) {
-        Visit visit = visitRepository.findById(token.getVisitId()).orElseThrow(VisitNotFoundException::new);
+        Visit visit = visitRepository.findByIdAndFacilityId(token.getVisitId(), ClinicContext.require()).orElseThrow(VisitNotFoundException::new);
         Patient patient = patientService.get(visit.getPatientId());
         return new QueueEntryView(token, patient.getFirstName() + " " + patient.getLastName(),
                 patient.getMpiNumber());
@@ -134,6 +139,7 @@ public class QueueService {
     @Transactional
     public QueueEntryView callNext(UUID facilityId, UUID calledByUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        ClinicContext.requireFacility(facilityId);
         List<QueueToken> queue = queueTokenRepository.findActiveQueue(facilityId);
         if (queue.isEmpty()) {
             throw new EmptyQueueException();
@@ -157,6 +163,7 @@ public class QueueService {
         UUID sourceFacilityId = token.getFacilityId();
         UUID sourceStationId = token.getStationId();
         UUID targetFacilityId = targetStation.getFacility().getId();
+        ClinicContext.requireFacility(sourceFacilityId);
         if (!sourceFacilityId.equals(targetFacilityId)) {
             throw new IllegalArgumentException("A token can only be transferred between stations in the same clinic or hospital.");
         }

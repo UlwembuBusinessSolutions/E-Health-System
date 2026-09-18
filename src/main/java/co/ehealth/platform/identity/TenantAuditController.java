@@ -1,5 +1,7 @@
 package co.ehealth.platform.identity;
 
+// lihle | 2026-09-09 | Added clinic context to audit handling so actions can be traced to the clinic where they occurred.
+
 import co.ehealth.platform.core.audit.AuditLog;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
@@ -90,7 +92,7 @@ public class TenantAuditController {
             @RequestParam(required = false) String entityId) {
         permissionService.requireAccess(ModuleCode.AUDT, PermissionLevel.VIEW);
 
-        List<AuditLog> rows = auditLogService.listAll();
+        List<AuditLog> rows = auditLogService.listInClinic();
 
         Set<UUID> userIds = rows.stream().map(AuditLog::getUserId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<UUID, String> namesByUserId = staffService.resolveUserNames(userIds);
@@ -102,11 +104,11 @@ public class TenantAuditController {
     }
 
     public record AuditEntryResponse(UUID id, String action, String entityType, String entityId, Instant createdAt,
-                UUID userId, String userName, UUID facilityId,
+            UUID userId, String userName, UUID facilityId, UUID clinicContextId,
             String beforeValue, String afterValue, String ipAddress, String deviceSignature) {
         static AuditEntryResponse from(AuditLog row, String userName) {
             return new AuditEntryResponse(row.getId(), row.getAction(), row.getEntityType(), row.getEntityId(),
-                    row.getCreatedAt(), row.getUserId(), userName, row.getFacilityId(),
+                    row.getCreatedAt(), row.getUserId(), userName, row.getFacilityId(), row.getClinicContextId(),
                     row.getBeforeValue(), row.getAfterValue(), row.getIpAddress(), row.getDeviceSignature());
         }
     }

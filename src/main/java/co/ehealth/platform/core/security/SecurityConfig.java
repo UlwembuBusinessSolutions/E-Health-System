@@ -1,5 +1,7 @@
 package co.ehealth.platform.core.security;
 
+// lihle | 2026-09-09 | Registered clinic-context filtering and allowed clinic headers for authenticated browser requests.
+
 import co.ehealth.platform.identity.UserRepository;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.platform.PlatformOperatorRepository;
@@ -39,7 +41,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http, JwtService jwtService, UserRepository userRepository, AuditLogService auditLogService,
             PlatformJwtService platformJwtService, PlatformOperatorRepository platformOperatorRepository,
-            SessionActivityStore activityStore, Clock clock,
+            SessionActivityStore activityStore, Clock clock, co.ehealth.platform.identity.ClinicScopeService clinicScopes,
             @Value("${app.idle-lock.timeout-minutes}") long idleTimeoutMinutes,
             CorsConfigurationSource corsConfigurationSource) throws Exception {
 
@@ -84,7 +86,9 @@ public class SecurityConfig {
                 .anyRequest().authenticated())
             .addFilterBefore(platformJwtFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterAfter(idleLockFilter, JwtAuthenticationFilter.class);
+            .addFilterAfter(idleLockFilter, JwtAuthenticationFilter.class)
+            .addFilterAfter(new co.ehealth.platform.core.clinic.ClinicContextFilter(clinicScopes, userRepository),
+                    IdleLockFilter.class);
 
         return http.build();
     }
@@ -103,7 +107,7 @@ public class SecurityConfig {
         // listed here gets stripped by the browser's CORS preflight before
         // it ever reaches PlatformJwtAuthenticationFilter, which would look
         // identical to a missing token from the server's side.
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Tenant-ID", "X-Platform-Key"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Tenant-ID", "X-Platform-Key", "X-Clinic-ID"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;

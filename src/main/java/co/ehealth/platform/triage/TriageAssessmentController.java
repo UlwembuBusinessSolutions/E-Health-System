@@ -1,5 +1,7 @@
 package co.ehealth.platform.triage;
 
+// lihle | 2026-09-09 | Connected persisted triage reads and validation to the UI while restricting records to the active clinic.
+
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
@@ -21,24 +23,47 @@ import java.util.UUID;
 @RestController
 public class TriageAssessmentController {
     private final TriageAssessmentService triageAssessmentService;
-    public TriageAssessmentController(TriageAssessmentService triageAssessmentService) { this.triageAssessmentService = triageAssessmentService; }
+    private final co.ehealth.platform.patient.PatientService patients;
+    public TriageAssessmentController(TriageAssessmentService triageAssessmentService, co.ehealth.platform.patient.PatientService patients) {
+        this.triageAssessmentService = triageAssessmentService;
+        this.patients = patients;
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/api/v1/triage-assessments")
+    public java.util.Map<String, Object> list() {
+        return java.util.Map.of("items", triageAssessmentService.list().stream().map(a -> {
+            var patient = patients.get(a.getPatientId());
+            return new AssessmentSummary(VitalSignsResponse.from(a), patient.getFirstName() + " " + patient.getLastName(), patient.getMpiNumber());
+        }).toList());
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/api/v1/triage-assessments/{id}")
+    public CaptureVitalsResponse get(@PathVariable UUID id) {
+        return CaptureVitalsResponse.from(triageAssessmentService.get(id));
+    }
+
+    public record AssessmentSummary(VitalSignsResponse assessment, String patientName, String patientMpi) { }
 
     @PostMapping("/api/v1/visits/{visitId}/triage-assessments")
     public ResponseEntity<CaptureVitalsResponse> capture(@PathVariable UUID visitId, @Valid @RequestBody CaptureVitalsRequest request,
                                                            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         var result = triageAssessmentService.capture(new TriageAssessmentService.CaptureVitalsCommand(visitId,
                 request.systolicBloodPressure(), request.diastolicBloodPressure(), request.heartRate(),
-                request.temperatureCelsius(), request.respiratoryRate(), request.avpu(), request.confirmOutOfRange()), staff.userId());
+                request.temperatureCelsius(), request.respiratoryRate(), request.avpu(), request.confirmOutOfRange()),
+                staff.userId(), request.mobilityAssessment(), request.urineTestFindings());
         return ResponseEntity.status(HttpStatus.CREATED).body(CaptureVitalsResponse.from(result));
     }
 
     public record CaptureVitalsRequest(@Positive int systolicBloodPressure, @Positive int diastolicBloodPressure,
                                        @Positive int heartRate, @NotNull @DecimalMin("1.0") @DecimalMax("99.9") BigDecimal temperatureCelsius,
-                                       @Positive int respiratoryRate, @NotNull AvpuLevel avpu, boolean confirmOutOfRange) { }
+                                       @Positive int respiratoryRate, @NotNull AvpuLevel avpu,
+                                       String mobilityAssessment, String urineTestFindings,
+                                       boolean confirmOutOfRange) { }
     public record VitalSignsResponse(UUID id, UUID visitId, UUID patientId, int systolicBloodPressure, int diastolicBloodPressure,
                                      int heartRate, BigDecimal temperatureCelsius, int respiratoryRate, AvpuLevel avpu,
+                                     String mobilityAssessment, String urineTestFindings,
                                      Instant capturedAt, UUID capturedByUserId) {
-        static VitalSignsResponse from(TriageAssessment a) { return new VitalSignsResponse(a.getId(), a.getVisitId(), a.getPatientId(), a.getSystolicBloodPressure(), a.getDiastolicBloodPressure(), a.getHeartRate(), a.getTemperatureCelsius(), a.getRespiratoryRate(), a.getAvpu(), a.getCapturedAt(), a.getCapturedByUserId()); }
+        static VitalSignsResponse from(TriageAssessment a) { return new VitalSignsResponse(a.getId(), a.getVisitId(), a.getPatientId(), a.getSystolicBloodPressure(), a.getDiastolicBloodPressure(), a.getHeartRate(), a.getTemperatureCelsius(), a.getRespiratoryRate(), a.getAvpu(), a.getMobilityAssessment(), a.getUrineTestFindings(), a.getCapturedAt(), a.getCapturedByUserId()); }
     }
     public record CaptureVitalsResponse(VitalSignsResponse assessment, VitalSignsResponse priorAssessment) {
         static CaptureVitalsResponse from(TriageAssessmentService.CaptureResult result) { return new CaptureVitalsResponse(VitalSignsResponse.from(result.assessment()), result.priorAssessment() == null ? null : VitalSignsResponse.from(result.priorAssessment())); }

@@ -1,6 +1,9 @@
 package co.ehealth.platform.visit;
 
+// lihle | 2026-09-09 | Aligned visit responses and scoped visit/queue access to the active clinic for connected clinical screens.
+
 import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.core.clinic.ClinicContext;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.facility.FacilityService;
 import co.ehealth.platform.identity.PermissionLevel;
@@ -47,6 +50,7 @@ public class VisitService {
     @Transactional
     public VisitWithToken createVisit(CreateVisitCommand cmd, UUID staffUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        ClinicContext.requireFacility(cmd.facilityId());
         patientService.get(cmd.patientId());
         facilityService.get(cmd.facilityId());
 
@@ -64,12 +68,12 @@ public class VisitService {
 
     public Visit get(UUID id) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
-        return visitRepository.findById(id).orElseThrow(VisitNotFoundException::new);
+        return visitRepository.findByIdAndFacilityId(id, ClinicContext.require()).orElseThrow(VisitNotFoundException::new);
     }
 
     public List<Visit> list() {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
-        return visitRepository.findAllByOrderByVisitDateTimeDesc();
+        return visitRepository.findByFacilityIdOrderByVisitDateTimeDesc(ClinicContext.require());
     }
 
     public record CreateVisitCommand(UUID patientId, UUID facilityId, VisitType visitType,

@@ -1,5 +1,7 @@
 package co.ehealth.platform.pharmacy;
 
+// lihle | 2026-09-09 | Updated regression coverage and fixtures to verify clinic isolation and clinical workflows.
+
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;

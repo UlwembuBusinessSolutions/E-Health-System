@@ -1,5 +1,7 @@
 package co.ehealth.platform.facility;
 
+// lihle | 2026-09-09 | Limited clinic discovery to accessible active facilities so dropdowns respect staff assignments.
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -45,6 +47,13 @@ public class FacilityController {
             .map(station -> Map.of("id", station.getId(), "name", station.getName(), "code", station.getCode(),
                 "careService", station.getCareService()))
                 .toList());
+    }
+
+    @GetMapping("/api/v1/facilities/accessible")
+    public Map<String, Object> list(@org.springframework.security.core.annotation.AuthenticationPrincipal
+                                   co.ehealth.platform.core.security.AuthenticatedPrincipal principal) {
+        return Map.of("items", facilityRepository.findAccessible(principal.userId()).stream()
+                .map(f -> Map.of("id", f.getId(), "name", f.getName())).toList());
     }
 
     @PostMapping("/api/v1/facilities")

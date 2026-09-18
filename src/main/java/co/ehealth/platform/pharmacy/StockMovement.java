@@ -1,5 +1,7 @@
 package co.ehealth.platform.pharmacy;
 
+// lihle | 2026-09-09 | Retained remote compatibility changes during integration to preserve the published backend contract.
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;

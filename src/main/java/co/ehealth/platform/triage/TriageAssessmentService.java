@@ -1,5 +1,7 @@
 package co.ehealth.platform.triage;
 
+// lihle | 2026-09-09 | Connected persisted triage reads and validation to the UI while restricting records to the active clinic.
+
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.identity.PermissionLevel;
@@ -34,16 +36,39 @@ public class TriageAssessmentService {
         this.clock = clock;
     }
 
+    @Transactional(readOnly = true)
+    public java.util.List<TriageAssessment> list() {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        return assessments.findAllInClinic(co.ehealth.platform.core.clinic.ClinicContext.require());
+    }
+
+    @Transactional(readOnly = true)
+    public CaptureResult get(UUID id) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        UUID clinicId = co.ehealth.platform.core.clinic.ClinicContext.require();
+        TriageAssessment assessment = assessments.findInClinic(id, clinicId)
+                .orElseThrow(TriageAssessmentNotFoundException::new);
+        return new CaptureResult(assessment, assessments.findPriorInClinic(assessment.getPatientId(), clinicId,
+                assessment.getCapturedAt()).orElse(null));
+    }
+
     @Transactional
     public CaptureResult capture(CaptureVitalsCommand command, UUID clinicianId) {
+        return capture(command, clinicianId, null, null);
+    }
+
+    @Transactional
+    public CaptureResult capture(CaptureVitalsCommand command, UUID clinicianId, String mobilityAssessment,
+                                 String urineTestFindings) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
         validate(command);
         Visit visit = visitService.get(command.visitId());
         Instant capturedAt = clock.instant();
-        Optional<TriageAssessment> prior = assessments.findFirstByPatientIdOrderByCapturedAtDesc(visit.getPatientId());
+        Optional<TriageAssessment> prior = assessments.findLatestInClinic(visit.getPatientId(), visit.getFacilityId());
         TriageAssessment assessment = assessments.save(new TriageAssessment(visit.getId(), visit.getPatientId(),
                 command.systolicBloodPressure(), command.diastolicBloodPressure(), command.heartRate(),
-                command.temperatureCelsius(), command.respiratoryRate(), command.avpu(), capturedAt, clinicianId));
+                command.temperatureCelsius(), command.respiratoryRate(), command.avpu(), mobilityAssessment,
+                urineTestFindings, capturedAt, clinicianId));
         auditLogService.append(clinicianId, visit.getFacilityId(), "TRIAGE_VITALS_CAPTURED", "TriageAssessment",
                 assessment.getId().toString(), null, null);
         return new CaptureResult(assessment, prior.orElse(null));

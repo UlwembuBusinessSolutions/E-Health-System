@@ -1,5 +1,7 @@
 package co.ehealth.platform.visit;
 
+// lihle | 2026-09-09 | Aligned visit responses and scoped visit/queue access to the active clinic for connected clinical screens.
+
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import co.ehealth.platform.patient.Patient;
 import co.ehealth.platform.patient.PatientService;
@@ -53,8 +55,8 @@ public class VisitController {
     }
 
     @GetMapping("/api/v1/visits/{id}")
-    public ResponseEntity<VisitResponse> get(@PathVariable UUID id) {
-        return ResponseEntity.ok(VisitResponse.from(visitService.get(id)));
+    public ResponseEntity<VisitListResponse> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(toListResponse(visitService.get(id)));
     }
 
     public record CreateVisitRequest(@NotNull UUID patientId, @NotNull UUID facilityId,
