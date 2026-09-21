@@ -1,10 +1,11 @@
-import { Blocks, Building2, Mail, MapPin, Search, Settings2, ChevronRight, type LucideIcon } from "lucide-react";
+import { Blocks, Building2, Fingerprint, Mail, MapPin, Search, Settings2, ChevronRight, type LucideIcon } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FacilitiesSettingsSection } from "./FacilitiesSettingsSection";
 import { EmailSettingsSection } from "./EmailSettingsSection";
 import { ContactInfoSection } from "./ContactInfoSection";
 import { ModulesSettingsSection } from "./ModulesSettingsSection";
+import { SsoSettingsSection } from "./SsoSettingsSection";
 
 type OrganizationSettingsSection = {
   id: string;
@@ -31,6 +32,11 @@ const sections: OrganizationSettingsSection[] = [{
   description: "Turn features on or off for your organization.",
   keywords: "modules features entitlements enable disable toggle", icon: Blocks,
   component: ModulesSettingsSection,
+}, {
+  id: "sso", title: "Single sign-on", group: "Communication",
+  description: "Let staff sign in with their organization's Microsoft account.",
+  keywords: "sso single sign on microsoft azure ad entra oauth login staff", icon: Fingerprint,
+  component: SsoSettingsSection,
 }];
 
 export function OrganizationSettingsPage() {

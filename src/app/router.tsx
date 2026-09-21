@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { FindOrganizationScreen } from "@/auth/FindOrganizationScreen";
 import { LoginScreen } from "@/auth/LoginScreen";
 import { ForgotPasswordScreen } from "@/auth/ForgotPasswordScreen";
+import { SsoCallbackPage } from "@/auth/SsoCallbackPage";
 import { RequireAuth } from "@/auth/RequireAuth";
 import { RequireRole } from "@/auth/RequireRole";
 import { AddStaffScreen } from "@/staff/AddStaffScreen";
@@ -15,6 +16,13 @@ import { TicketPrintPage } from "@/queue/TicketPrintPage";
 import { VitalsPrintPage } from "@/patient/VitalsPrintPage";
 import { PharmacyQueuePage } from "@/pharmacy/PharmacyQueuePage";
 import { PrescriptionPrintPage } from "@/pharmacy/PrescriptionPrintPage";
+import { PharmacyLayout } from "@/pharmacy/PharmacyLayout";
+import { ProductListPage } from "@/pharmacy/products/ProductListPage";
+import { AddProductScreen } from "@/pharmacy/products/AddProductScreen";
+import { ProductDetailPage } from "@/pharmacy/products/ProductDetailPage";
+import { StockListPage } from "@/pharmacy/stock/StockListPage";
+import { ReceiveStockScreen } from "@/pharmacy/stock/ReceiveStockScreen";
+import { LedgerPage } from "@/pharmacy/ledger/LedgerPage";
 import { OrganizationSettingsPage } from "@/settings/OrganizationSettingsPage";
 import { AuditTrailPage } from "@/audit/AuditTrailPage";
 import { PatientLoginScreen } from "@/patient-portal/PatientLoginScreen";
@@ -53,6 +61,11 @@ export function AppRouter() {
           still go straight to /login as always. */}
       <Route path="/org/:tenantSlug" element={<TenantHomePage />} />
       <Route path="/org/:tenantSlug/login" element={<LoginScreen />} />
+      {/* Where a completed Microsoft sign-in lands (MicrosoftSsoService.
+          frontendSuccessRedirect()'s own why-note) — a full-page redirect
+          carrying a real token as a query param, not a fetch response, so
+          this needs its own route rather than living inside LoginScreen. */}
+      <Route path="/org/:tenantSlug/sso/callback" element={<SsoCallbackPage />} />
       <Route path="/org/:tenantSlug/forgot-password" element={<ForgotPasswordScreen />} />
       {/* The patient portal's own identity space — a separate login/register
           pair from staff's /org/:tenantSlug/login above, backed by
@@ -145,7 +158,15 @@ export function AppRouter() {
         <Route path="patients/:id" element={<PatientDetailPage />} />
         <Route path="queue" element={<QueuePage />} />
         <Route path="vitals" element={<VitalsIntakePage />} />
-        <Route path="pharmacy" element={<PharmacyQueuePage />} />
+        <Route path="pharmacy" element={<PharmacyLayout />}>
+          <Route index element={<PharmacyQueuePage />} />
+          <Route path="stock" element={<StockListPage />} />
+          <Route path="stock/receive" element={<ReceiveStockScreen />} />
+          <Route path="products" element={<ProductListPage />} />
+          <Route path="products/new" element={<AddProductScreen />} />
+          <Route path="products/:productId" element={<ProductDetailPage />} />
+          <Route path="ledger" element={<LedgerPage />} />
+        </Route>
         <Route
           path="settings"
           element={
