@@ -43,6 +43,15 @@ import co.ehealth.platform.visit.QueueTokenNotFoundException;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import co.ehealth.platform.triage.InvalidTriageCaptureException;
 import co.ehealth.platform.triage.TriageAssessmentNotFoundException;
+import co.ehealth.platform.pharmacy.stock.BatchExpiryConflictException;
+import co.ehealth.platform.pharmacy.stock.DuplicateProductCodeException;
+import co.ehealth.platform.pharmacy.stock.IdempotencyConflictException;
+import co.ehealth.platform.pharmacy.stock.InsufficientStockException;
+import co.ehealth.platform.pharmacy.stock.MissingExpiryException;
+import co.ehealth.platform.pharmacy.stock.PharmacyProductNotFoundException;
+import co.ehealth.platform.pharmacy.stock.ProductArchivedException;
+import co.ehealth.platform.pharmacy.stock.ProductHasStockException;
+import co.ehealth.platform.pharmacy.stock.ProductNotStockedAtFacilityException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -439,6 +448,54 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // PrescriptionAlreadyDispensedException above.
     @ExceptionHandler(InvalidConsultationStateException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidConsultationState(InvalidConsultationStateException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // Pharmacy stock ledger, Phase 1 (co.ehealth.platform.pharmacy.stock) —
+    // see Docs/pharmacy-stock-ledger-plan.md.
+    @ExceptionHandler(DuplicateProductCodeException.class)
+    public ResponseEntity<ApiErrorResponse> handleDuplicateProductCode(DuplicateProductCodeException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PharmacyProductNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handlePharmacyProductNotFound(PharmacyProductNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(ProductArchivedException.class)
+    public ResponseEntity<ApiErrorResponse> handleProductArchived(ProductArchivedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(ProductHasStockException.class)
+    public ResponseEntity<ApiErrorResponse> handleProductHasStock(ProductHasStockException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(ProductNotStockedAtFacilityException.class)
+    public ResponseEntity<ApiErrorResponse> handleProductNotStockedAtFacility(
+            ProductNotStockedAtFacilityException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(BatchExpiryConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleBatchExpiryConflict(BatchExpiryConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(MissingExpiryException.class)
+    public ResponseEntity<ApiErrorResponse> handleMissingExpiry(MissingExpiryException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InsufficientStockException.class)
+    public ResponseEntity<ApiErrorResponse> handleInsufficientStock(InsufficientStockException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleIdempotencyConflict(IdempotencyConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 

@@ -128,6 +128,41 @@ public class AuthService {
     private record LoginStateSnapshot(int failedLoginCount, Instant lastLoginAt) {
     }
 
+    // MicrosoftSsoService's own why-note: by the time this runs, Microsoft
+    // has already verified the person's identity (the code exchange
+    // succeeded using this org's real client secret, and email came back
+    // from a live Graph API call) — there's no password to check and
+    // therefore no failed-attempt/lockout bookkeeping the way login()
+    // above has. Still refuses a non-ACTIVE account (LOCKED or DISABLED):
+    // an admin's decision to lock or disable someone shouldn't have a
+    // side door. Returns empty rather than throwing — the caller is a
+    // full-page redirect with nobody to hand a JSON error body to, so
+    // "no session" is a value this method can return, not an exception
+    // that method has to translate.
+    @Transactional
+    public Optional<JwtService.IssuedToken> loginViaSso(String email) {
+        Optional<User> maybeUser = userRepository.findByEmail(email);
+        if (maybeUser.isEmpty() || maybeUser.get().getStatus() != UserStatus.ACTIVE) {
+            return Optional.empty();
+        }
+
+        User user = maybeUser.get();
+        Instant now = clock.instant();
+        String beforeValue = serializeLoginState(user.getFailedLoginCount(), user.getLastLoginAt());
+        user.setLastLoginAt(now);
+
+        List<String> roles = userRepository.findRoleNames(user.getId());
+        JwtService.IssuedToken issued = jwtService.issue(
+                user.getId(), TenantContext.getCurrentTenant(), roles, user.getTokenVersion());
+
+        activityStore.recordActivity(issued.jti(), now);
+        String afterValue = serializeLoginState(user.getFailedLoginCount(), user.getLastLoginAt());
+        auditLogService.append(user.getId(), null, "SSO_LOGIN", "User", user.getId().toString(),
+                beforeValue, afterValue);
+
+        return Optional.of(issued);
+    }
+
     public void logout(String jti) {
         activityStore.clear(jti);
     }

@@ -82,6 +82,13 @@ app:
     capture-dir: ${NOTIFICATIONS_CAPTURE_DIR:./data/emails}
   frontend:
     base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  backend:
+    # This app's own public origin — used only to build the Microsoft SSO
+    # redirect_uri (MicrosoftSsoService), which has to be an exact,
+    # internet-reachable URL an Azure AD app registration can be configured
+    # with. Distinct from frontend.base-url above, which is where a human
+    # lands; this is where Microsoft itself sends the browser back to.
+    base-url: ${BACKEND_BASE_URL:http://localhost:8081}
 
 management:
   endpoints:

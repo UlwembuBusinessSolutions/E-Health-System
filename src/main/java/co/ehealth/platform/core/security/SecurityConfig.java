@@ -58,7 +58,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/password-reset/**",
-                        "/api/v1/public/**", "/actuator/health").permitAll()
+                        "/api/v1/auth/sso/**", "/api/v1/public/**", "/actuator/health").permitAll()
                 // Getting a token in the first place can't require one.
                 .requestMatchers("/platform/auth/login").permitAll()
                 // Same reasoning, patient portal's own two pre-auth
@@ -109,9 +109,17 @@ public class SecurityConfig {
         // X-Platform-Key listed alongside the tenant headers — a header not
         // listed here gets stripped by the browser's CORS preflight before
         // it ever reaches PlatformJwtAuthenticationFilter, which would look
-        // identical to a missing token from the server's side.
+        // identical to a missing token from the server's side. Idempotency-Key
+        // is the same failure mode, found by real browser testing rather
+        // than reading: PharmacyReceiptController's posting endpoint 500%
+        // reachable via curl (which never enforces CORS at all) but a real
+        // browser's preflight rejected the request outright with "Request
+        // header field idempotency-key is not allowed by
+        // Access-Control-Allow-Headers" before it ever left the page —
+        // curl-only verification of that endpoint had no way to catch this.
         configuration.setAllowedHeaders(
-                List.of("Authorization", "Content-Type", "X-Tenant-ID", "X-Platform-Key", "X-Patient-Key"));
+                List.of("Authorization", "Content-Type", "X-Tenant-ID", "X-Platform-Key", "X-Patient-Key",
+                        "Idempotency-Key"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;

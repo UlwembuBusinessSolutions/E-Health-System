@@ -33,12 +33,22 @@ public class PublicOrganizationController {
                 organization.getDisplayName(), organization.getSlug(), branding.logoUrl(), branding.primaryColor(),
                 branding.shortName(), profile.description(), profile.contactEmail(), profile.contactPhone(),
                 profile.address(), profile.businessHours(), profile.websiteUrl(), profile.facebookUrl(),
-                profile.instagramUrl()));
+                profile.instagramUrl(), organization.getSsoSettings().isUsable()));
     }
 
+    // microsoftSsoEnabled is deliberately the fully-usable check
+    // (OrganizationSsoSettings.isUsable()), not the raw "enabled" toggle —
+    // this is what the tenant login screen gates its "Sign in with
+    // Microsoft" button on, and a half-configured org (switch on, secret
+    // not yet entered) has nothing that button could actually redirect to
+    // yet. Never leaks the underlying tenant/client id here: those aren't
+    // secrets, but a signed-out visitor has no use for them either, and the
+    // login button's own link only ever needs this one boolean plus the
+    // tenant slug it already has.
     public record PublicOrganizationResponse(String displayName, String slug, String logoUrl, String primaryColor,
                                               String shortName, String description, String contactEmail,
                                               String contactPhone, String address, String businessHours,
-                                              String websiteUrl, String facebookUrl, String instagramUrl) {
+                                              String websiteUrl, String facebookUrl, String instagramUrl,
+                                              boolean microsoftSsoEnabled) {
     }
 }

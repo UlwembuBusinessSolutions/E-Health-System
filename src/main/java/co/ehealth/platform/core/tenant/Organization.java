@@ -76,6 +76,14 @@ public class Organization {
     @Column(name = "profile", columnDefinition = "jsonb", nullable = false)
     private OrganizationProfile profile = OrganizationProfile.empty();
 
+    // Same JSONB-column pattern as branding/mailSettings/profile above (see
+    // V11__organization_sso_settings.sql) — this org's own Microsoft SSO
+    // (Azure AD) configuration, read/written by OrganizationSsoSettingsService
+    // and consumed by MicrosoftSsoService to drive the staff login flow.
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "sso_settings", columnDefinition = "jsonb", nullable = false)
+    private OrganizationSsoSettings ssoSettings = OrganizationSsoSettings.empty();
+
     protected Organization() {
     }
 
@@ -182,5 +190,13 @@ public class Organization {
 
     public void setProfile(OrganizationProfile profile) {
         this.profile = profile;
+    }
+
+    public OrganizationSsoSettings getSsoSettings() {
+        return ssoSettings;
+    }
+
+    public void setSsoSettings(OrganizationSsoSettings ssoSettings) {
+        this.ssoSettings = ssoSettings;
     }
 }
