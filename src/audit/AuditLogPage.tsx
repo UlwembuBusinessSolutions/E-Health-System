@@ -64,7 +64,7 @@ const MODULE_OPTIONS: {
     value: "PHRM",
     label: "Pharmacy",
   },
-   {
+  {
     value: "AUDT",
     label: "Audits",
   },
@@ -116,19 +116,13 @@ export function AuditLogPage() {
 
   const [action, setAction] = useState("");
 
-  const [module, setModule] = useState<
-    AuditModule | ""
-  >("");
+  const [module, setModule] = useState<AuditModule | "">("");
 
-  const [entityIdInput, setEntityIdInput] =
-    useState("");
-
+  const [entityIdInput, setEntityIdInput] = useState("");
   const [entityId, setEntityId] = useState("");
 
   const [userId, setUserId] = useState("");
-
-  const [userIdInput, setUserIdInput] =
-    useState("");
+  const [userIdInput, setUserIdInput] = useState("");
 
   /*
    * Three-state privileged filter:
@@ -141,9 +135,11 @@ export function AuditLogPage() {
     "" | "true" | "false"
   >("");
 
-  const [isExporting, setIsExporting] =
-    useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
+  /*
+   * Debounce record/entity ID filtering.
+   */
   useEffect(() => {
     const timeout = setTimeout(() => {
       setEntityId(entityIdInput.trim());
@@ -152,6 +148,9 @@ export function AuditLogPage() {
     return () => clearTimeout(timeout);
   }, [entityIdInput]);
 
+  /*
+   * Debounce manual user ID filtering.
+   */
   useEffect(() => {
     const timeout = setTimeout(() => {
       setUserId(userIdInput.trim());
@@ -161,7 +160,7 @@ export function AuditLogPage() {
   }, [userIdInput]);
 
   /*
-   * The staff directory is useful for the User filter.
+   * Staff directory is used for the User filter.
    *
    * If the current role cannot access the staff endpoint,
    * the page falls back to a manual User ID field.
@@ -172,9 +171,14 @@ export function AuditLogPage() {
     retry: false,
   });
 
-  const staffDirectoryAvailable =
-    !staffQuery.isError;
+  const staffDirectoryAvailable = !staffQuery.isError;
 
+  /*
+   * Audit trail query.
+   *
+   * Every filter currently displayed on screen is included
+   * in the query key and sent to the backend.
+   */
   const auditQuery = useQuery({
     queryKey: [
       "audit",
@@ -237,7 +241,7 @@ export function AuditLogPage() {
   const entries = auditQuery.data ?? [];
 
   /*
-   * Export uses the exact same filters currently applied
+   * Export uses exactly the same filters currently applied
    * to the audit query.
    */
   const handleExport = async () => {
@@ -260,11 +264,14 @@ export function AuditLogPage() {
       const url = URL.createObjectURL(blob);
 
       const link = document.createElement("a");
+
       link.href = url;
       link.download = "audit-log.csv";
 
       document.body.appendChild(link);
+
       link.click();
+
       link.remove();
 
       URL.revokeObjectURL(url);
@@ -365,10 +372,14 @@ export function AuditLogPage() {
                 value: "",
                 label: "All actions",
               },
-              ...AUDIT_ACTIONS.map((auditAction) => ({
-                value: auditAction,
-                label: actionLabel(auditAction),
-              })),
+              ...AUDIT_ACTIONS.map(
+                (auditAction) => ({
+                  value: auditAction,
+                  label: actionLabel(
+                    auditAction,
+                  ),
+                }),
+              ),
             ]}
           />
 

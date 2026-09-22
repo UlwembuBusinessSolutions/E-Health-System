@@ -15,23 +15,14 @@ export interface AuditEntry {
   entityType: string;
   entityId: string;
   createdAt: string;
-
   userId: string | null;
   userName: string;
-
   facilityId: string | null;
-
   privileged: boolean;
 
-  /*
-   * Integrity-chain fields.
-   *
-   * These are generated and controlled by the database and are therefore
-   * read-only from the application's perspective.
-   */
-  auditSequence: number;
-  previousHash: string;
-  integrityHash: string;
+  auditSequence: number | null;
+  previousHash: string | null;
+  integrityHash: string | null;
 
   beforeValue: string | null;
   afterValue: string | null;
@@ -50,9 +41,9 @@ export interface ListAuditParams {
   privileged?: boolean;
 }
 
-export async function listAuditLog(
+function buildAuditQuery(
   params: ListAuditParams = {},
-): Promise<AuditEntry[]> {
+): string {
   const search = new URLSearchParams();
 
   if (params.from) {
@@ -80,15 +71,28 @@ export async function listAuditLog(
   }
 
   if (params.privileged !== undefined) {
-    search.set("privileged", String(params.privileged));
+    search.set(
+      "privileged",
+      String(params.privileged),
+    );
   }
 
-  const queryString = search.toString();
+  return search.toString();
+}
+
+export async function listAuditLog(
+  params: ListAuditParams = {},
+): Promise<AuditEntry[]> {
+  const queryString = buildAuditQuery(params);
 
   const response = await apiClient.get<{
     items: AuditEntry[];
   }>(
-    `/api/v1/audit${queryString ? `?${queryString}` : ""}`,
+    `/api/v1/audit${
+      queryString
+        ? `?${queryString}`
+        : ""
+    }`,
     {
       headers: tenantAuthHeaders(),
     },
@@ -98,63 +102,24 @@ export async function listAuditLog(
 }
 
 /**
- * Export the audit trail as CSV.
- *
- * Uses exactly the same filter parameters as listAuditLog().
- *
- * The response is a Blob because the backend returns:
- *
- *     Content-Type: text/csv
- *
- * rather than JSON.
+ * Export the currently filtered tenant audit trail
+ * as CSV.
  */
 export async function exportAuditLog(
   params: ListAuditParams = {},
 ): Promise<Blob> {
-  const search = new URLSearchParams();
+  const queryString =
+    buildAuditQuery(params);
 
-  if (params.from) {
-    search.set("from", params.from);
-  }
-
-  if (params.to) {
-    search.set("to", params.to);
-  }
-
-  if (params.userId) {
-    search.set("userId", params.userId);
-  }
-
-  if (params.action) {
-    search.set("action", params.action);
-  }
-
-  if (params.module) {
-    search.set("module", params.module);
-  }
-
-  if (params.entityId) {
-    search.set("entityId", params.entityId);
-  }
-
-  if (params.privileged !== undefined) {
-    search.set("privileged", String(params.privileged));
-  }
-
-  const queryString = search.toString();
-
-  /*
-   * Use the same API base URL as the rest of the frontend.
-   *
-   * VITE_API_BASE_URL is the value already used by the frontend Docker
-   * configuration. When it is empty, the browser uses the current origin.
-   */
   const baseUrl =
-    import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "";
+    import.meta.env.VITE_API_BASE_URL
+      ?.replace(/\/$/, "") ?? "";
 
   const response = await fetch(
     `${baseUrl}/api/v1/audit/export${
-      queryString ? `?${queryString}` : ""
+      queryString
+        ? `?${queryString}`
+        : ""
     }`,
     {
       method: "GET",
@@ -166,16 +131,18 @@ export async function exportAuditLog(
   );
 
   if (!response.ok) {
-    let message = `Audit export failed with status ${response.status}`;
+    let message =
+      `Audit export failed with status ${response.status}`;
 
     try {
-      const body = await response.text();
+      const body =
+        await response.text();
 
       if (body.trim()) {
         message = body;
       }
     } catch {
-      // Keep the default error message.
+      // Keep default error message.
     }
 
     throw new Error(message);
@@ -183,4 +150,3 @@ export async function exportAuditLog(
 
   return response.blob();
 }
-

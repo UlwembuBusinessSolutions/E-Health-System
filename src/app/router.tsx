@@ -28,7 +28,8 @@ import { UsersPage } from "@/platform/UsersPage";
 import { CreateOperatorScreen } from "@/platform/CreateOperatorScreen";
 import { AuditPage } from "@/platform/AuditPage";
 import { AuditLogPage } from "@/audit/AuditLogPage";
-
+import { StockPage } from "@/pharmacy/StockPage";
+ 
 export function AppRouter() {
   return (
     <Routes>
@@ -60,16 +61,17 @@ export function AppRouter() {
             </RequireRole>
           }
         />
-
+ 
         <Route path="patients" element={<PatientSearchPage />} />
         <Route path="patients/new" element={<RegisterPatientScreen />} />
         <Route path="patients/:id" element={<PatientDetailPage />} />
         <Route path="patients/:id/edit" element={<EditPatientScreen />} />
         <Route path="queue" element={<QueuePage />} />
         <Route path="pharmacy" element={<PharmacyQueuePage />} />
+        <Route path="pharmacy/" element={<StockPage />} />
         <Route path="audit" element={<AuditLogPage />} />
       </Route>
-
+ 
       <Route path="/platform" element={<PlatformRoot />}>
         <Route path="login" element={<PlatformLoginScreen />} />
         <Route
