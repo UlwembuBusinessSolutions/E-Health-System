@@ -37,6 +37,7 @@ import { AddClinicScreen } from "@/platform/AddClinicScreen";
 import { UsersPage } from "@/platform/UsersPage";
 import { CreateOperatorScreen } from "@/platform/CreateOperatorScreen";
 import { AuditPage } from "@/platform/AuditPage";
+import { ModuleEntitlementMatrixPage } from "@/platform/ModuleEntitlementMatrixPage";
 
 export function AppRouter() {
   return (
@@ -189,6 +190,7 @@ export function AppRouter() {
           <Route path="users" element={<UsersPage />} />
           <Route path="users/new" element={<CreateOperatorScreen />} />
           <Route path="audit" element={<AuditPage />} />
+          <Route path="modules" element={<ModuleEntitlementMatrixPage />} />
         </Route>
       </Route>
       <Route path="/" element={<Navigate to="/login" replace />} />
