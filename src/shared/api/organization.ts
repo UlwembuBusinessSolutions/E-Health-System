@@ -142,3 +142,41 @@ export async function updateOrganizationMailSettings(
     headers: tenantAuthHeaders(),
   });
 }
+
+// Backs OrganizationSsoSettingsController — ORG_ADMIN-only, the "Single
+// sign-on" section of the tenant app's Settings tab. Same "bring your own
+// account, secret never round-trips" shape as the mail settings pair
+// above: clientSecretSet is the only signal the GET gives about whether
+// one's stored, and usable mirrors OrganizationSsoSettings.isUsable() —
+// enabled alone doesn't mean the login button actually has anywhere to
+// send someone yet.
+export interface OrganizationSsoSettings {
+  enabled: boolean;
+  microsoftTenantId: string | null;
+  clientId: string | null;
+  clientSecretSet: boolean;
+  usable: boolean;
+}
+
+export interface UpdateOrganizationSsoSettingsPayload {
+  enabled: boolean;
+  microsoftTenantId: string;
+  clientId: string;
+  // Omit (or send blank) to keep the currently stored secret — mirrors
+  // UpdateOrganizationMailSettingsPayload's own password field.
+  clientSecret?: string;
+}
+
+export async function getOrganizationSsoSettings(): Promise<OrganizationSsoSettings> {
+  return apiClient.get<OrganizationSsoSettings>("/api/v1/admin/organization/sso-settings", {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export async function updateOrganizationSsoSettings(
+  payload: UpdateOrganizationSsoSettingsPayload,
+): Promise<OrganizationSsoSettings> {
+  return apiClient.patch<OrganizationSsoSettings>("/api/v1/admin/organization/sso-settings", payload, {
+    headers: tenantAuthHeaders(),
+  });
+}

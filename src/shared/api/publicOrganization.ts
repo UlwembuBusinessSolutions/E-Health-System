@@ -21,6 +21,11 @@ export interface PublicOrganization {
   websiteUrl: string | null;
   facebookUrl: string | null;
   instagramUrl: string | null;
+  // Whether this org's Microsoft SSO is fully configured and switched on
+  // — StaffLoginLayout/LoginScreen gate the "Sign in with Microsoft"
+  // button on exactly this, never the raw settings toggle (which can be
+  // on before the rest of the setup is finished).
+  microsoftSsoEnabled: boolean;
 }
 
 export async function getPublicOrganization(tenantSlug: string): Promise<PublicOrganization> {

@@ -1,5 +1,5 @@
 import type { Gender } from "./types";
-import { apiClient, ApiError } from "./client";
+import { apiClient, apiOrigin, ApiError } from "./client";
 
 // Real backend calls — api/'s /platform/** endpoints (api-reference.html,
 // Platform organizations module). No more MOCK_ORGANIZATIONS/delay(): this
@@ -535,9 +535,16 @@ export async function listOrganizationAudit(
 // Triggers a browser download of a CSV response — apiClient always parses
 // JSON, so this bypasses it for the one response shape that isn't. The
 // filename comes from the server's own Content-Disposition (both export
-// endpoints set one), not guessed here.
+// endpoints set one), not guessed here. apiOrigin() prefix is required,
+// not cosmetic — a bare relative path only resolves correctly when the
+// frontend and backend share an origin; in dev (5173 vs 8081) it silently
+// hit the Vite dev server's own SPA fallback instead of the API, which
+// returns a 200 with index.html's HTML instead of a CSV — a real bug this
+// exact bare-fetch pattern shipped with, only caught by a real browser
+// actually downloading and reading the file (found via pharmacyStock.ts's
+// own copy of this same helper — see its own why-note).
 async function downloadCsv(path: string): Promise<void> {
-  const res = await fetch(path, { headers: authHeaders() });
+  const res = await fetch(`${apiOrigin()}${path}`, { headers: authHeaders() });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new ApiError(body?.message ?? res.statusText, res.status);

@@ -118,6 +118,20 @@ export async function login(payload: LoginPayload): Promise<AuthenticatedUser> {
   return buildAuthenticatedUser(response.user, response.accessToken);
 }
 
+// SsoCallbackPage's own counterpart to login() above — by the time that
+// page runs, MicrosoftSsoService has already authenticated the person and
+// issued a real token, handed over as a query param on the redirect back
+// from the backend rather than as a JSON response body (there was no fetch
+// call for a response to belong to; this followed a full-page Microsoft
+// sign-in redirect). Stores it exactly the same way login() does, then
+// round-trips through getCurrentUser() to get the name/email login()'s own
+// response carries directly.
+export async function establishSsoSession(tenantSlug: string, accessToken: string): Promise<AuthenticatedUser> {
+  setTenantSlug(tenantSlug);
+  setTenantToken(accessToken);
+  return getCurrentUser();
+}
+
 // AuthProvider's own rehydration on a fresh page load (AuthContext.tsx's
 // own why-note) — a stored tenant token proves someone was signed in, but
 // carries no name/email of its own (JwtService only embeds sub/tenant/

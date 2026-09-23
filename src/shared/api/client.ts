@@ -8,6 +8,15 @@
 // same origin.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
+// Exposed for the one caller that needs the backend's origin as a real,
+// absolute URL rather than a fetch path — the Microsoft SSO "start" link
+// (LoginScreen.tsx) is a plain <a href>, a full-page browser navigation
+// that has to resolve on its own, unlike every apiClient.* call below
+// which fetch() resolves against API_BASE_URL automatically.
+export function apiOrigin(): string {
+  return API_BASE_URL;
+}
+
 export class ApiError extends Error {
   status: number;
   fieldErrors?: Record<string, string>;

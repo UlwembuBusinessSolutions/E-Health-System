@@ -561,6 +561,45 @@
   font-size: 12px;
   line-height: 1.6;
 }
+.sl-sso-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: #78877c;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.sl-sso-divider::before,
+.sl-sso-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e0e6de;
+}
+.sl-sso-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 48px;
+  border-radius: 8px;
+  border: 1px solid #d8ded5;
+  background: #fff;
+  color: #24291f;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 150ms;
+}
+.sl-sso-button:hover {
+  background: #f5f7f3;
+}
+.sl-sso-button:active {
+  background: #eef1eb;
+}
 .sl-account-help {
   margin-top: 23px;
   text-align: center;
