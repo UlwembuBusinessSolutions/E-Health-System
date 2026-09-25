@@ -32,7 +32,7 @@ public class FacilityController {
 
     @GetMapping("/api/v1/facilities")
     public Map<String, Object> list() {
-        return Map.of("items", facilityRepository.findByActiveTrue().stream()
+        return Map.of("items", facilityRepository.findByActiveTrueOrderByNameAsc().stream()
                 .map(f -> Map.of("id", f.getId(), "name", f.getName())).toList());
     }
 

@@ -44,7 +44,7 @@ public class SecurityConfig {
             @Value("${app.idle-lock.timeout-minutes}") long idleTimeoutMinutes,
             CorsConfigurationSource corsConfigurationSource) throws Exception {
 
-        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository);
+        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository, activityStore, clock);
         IdleLockFilter idleLockFilter =
                 new IdleLockFilter(activityStore, Duration.ofMinutes(idleTimeoutMinutes), clock);
         PlatformJwtAuthenticationFilter platformJwtFilter =

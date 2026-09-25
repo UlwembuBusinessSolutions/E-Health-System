@@ -370,6 +370,55 @@ public class EmailService {
         send(toEmail, subject, body, html);
     }
 
+    // AppointmentService calls these only after the booking transaction commits.
+    public void sendAppointmentConfirmedEmail(String toEmail, String firstName, String organizationDisplayName,
+                                               String facilityName, String appointmentDate, String appointmentTime,
+                                               String assignedStaffName) {
+        sendAppointmentEmail(toEmail, firstName, organizationDisplayName, facilityName, appointmentDate,
+                appointmentTime, assignedStaffName, false);
+    }
+
+    public void sendAppointmentUpdatedEmail(String toEmail, String firstName, String organizationDisplayName,
+                                             String facilityName, String appointmentDate, String appointmentTime,
+                                             String assignedStaffName) {
+        sendAppointmentEmail(toEmail, firstName, organizationDisplayName, facilityName, appointmentDate,
+                appointmentTime, assignedStaffName, true);
+    }
+
+    private void sendAppointmentEmail(String toEmail, String firstName, String organizationDisplayName,
+                                      String facilityName, String appointmentDate, String appointmentTime,
+                                      String assignedStaffName, boolean updated) {
+        String heading = updated ? "Your appointment has been updated" : "Your appointment is confirmed";
+        String action = updated ? "updated" : "confirmed";
+        String subject = heading + " — " + organizationDisplayName;
+        String staffLine = assignedStaffName == null ? "" : "\n  With: " + assignedStaffName;
+        String body = """
+                Hi %s,
+
+                Your appointment at %s has been %s.
+
+                  Facility: %s
+                  Date: %s
+                  Time: %s%s
+
+                If you need to reschedule or cancel, please contact the clinic directly.
+                """.formatted(firstName, organizationDisplayName, action, facilityName, appointmentDate, appointmentTime,
+                staffLine);
+        List<InfoRow> rows = new java.util.ArrayList<>(List.of(
+                new InfoRow("Facility", esc(facilityName)),
+                new InfoRow("Date", esc(appointmentDate)),
+                new InfoRow("Time", esc(appointmentTime))));
+        if (assignedStaffName != null) rows.add(new InfoRow("With", esc(assignedStaffName)));
+        String html = shell(Accent.SUCCESS,
+                kicker(Accent.SUCCESS, heading)
+                        + greeting("Hi " + esc(firstName) + ",")
+                        + lead("Your appointment at <strong>" + esc(organizationDisplayName) + "</strong> has been " + action + ".")
+                        + infoBox("Appointment details", rows)
+                        + muted("If you need to reschedule or cancel, please contact the clinic directly."),
+                footer(FooterAudience.PATIENT));
+        send(toEmail, subject, body, html);
+    }
+
     private void send(String toEmail, String subject, String textBody, String htmlBody) {
         // Resolved here, on the request thread, not inside
         // EmailDeliveryWorker — TenantContext is a ThreadLocal, so it's only
