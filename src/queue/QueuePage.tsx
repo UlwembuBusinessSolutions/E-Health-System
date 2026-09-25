@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/auth/AuthContext";
+import { canTakeVitals } from "@/auth/roles";
 import {
   ArrowRightLeft,
   ArrowUpCircle,
@@ -157,6 +159,7 @@ function buildRowActions(params: {
   entry: QueueEntry;
   status: TokenStatus;
   canTransfer: boolean;
+  canTakeVitals: boolean;
   onPrint: () => void;
   onTransfer: () => void;
   onBoost: () => void;
@@ -189,7 +192,7 @@ function buildRowActions(params: {
       onClick: params.onBoost,
     });
   }
-  if (status === "ISSUED" || status === "CALLED") {
+  if (params.canTakeVitals && (status === "ISSUED" || status === "CALLED")) {
     items.push({
       key: "vitals",
       label: "Vitals",
@@ -248,6 +251,7 @@ function buildRowActions(params: {
 // bounds) — there's no client control to look at another day.
 export function QueuePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [facilityId, setFacilityId] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -808,6 +812,7 @@ export function QueuePage() {
                               entry,
                               status,
                               canTransfer: facilities.length > 1,
+                              canTakeVitals: canTakeVitals(user?.role),
                               onPrint: () => printQueueTicket(entry.token.id),
                               onTransfer: () => openTransfer(entry.token.id, entry.token.facilityId),
                               onBoost: () => openReasonAction(entry.token.id, "boost"),
