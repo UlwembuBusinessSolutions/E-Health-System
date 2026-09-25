@@ -16,6 +16,11 @@ function setTenantToken(token: string): void {
   sessionStorage.setItem(TENANT_TOKEN_KEY, token);
 }
 
+// A successful server-side continuation replaces the signed token in this tab.
+export function replaceTenantToken(token: string): void {
+  setTenantToken(token);
+}
+
 export function getTenantSlug(): string | null {
   return sessionStorage.getItem(TENANT_SLUG_KEY);
 }

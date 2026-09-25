@@ -62,3 +62,40 @@ export const createStaffSchema = z
   });
 
 export type CreateStaffValues = z.infer<typeof createStaffSchema>;
+
+// Mirrors StaffController.UpdateStaffDetailsRequest field-for-field —
+// the subset of createStaffSchema's fields that stay editable after
+// creation (no employeeNumber/email/gender/facility/role/employmentType/
+// password: each of those either never changes or already has its own
+// dedicated action elsewhere in the Staff page, same "one lever per
+// real-world fact" reasoning StaffService.updateDetails()'s own why-note
+// gives on the backend).
+export const editStaffSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required").max(60),
+  lastName: z.string().trim().min(1, "Last name is required").max(60),
+  contactNumber: z
+    .string()
+    .trim()
+    .regex(/^\+?[0-9]{9,15}$/, "Enter a valid contact number, e.g. +27821234567"),
+  idNumber: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || /^[0-9]{13}$/.test(value), "Enter a valid 13-digit SA ID number"),
+  dateOfBirth: z.string().trim().max(10),
+  department: z.string().trim().max(100),
+  designation: z.string().trim().max(100),
+  sancNumber: z.string().trim().max(30),
+  sancExpiryDate: z.string().trim().max(10),
+  hpcsaNumber: z.string().trim().max(30),
+  hpcsaExpiryDate: z.string().trim().max(10),
+  sapcNumber: z.string().trim().max(30),
+  sapcExpiryDate: z.string().trim().max(10),
+  emergencyContactName: z.string().trim().max(120),
+  emergencyContactRelationship: z.string().trim().max(60),
+  emergencyContactPhone: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || /^\+?[0-9]{9,15}$/.test(value), "Enter a valid contact number"),
+});
+
+export type EditStaffValues = z.infer<typeof editStaffSchema>;

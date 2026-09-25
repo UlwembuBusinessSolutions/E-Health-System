@@ -6,6 +6,7 @@ import { SsoCallbackPage } from "@/auth/SsoCallbackPage";
 import { RequireAuth } from "@/auth/RequireAuth";
 import { RequireRole } from "@/auth/RequireRole";
 import { AddStaffScreen } from "@/staff/AddStaffScreen";
+import { EditStaffScreen } from "@/staff/EditStaffScreen";
 import { StaffListPage } from "@/staff/StaffListPage";
 import { PatientSearchPage } from "@/patient/PatientSearchPage";
 import { RegisterPatientScreen } from "@/patient/RegisterPatientScreen";
@@ -25,6 +26,7 @@ import { ReceiveStockScreen } from "@/pharmacy/stock/ReceiveStockScreen";
 import { LedgerPage } from "@/pharmacy/ledger/LedgerPage";
 import { OrganizationSettingsPage } from "@/settings/OrganizationSettingsPage";
 import { AuditTrailPage } from "@/audit/AuditTrailPage";
+import { AppointmentsPage } from "@/appointments/AppointmentsPage";
 import { PatientLoginScreen } from "@/patient-portal/PatientLoginScreen";
 import { PatientRegisterScreen } from "@/patient-portal/PatientRegisterScreen";
 import { PatientPortalPage } from "@/patient-portal/PatientPortalPage";
@@ -149,6 +151,14 @@ export function AppRouter() {
             </RequireRole>
           }
         />
+        <Route
+          path="staff/:staffId/edit"
+          element={
+            <RequireRole role="ORG_ADMIN">
+              <EditStaffScreen />
+            </RequireRole>
+          }
+        />
         {/* No RequireRole — registering and finding a patient is front-line
             reception/clinical work, not admin territory, same gating as the
             backend's own PatientController (falls through to
@@ -157,6 +167,7 @@ export function AppRouter() {
         <Route path="patients/new" element={<RegisterPatientScreen />} />
         <Route path="patients/:id" element={<PatientDetailPage />} />
         <Route path="queue" element={<QueuePage />} />
+        <Route path="appointments" element={<AppointmentsPage />} />
         <Route path="vitals" element={<VitalsIntakePage />} />
         <Route path="pharmacy" element={<PharmacyLayout />}>
           <Route index element={<PharmacyQueuePage />} />

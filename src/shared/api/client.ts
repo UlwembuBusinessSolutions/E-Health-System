@@ -44,6 +44,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
+    const headers = new Headers(init?.headers);
+    if ((res.status === 401 || res.status === 419) && headers.has("Authorization") && headers.has("X-Tenant-ID")
+      && !path.startsWith("/api/v1/auth/unlock")) {
+      window.dispatchEvent(new CustomEvent("ulwembu:session-ended", { detail: { status: res.status } }));
+    }
     const body = await res.json().catch(() => null);
     throw new ApiError(body?.message ?? res.statusText, res.status, body?.fieldErrors);
   }
