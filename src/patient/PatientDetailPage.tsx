@@ -1,3 +1,4 @@
+import { generateUUID } from "../utils/uuid";
 import { PatientVisitsTab } from "./PatientVisitsTab";
 import { createPortal } from "react-dom";
 import { VitalsOverview } from "./VitalsOverview";
@@ -889,7 +890,8 @@ export function PatientDetailPage() {
   // capture (form dismissed and reopened) gets a fresh key, while retrying
   // the same submission (the mutation firing again for the same click)
   // reuses it, which is the whole point of idempotencyKey server-side.
-  const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => crypto.randomUUID());
+  //const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => generateUUID());
 
   const vitalsHistoryQuery = useQuery({
     queryKey: ["triage-history", activeVisitId],
@@ -914,7 +916,8 @@ export function PatientDetailPage() {
     onSuccess: () => {
       setIsCapturingVitals(false);
       setVitalsForm(EMPTY_VITALS_FORM);
-      setVitalsIdempotencyKey(crypto.randomUUID());
+      //setVitalsIdempotencyKey(crypto.randomUUID());
+      setVitalsIdempotencyKey(generateUUID());
       queryClient.invalidateQueries({ queryKey: ["triage-history", activeVisitId] });
       queryClient.invalidateQueries({ queryKey: ["patient-vitals-history"] });
     },
