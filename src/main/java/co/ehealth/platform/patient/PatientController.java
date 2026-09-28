@@ -1,0 +1,815 @@
+package co.ehealth.platform.patient;
+
+import co.ehealth.platform.core.security.AuthenticatedPrincipal;
+import co.ehealth.platform.core.tenant.Organization;
+import co.ehealth.platform.facility.Facility;
+import co.ehealth.platform.identity.Gender;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+// Patient registration, identity scanning, document capture, guardians and
+// migration endpoints. Patient documents are uploaded as multipart files and
+// are converted to PDF by PatientDocumentService before being stored.
+@RestController
+public class PatientController {
+
+    private final PatientService patientService;
+    private final PatientDocumentService patientDocumentService;
+    private final PatientGuardianService patientGuardianService;
+    private final PatientMigrationService patientMigrationService;
+    private final PatientIdentityScanService patientIdentityScanService;
+
+    public PatientController(
+            PatientService patientService,
+            PatientDocumentService patientDocumentService,
+            PatientGuardianService patientGuardianService,
+            PatientMigrationService patientMigrationService,
+            PatientIdentityScanService patientIdentityScanService) {
+
+        this.patientService = patientService;
+        this.patientDocumentService = patientDocumentService;
+        this.patientGuardianService = patientGuardianService;
+        this.patientMigrationService = patientMigrationService;
+        this.patientIdentityScanService = patientIdentityScanService;
+    }
+
+    /*
+     * Patient registration.
+     */
+    @PostMapping("/api/v1/patients")
+    public ResponseEntity<PatientSummary> register(
+            @Valid @RequestBody RegisterPatientRequest request,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+
+        var command = new PatientService.RegisterPatientCommand(
+                request.firstName(),
+                request.lastName(),
+                request.idNumber(),
+                request.address(),
+                request.contactNumber(),
+                request.email(),
+                request.medicalAidProvider(),
+                request.medicalAidNumber(),
+                request.passportNumber(),
+                request.passportExpiry());
+
+        Patient patient = patientService.register(
+                command,
+                staff.userId());
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(PatientSummary.from(patient, false));
+    }
+
+    /*
+     * PREG identity/document-capture story:
+     *
+     * The frontend can submit the value returned by an SA ID barcode scanner.
+     * The identity service validates and parses the 13-digit SA ID number.
+     *
+     * This endpoint DOES NOT create a patient.
+     *
+     * It only returns the decoded identity fields so the registration form
+     * can be pre-populated for staff confirmation before registration.
+     */
+    @PostMapping("/api/v1/patients/identity-scan/id")
+    public ResponseEntity<PatientIdentityScanService.IdentityScanResult> scanSouthAfricanId(
+            @Valid @RequestBody IdentityScanIdRequest request) {
+
+        PatientIdentityScanService.IdentityScanResult result =
+                patientIdentityScanService.parseSouthAfricanId(
+                        request.idNumber());
+
+        return ResponseEntity.ok(result);
+    }
+
+    /*
+     * Passport MRZ scanning.
+     *
+     * The frontend sends the two-line TD3 MRZ captured by the passport
+     * scanner/camera. The identity service parses the MRZ and returns the
+     * decoded identity fields.
+     *
+     * This endpoint DOES NOT create a patient.
+     *
+     * The returned values are intended to pre-populate the registration
+     * form for staff confirmation.
+     */
+    @PostMapping("/api/v1/patients/identity-scan/passport")
+    public ResponseEntity<PatientIdentityScanService.IdentityScanResult> scanPassport(
+            @Valid @RequestBody IdentityScanPassportRequest request) {
+
+        PatientIdentityScanService.IdentityScanResult result =
+                patientIdentityScanService.parsePassportMrz(
+                        request.mrz());
+
+        return ResponseEntity.ok(result);
+    }
+
+    /*
+     * Patient document capture.
+     *
+     * The client sends the scanned ID/passport/document as
+     * multipart/form-data.
+     *
+     * PatientDocumentService:
+     *  - validates the supplied content type;
+     *  - reads the uploaded bytes;
+     *  - converts JPEG/PNG/WebP to PDF;
+     *  - leaves an uploaded PDF as PDF;
+     *  - stores the resulting PDF in object storage;
+     *  - creates an immutable PatientDocument row.
+     *
+     * Multiple uploads are deliberately supported. A rescanned ID or renewed
+     * document creates another PatientDocument row instead of overwriting
+     * the previous document.
+     */
+    @PostMapping(
+            value = "/api/v1/patients/{id}/documents",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<PatientDocumentSummary> uploadDocument(
+            @PathVariable UUID id,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam PatientDocumentType documentType,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+
+        PatientDocument document =
+                patientDocumentService.upload(
+                        id,
+                        documentType,
+                        file,
+                        staff.userId());
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(PatientDocumentSummary.from(document));
+    }
+
+    @GetMapping("/api/v1/patients/{id}/documents")
+    public ResponseEntity<Map<String, Object>> listDocuments(
+            @PathVariable UUID id) {
+
+        List<PatientDocumentSummary> items =
+                patientDocumentService.list(id)
+                        .stream()
+                        .map(PatientDocumentSummary::from)
+                        .toList();
+
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    /*
+     * The actual S3/object-storage key is never returned to the frontend.
+     * A short-lived presigned URL is generated for each download request.
+     */
+    @GetMapping(
+            "/api/v1/patients/{id}/documents/{documentId}/download-url")
+    public ResponseEntity<Map<String, String>> getDocumentDownloadUrl(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId) {
+
+        String url =
+                patientDocumentService.getDownloadUrl(
+                        id,
+                        documentId);
+
+        return ResponseEntity.ok(Map.of("url", url));
+    }
+
+    /*
+     * Guardian/companion contacts.
+     */
+    @PostMapping("/api/v1/patients/{id}/guardians")
+    public ResponseEntity<GuardianSummary> addGuardian(
+            @PathVariable UUID id,
+            @Valid @RequestBody AddGuardianRequest request,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+
+        var command =
+                new PatientGuardianService.AddGuardianCommand(
+                        request.firstName(),
+                        request.lastName(),
+                        request.relationship(),
+                        request.contactNumber(),
+                        request.idNumber(),
+                        request.email());
+
+        PatientGuardian guardian =
+                patientGuardianService.add(
+                        id,
+                        command,
+                        staff.userId());
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(GuardianSummary.from(guardian));
+    }
+
+    @GetMapping("/api/v1/patients/{id}/guardians")
+    public ResponseEntity<Map<String, Object>> listGuardians(
+            @PathVariable UUID id) {
+
+        List<GuardianSummary> items =
+                patientGuardianService.list(id)
+                        .stream()
+                        .map(GuardianSummary::from)
+                        .toList();
+
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    @DeleteMapping("/api/v1/patients/{id}/guardians/{guardianId}")
+    public ResponseEntity<Void> removeGuardian(
+            @PathVariable UUID id,
+            @PathVariable UUID guardianId) {
+
+        patientGuardianService.remove(id, guardianId);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping(
+            value = "/api/v1/patients/{id}/guardians/{guardianId}/signature",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<GuardianSummary> uploadGuardianSignature(
+            @PathVariable UUID id,
+            @PathVariable UUID guardianId,
+            @RequestParam("file") MultipartFile file) {
+
+        PatientGuardian guardian =
+                patientGuardianService.uploadSignature(
+                        id,
+                        guardianId,
+                        file);
+
+        return ResponseEntity
+                .ok(GuardianSummary.from(guardian));
+    }
+
+    @GetMapping(
+            "/api/v1/patients/{id}/guardians/{guardianId}/signature/download-url")
+    public ResponseEntity<Map<String, String>> getGuardianSignatureUrl(
+            @PathVariable UUID id,
+            @PathVariable UUID guardianId) {
+
+        String url =
+                patientGuardianService.getSignatureUrl(
+                        id,
+                        guardianId);
+
+        return ResponseEntity.ok(Map.of("url", url));
+    }
+
+    /*
+     * Paged patient roster.
+     */
+    @GetMapping("/api/v1/patients")
+    public ResponseEntity<Map<String, Object>> list(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "name") String sortBy,
+            @RequestParam(defaultValue = "asc") String sortDir,
+            @RequestParam(required = false) String gender,
+            @RequestParam(required = false) String medicalAid,
+            @RequestParam(required = false) String mpiNumber,
+            @RequestParam(required = false) String citizenship,
+            @RequestParam(required = false) String createdFrom,
+            @RequestParam(required = false) String createdTo) {
+
+        Page<Patient> result =
+                patientService.list(
+                        page,
+                        size,
+                        sortBy,
+                        sortDir,
+                        gender,
+                        medicalAid,
+                        mpiNumber,
+                        citizenship,
+                        createdFrom,
+                        createdTo);
+
+        List<PatientSummary> items =
+                result.getContent()
+                        .stream()
+                        .map(p -> PatientSummary.from(p, false))
+                        .toList();
+
+        Map<String, Object> body =
+                Map.of(
+                        "items", items,
+                        "page", result.getNumber(),
+                        "size", result.getSize(),
+                        "totalItems", result.getTotalElements(),
+                        "totalPages", result.getTotalPages());
+
+        return ResponseEntity.ok(body);
+    }
+
+    /*
+     * Patient search.
+     */
+    @GetMapping("/api/v1/patients/search")
+    public ResponseEntity<Map<String, Object>> search(
+            @RequestParam(required = false) String q) {
+
+        List<PatientSummary> items =
+                patientService.search(q)
+                        .stream()
+                        .map(p -> PatientSummary.from(p, false))
+                        .toList();
+
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    @GetMapping("/api/v1/patients/{id}")
+    public ResponseEntity<PatientSummary> get(
+            @PathVariable UUID id) {
+
+        Patient patient = patientService.get(id);
+
+        boolean migrated =
+                patient.isArchived()
+                        && patientMigrationService.isMigrated(id);
+
+        return ResponseEntity.ok(
+                PatientSummary.from(patient, migrated));
+    }
+
+    /*
+     * Admin patient update.
+     */
+    @PatchMapping("/api/v1/admin/patients/{id}")
+    public ResponseEntity<PatientSummary> update(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdatePatientRequest request,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+
+        var command = new PatientService.UpdatePatientCommand(
+                request.firstName(),
+                request.lastName(),
+                request.address(),
+                request.contactNumber(),
+                request.email(),
+                request.medicalAidProvider(),
+                request.medicalAidNumber(),
+                request.passportNumber(),
+                request.passportExpiry(),
+                request.reason());
+
+        Patient patient =
+                patientService.update(
+                        id,
+                        command,
+                        staff.userId());
+
+        return ResponseEntity.ok(
+                PatientSummary.from(patient, false));
+    }
+
+    @GetMapping("/api/v1/admin/patients/{id}/history")
+    public ResponseEntity<Map<String, Object>> getHistory(
+            @PathVariable UUID id) {
+
+        List<FieldHistoryEntry> items =
+                patientService.getFieldHistory(id)
+                        .stream()
+                        .map(FieldHistoryEntry::from)
+                        .toList();
+
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    /*
+     * Archive instead of delete.
+     */
+    @PostMapping("/api/v1/admin/patients/{id}/archive")
+    public ResponseEntity<PatientSummary> archive(
+            @PathVariable UUID id,
+            @Valid @RequestBody ArchivePatientRequest request,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+
+        Patient patient =
+                patientService.archive(
+                        id,
+                        request.reason(),
+                        request.deceasedDate(),
+                        staff.userId());
+
+        return ResponseEntity.ok(
+                PatientSummary.from(patient, false));
+    }
+
+    /*
+     * Cross-tenant migration destination selection.
+     */
+    @GetMapping("/api/v1/admin/migration/organizations")
+    public ResponseEntity<Map<String, Object>>
+    listMigrationDestinationOrganizations() {
+
+        List<MigrationOrganizationSummary> items =
+                patientMigrationService
+                        .listDestinationOrganizations()
+                        .stream()
+                        .map(MigrationOrganizationSummary::from)
+                        .toList();
+
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    @GetMapping(
+            "/api/v1/admin/migration/organizations/{organizationId}/facilities")
+    public ResponseEntity<Map<String, Object>>
+    listMigrationDestinationFacilities(
+            @PathVariable UUID organizationId) {
+
+        List<MigrationFacilitySummary> items =
+                patientMigrationService
+                        .listDestinationFacilities(organizationId)
+                        .stream()
+                        .map(MigrationFacilitySummary::from)
+                        .toList();
+
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    @PostMapping("/api/v1/admin/patients/{id}/migrate")
+    public ResponseEntity<MigrationResultResponse> migrate(
+            @PathVariable UUID id,
+            @Valid @RequestBody MigratePatientRequest request,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+
+        var command =
+                new PatientMigrationService.MigratePatientCommand(
+                        request.destinationOrganizationId(),
+                        request.destinationFacilityId(),
+                        request.reason());
+
+        PatientMigrationService.MigrationResult result =
+                patientMigrationService.migrate(
+                        id,
+                        command,
+                        staff.userId());
+
+        return ResponseEntity.ok(
+                MigrationResultResponse.from(result));
+    }
+
+    @GetMapping(
+            "/api/v1/admin/patients/{id}/migration/destination-view")
+    public ResponseEntity<MigrationDestinationViewResponse>
+    getMigrationDestinationView(
+            @PathVariable UUID id) {
+
+        PatientMigrationService.DestinationView view =
+                patientMigrationService.getDestinationView(id);
+
+        return ResponseEntity.ok(
+                MigrationDestinationViewResponse.from(view));
+    }
+
+    @GetMapping(
+            "/api/v1/admin/patients/{id}/migration/destination-view/documents/{documentId}/download-url")
+    public ResponseEntity<Map<String, String>>
+    getMigrationDestinationDocumentDownloadUrl(
+            @PathVariable UUID id,
+            @PathVariable UUID documentId) {
+
+        String url =
+                patientMigrationService
+                        .getDestinationDocumentDownloadUrl(
+                                id,
+                                documentId);
+
+        return ResponseEntity.ok(Map.of("url", url));
+    }
+
+    /*
+     * Patient registration request.
+     */
+    public record RegisterPatientRequest(
+            @NotBlank String firstName,
+            @NotBlank String lastName,
+
+            @NotBlank
+            @Pattern(
+                    regexp = "^\\d{13}$",
+                    message = "ID number must be 13 digits")
+            String idNumber,
+
+            @NotBlank String address,
+
+            @NotBlank
+            @Pattern(regexp = "^\\+?[0-9]{9,15}$")
+            String contactNumber,
+
+            @Email
+            String email,
+
+            String medicalAidProvider,
+            String medicalAidNumber,
+
+            @Size(max = 20)
+            String passportNumber,
+
+            LocalDate passportExpiry) {
+    }
+
+    /*
+     * ID barcode / SA identity scan request.
+     *
+     * The scanner supplies the decoded 13-digit value. The service performs
+     * the actual South African ID validation and parsing.
+     */
+    public record IdentityScanIdRequest(
+            @NotBlank
+            @Pattern(
+                    regexp = "^\\d{13}$",
+                    message = "ID number must be 13 digits")
+            String idNumber) {
+    }
+
+    /*
+     * Passport MRZ scan request.
+     *
+     * A passport TD3 MRZ consists of two lines. The service is responsible
+     * for normalising and validating the supplied MRZ.
+     */
+    public record IdentityScanPassportRequest(
+            @NotBlank
+            @Size(min = 10, max = 1000)
+            String mrz) {
+    }
+
+    /*
+     * API representation of a patient.
+     */
+    public record PatientSummary(
+            UUID id,
+            String mpiNumber,
+            String firstName,
+            String lastName,
+            LocalDate dateOfBirth,
+            Gender gender,
+            CitizenshipStatus citizenshipStatus,
+            String idNumber,
+            String address,
+            String contactNumber,
+            String email,
+            String medicalAidProvider,
+            String medicalAidNumber,
+            String passportNumber,
+            LocalDate passportExpiry,
+            Instant createdAt,
+            boolean archived,
+            String archivedReason,
+            Instant archivedAt,
+            LocalDate deceasedDate,
+            boolean migrated) {
+
+        static PatientSummary from(
+                Patient p,
+                boolean migrated) {
+
+            return new PatientSummary(
+                    p.getId(),
+                    p.getMpiNumber(),
+                    p.getFirstName(),
+                    p.getLastName(),
+                    p.getDateOfBirth(),
+                    p.getGender(),
+                    p.getCitizenshipStatus(),
+                    p.getIdNumber(),
+                    p.getAddress(),
+                    p.getContactNumber(),
+                    p.getEmail(),
+                    p.getMedicalAidProvider(),
+                    p.getMedicalAidNumber(),
+                    p.getPassportNumber(),
+                    p.getPassportExpiry(),
+                    p.getCreatedAt(),
+                    p.isArchived(),
+                    p.getArchivedReason(),
+                    p.getArchivedAt(),
+                    p.getDeceasedDate(),
+                    migrated);
+        }
+    }
+
+    /*
+     * Patient documents deliberately expose metadata only.
+     * The S3/object-storage key is never returned to clients.
+     */
+    public record PatientDocumentSummary(
+            UUID id,
+            PatientDocumentType documentType,
+            String originalFilename,
+            String contentType,
+            long fileSize,
+            Instant uploadedAt) {
+
+        static PatientDocumentSummary from(
+                PatientDocument d) {
+
+            return new PatientDocumentSummary(
+                    d.getId(),
+                    d.getDocumentType(),
+                    d.getOriginalFilename(),
+                    d.getContentType(),
+                    d.getFileSize(),
+                    d.getUploadedAt());
+        }
+    }
+
+    public record AddGuardianRequest(
+            @NotBlank String firstName,
+            @NotBlank String lastName,
+            @NotNull GuardianRelationship relationship,
+
+            @NotBlank
+            @Pattern(regexp = "^\\+?[0-9]{9,15}$")
+            String contactNumber,
+
+            @Pattern(
+                    regexp = "^\\d{13}$",
+                    message = "ID number must be 13 digits")
+            String idNumber,
+
+            @Email
+            String email) {
+    }
+
+    public record GuardianSummary(
+            UUID id,
+            String firstName,
+            String lastName,
+            GuardianRelationship relationship,
+            String contactNumber,
+            String idNumber,
+            String email,
+            boolean hasSignature,
+            Instant consentedAt,
+            Instant createdAt) {
+
+        static GuardianSummary from(
+                PatientGuardian g) {
+
+            return new GuardianSummary(
+                    g.getId(),
+                    g.getFirstName(),
+                    g.getLastName(),
+                    g.getRelationship(),
+                    g.getContactNumber(),
+                    g.getIdNumber(),
+                    g.getEmail(),
+                    g.getSignatureS3Key() != null,
+                    g.getConsentedAt(),
+                    g.getCreatedAt());
+        }
+    }
+
+    public record UpdatePatientRequest(
+            @NotBlank String firstName,
+            @NotBlank String lastName,
+            @NotBlank String address,
+
+            @NotBlank
+            @Pattern(regexp = "^\\+?[0-9]{9,15}$")
+            String contactNumber,
+
+            @Email
+            String email,
+
+            String medicalAidProvider,
+            String medicalAidNumber,
+
+            @Size(max = 20)
+            String passportNumber,
+
+            LocalDate passportExpiry,
+
+            @NotBlank
+            String reason) {
+    }
+
+    public record MigrationOrganizationSummary(
+            UUID id,
+            String displayName) {
+
+        static MigrationOrganizationSummary from(
+                Organization organization) {
+
+            return new MigrationOrganizationSummary(
+                    organization.getId(),
+                    organization.getDisplayName());
+        }
+    }
+
+    public record MigrationFacilitySummary(
+            UUID id,
+            String name) {
+
+        static MigrationFacilitySummary from(
+                Facility facility) {
+
+            return new MigrationFacilitySummary(
+                    facility.getId(),
+                    facility.getName());
+        }
+    }
+
+    public record MigratePatientRequest(
+            @NotNull UUID destinationOrganizationId,
+            @NotNull UUID destinationFacilityId,
+            @NotBlank String reason) {
+    }
+
+    public record MigrationResultResponse(
+            UUID destinationPatientId,
+            String destinationMpiNumber) {
+
+        static MigrationResultResponse from(
+                PatientMigrationService.MigrationResult result) {
+
+            return new MigrationResultResponse(
+                    result.destinationPatientId(),
+                    result.destinationMpiNumber());
+        }
+    }
+
+    public record MigrationDestinationViewResponse(
+            PatientSummary patient,
+            List<PatientDocumentSummary> documents,
+            String destinationOrganizationDisplayName,
+            String destinationFacilityName) {
+
+        static MigrationDestinationViewResponse from(
+                PatientMigrationService.DestinationView view) {
+
+            List<PatientDocumentSummary> documents =
+                    view.documents()
+                            .stream()
+                            .map(PatientDocumentSummary::from)
+                            .toList();
+
+            return new MigrationDestinationViewResponse(
+                    PatientSummary.from(
+                            view.patient(),
+                            false),
+                    documents,
+                    view.destinationOrganizationDisplayName(),
+                    view.destinationFacilityName());
+        }
+    }
+
+    public record FieldHistoryEntry(
+            UUID id,
+            String fieldName,
+            String oldValue,
+            String newValue,
+            String reason,
+            Instant changedAt) {
+
+        static FieldHistoryEntry from(
+                PatientFieldHistory h) {
+
+            return new FieldHistoryEntry(
+                    h.getId(),
+                    h.getFieldName(),
+                    h.getOldValue(),
+                    h.getNewValue(),
+                    h.getReason(),
+                    h.getChangedAt());
+        }
+    }
+
+    public record ArchivePatientRequest(
+            @NotBlank String reason,
+            LocalDate deceasedDate) {
+    }
+}
