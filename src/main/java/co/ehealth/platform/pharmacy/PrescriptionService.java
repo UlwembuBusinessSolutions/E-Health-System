@@ -12,6 +12,7 @@ import co.ehealth.platform.identity.StaffService;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
 import co.ehealth.platform.visit.Visit;
+import co.ehealth.platform.recq.WaitingTimeService;
 import co.ehealth.platform.visit.VisitService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +40,7 @@ public class PrescriptionService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
+    private final WaitingTimeService waitingTimeService;
 
     public PrescriptionService(PrescriptionRepository prescriptionRepository,
                                 PrescriptionItemRepository prescriptionItemRepository,
@@ -47,7 +49,8 @@ public class PrescriptionService {
                                 PrescriberMessageRepository prescriberMessageRepository, VisitService visitService,
                                 StaffService staffService, UserRepository userRepository,
                                 OrganizationRepository organizationRepository, EmailService emailService,
-                                AuditLogService auditLogService, Clock clock, PermissionService permissionService) {
+                                AuditLogService auditLogService, Clock clock, PermissionService permissionService,
+                                WaitingTimeService waitingTimeService) {
         this.prescriptionRepository = prescriptionRepository;
         this.prescriptionItemRepository = prescriptionItemRepository;
         this.dispensingRecordRepository = dispensingRecordRepository;
@@ -61,9 +64,10 @@ public class PrescriptionService {
         this.auditLogService = auditLogService;
         this.clock = clock;
         this.permissionService = permissionService;
+        this.waitingTimeService = waitingTimeService;
     }
 
-    // PHRM-US-018 + PHRM-US-009 — patientId/facilityId come from the visit,
+    // PHRM-US-018 + PHRM-US-009 â€” patientId/facilityId come from the visit,
     // never a second independently-supplied value (Prescription's own
     // why-note on why that's the safer MPI-binding path); the prescriber
     // must currently hold a valid HPCSA or SANC registration
@@ -98,7 +102,7 @@ public class PrescriptionService {
         return prescriptionRepository.findById(id).orElseThrow(PrescriptionNotFoundException::new);
     }
 
-    // The pharmacy "look up a prescription" utility — finds one by its
+    // The pharmacy "look up a prescription" utility â€” finds one by its
     // human-facing serial number (what a pharmacist actually has on hand,
     // not a UUID) regardless of status, so a prescription that fell off the
     // active queue (PrescriptionRepository's own why-note) can still be
@@ -116,7 +120,7 @@ public class PrescriptionService {
         return prescriptionItemRepository.findById(itemId).orElseThrow(PrescriptionItemNotFoundException::new);
     }
 
-    // PHRM-US-001 — the dispensing queue for one facility. PARTIALLY_DISPENSED
+    // PHRM-US-001 â€” the dispensing queue for one facility. PARTIALLY_DISPENSED
     // included alongside PENDING so a prescription with some items already
     // resolved stays visible as long as at least one item still needs action.
     public List<Prescription> listQueue(UUID facilityId) {
@@ -125,10 +129,10 @@ public class PrescriptionService {
                 List.of(PrescriptionStatus.PENDING, PrescriptionStatus.PARTIALLY_DISPENSED));
     }
 
-    // The patient-level Medication tab (PatientDetailPage) — every
+    // The patient-level Medication tab (PatientDetailPage) â€” every
     // prescription this patient has ever had, across every visit, every
     // status alike, so staff can see the complete history and whether each
-    // one was actually taken — same "read access only needs VIEW" reasoning
+    // one was actually taken â€” same "read access only needs VIEW" reasoning
     // as listQueue() above.
     public List<Prescription> getPatientPrescriptions(UUID patientId) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
@@ -143,10 +147,10 @@ public class PrescriptionService {
         return outOfStockRecordRepository.findByPrescriptionItemId(prescriptionItemId);
     }
 
-    // PHRM-US-009's other half — dispensing requires a current SAPC
+    // PHRM-US-009's other half â€” dispensing requires a current SAPC
     // registration. Reversible the other way: an item already OUT_OF_STOCK
     // can still be dispensed here once stock is back (that's the whole
-    // point of getBySerialNumber() above) — only an already-DISPENSED item
+    // point of getBySerialNumber() above) â€” only an already-DISPENSED item
     // is refused.
     @Transactional
     public void dispenseItem(UUID prescriptionId, UUID itemId, UUID dispenserId) {
@@ -158,11 +162,12 @@ public class PrescriptionService {
         PrescriptionItem item = requireOwnedItem(prescription, itemId);
         dispenseItemInternal(prescription, item, dispenserId);
         recomputeAndSave(prescription);
+        completeWaitingTimeIfFullyDispensed(prescription);
     }
 
-    // "Mark all as collected" — dispenses every item still PENDING on this
+    // "Mark all as collected" â€” dispenses every item still PENDING on this
     // prescription in one action; an item already OUT_OF_STOCK is left
-    // alone (there's nothing to hand over until stock is actually back —
+    // alone (there's nothing to hand over until stock is actually back â€”
     // this must never silently fabricate a dispense for something the
     // pharmacy doesn't have).
     @Transactional
@@ -179,6 +184,14 @@ public class PrescriptionService {
             }
         }
         recomputeAndSave(prescription);
+        completeWaitingTimeIfFullyDispensed(prescription);
+    }
+
+    private void completeWaitingTimeIfFullyDispensed(Prescription prescription) {
+        List<PrescriptionItem> items = getItems(prescription.getId());
+        if (!items.isEmpty() && items.stream().allMatch(item -> item.getStatus() == PrescriptionStatus.DISPENSED)) {
+            waitingTimeService.completePharmacyByVisit(prescription.getVisitId(), clock.instant());
+        }
     }
 
     private void dispenseItemInternal(Prescription prescription, PrescriptionItem item, UUID dispenserId) {
@@ -192,15 +205,15 @@ public class PrescriptionService {
                 "PrescriptionItem", item.getId().toString(), null, null);
     }
 
-    // The other outcome for a PENDING item — the pharmacy doesn't have the
+    // The other outcome for a PENDING item â€” the pharmacy doesn't have the
     // stock to fill it. Deliberately no SAPC-registration check unlike
     // dispensing: saying "we don't have this in stock" doesn't require a
     // dispensing licence the way actually handing over medicine does; any
     // staff member with PHRM:MANAGE can flag it. Idempotent on an item
-    // already OUT_OF_STOCK — re-marking just updates who/when/why
+    // already OUT_OF_STOCK â€” re-marking just updates who/when/why
     // (PrescriptionOutOfStockRecord.update()) rather than erroring, since a
     // pharmacist may want to update the note while still waiting on stock.
-    // Never deletes the item or the prescription — status changes,
+    // Never deletes the item or the prescription â€” status changes,
     // everything else about what was prescribed stays on the record.
     @Transactional
     public void markItemOutOfStock(UUID prescriptionId, UUID itemId, UUID staffId, String note) {
@@ -239,7 +252,7 @@ public class PrescriptionService {
         prescriptionRepository.save(prescription);
     }
 
-    // "Something else" — a pharmacy query about this prescription that
+    // "Something else" â€” a pharmacy query about this prescription that
     // isn't a stock or dispensing action (a dosage concern, missing
     // information, anything needing the prescriber's own judgment). Always
     // paired with a real email; the row this saves is the pharmacy's own
@@ -275,7 +288,7 @@ public class PrescriptionService {
     }
 
     // consultationId is optional traceability only (Prescription's own
-    // why-note) — null keeps this call's behaviour identical to before it
+    // why-note) â€” null keeps this call's behaviour identical to before it
     // existed.
     public record CreatePrescriptionCommand(UUID visitId, List<PrescriptionItemInput> items, UUID consultationId) {
     }

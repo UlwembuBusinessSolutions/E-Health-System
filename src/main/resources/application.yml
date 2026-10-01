@@ -108,4 +108,7 @@ management:
     mail:
       enabled: false
 
-
+ehealth:
+  recq:
+   waiting-time:
+    target-minutes: 120

@@ -8,6 +8,8 @@ import co.ehealth.platform.facility.FacilityNotFoundException;
 import co.ehealth.platform.facility.FacilityRepository;
 import co.ehealth.platform.patient.Patient;
 import co.ehealth.platform.patient.PatientService;
+import co.ehealth.platform.recq.WaitingTimeService;
+import co.ehealth.platform.recq.WaitingTimeStage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -31,11 +33,13 @@ public class QueueService {
     private final Clock clock;
     private final PermissionService permissionService;
     private final FacilityRepository facilityRepository;
+    private final WaitingTimeService waitingTimeService;
 
     public QueueService(QueueTokenRepository queueTokenRepository,
                          QueueTokenEventRepository queueTokenEventRepository, VisitRepository visitRepository,
                          PatientService patientService, AuditLogService auditLogService, Clock clock,
-                         PermissionService permissionService, FacilityRepository facilityRepository) {
+                         PermissionService permissionService, FacilityRepository facilityRepository,
+                         WaitingTimeService waitingTimeService) {
         this.queueTokenRepository = queueTokenRepository;
         this.queueTokenEventRepository = queueTokenEventRepository;
         this.visitRepository = visitRepository;
@@ -44,19 +48,22 @@ public class QueueService {
         this.clock = clock;
         this.permissionService = permissionService;
         this.facilityRepository = facilityRepository;
+        this.waitingTimeService = waitingTimeService;
     }
 
-    // RECQ-US-001's automatic path — VisitService.createVisit() calls this
+    // RECQ-US-001's automatic path â€” VisitService.createVisit() calls this
     // in the same transaction as the Visit it just created, "Visit w/ valid
     // MPI -> token issued" being one atomic hand-off rather than two
     // separate client calls. Not manual, always NORMAL priority: nothing
     // about a fresh visit implies urgency yet, unlike a receptionist
     // deliberately flagging one via issueManualToken() below.
     QueueToken issueAutomaticToken(Visit visit, UUID issuedByUserId) {
-        return issue(visit, TokenPriority.NORMAL, false, issuedByUserId);
+        QueueToken token = issue(visit, TokenPriority.NORMAL, false, issuedByUserId);
+        waitingTimeService.completeRegistration(visit.getId(), token.getIssuedAt());
+        return token;
     }
 
-    // RECQ-US-002 — "User w/ queue-mgmt permission issues manual token,
+    // RECQ-US-002 â€” "User w/ queue-mgmt permission issues manual token,
     // same structure, flagged manual for reporting." Takes an existing
     // visitId rather than creating one: this is for re-queuing or a
     // priority override on a visit that already has (or previously had) a
@@ -72,7 +79,7 @@ public class QueueService {
         return issue(visit, priority, manual, issuedByUserId, QueueTokenEventType.ISSUED, null);
     }
 
-    // transferToken()'s destination-side issuance — same status transition
+    // transferToken()'s destination-side issuance â€” same status transition
     // (null -> ISSUED) as any other issue(), but tagged TRANSFERRED_IN and
     // carrying a reasonNote pointing back at the origin token, same
     // "distinct event type for the same transition" pattern as
@@ -92,12 +99,12 @@ public class QueueService {
         return token;
     }
 
-    // RECQ-US-001's "numbering resets daily per station" — this codebase
+    // RECQ-US-001's "numbering resets daily per station" â€” this codebase
     // has no Station entity yet (RECQ-US-012, Sprint 4), so "per facility"
     // stands in for it. A plain count-then-increment, not a Postgres
     // sequence: a real sequence can't reset at midnight without extra
     // scheduled maintenance, which is more machinery than a reception
-    // desk's daily token count needs at this scale — the small race window
+    // desk's daily token count needs at this scale â€” the small race window
     // under truly simultaneous issuance at the same facility is an accepted
     // trade-off here, unlike PatientService's MPI generation which
     // genuinely needs sequence-level concurrency safety (an MPI collision
@@ -111,7 +118,7 @@ public class QueueService {
     }
 
     // One definition of "today" (UTC) shared by numbering, the callable
-    // queue, and the full daily list — used to keep those three from
+    // queue, and the full daily list â€” used to keep those three from
     // silently drifting apart, not because any of them has a stronger
     // timezone requirement than nextTokenNumber() already had.
     private DayBounds dayBounds(UUID facilityId, LocalDate date) {
@@ -131,10 +138,10 @@ public class QueueService {
     }
 
     // RECQ-US-011's "live queue" read, minus the push-refresh (Sprint 4,
-    // out of scope) — a plain GET is enough to prove the ordering
+    // out of scope) â€” a plain GET is enough to prove the ordering
     // (currently-served, then priority, then earliest issued) is right.
-    // Scoped to today (queue-system-improvements.md §1) and, with `search`,
-    // filtered by token number / patient name / MPI (RECQ-US-007) — applied
+    // Scoped to today (queue-system-improvements.md Â§1) and, with `search`,
+    // filtered by token number / patient name / MPI (RECQ-US-007) â€” applied
     // in memory after enrichment rather than in SQL, matching this method's
     // existing "accepted N+1" trade-off below: a single facility's daily
     // queue is realistically a handful of people, not a scale where either
@@ -179,7 +186,7 @@ public class QueueService {
                 patient.getMpiNumber());
     }
 
-    // patientId — not previously exposed here — is what lets the queue
+    // patientId â€” not previously exposed here â€” is what lets the queue
     // page's "Vitals" action link straight to a patient's page (and that
     // patient's specific visit) without the caller having to search for
     // them by name mid-workflow.
@@ -191,7 +198,7 @@ public class QueueService {
     }
 
     // RECQ-US-003's ticket print/reprint and a future "what happened to
-    // this ticket" view — the normalized event history (V21) for one
+    // this ticket" view â€” the normalized event history (V21) for one
     // token, oldest first.
     public List<QueueTokenEvent> getTokenHistory(UUID tokenId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
@@ -199,7 +206,7 @@ public class QueueService {
         return queueTokenEventRepository.findByTokenIdOrderByOccurredAtAsc(tokenId);
     }
 
-    // RECQ-US-004 — "the highest-priority/longest-waiting token for the
+    // RECQ-US-004 â€” "the highest-priority/longest-waiting token for the
     // station is called." findCallableQueue() already returns the queue in
     // exactly that order (bounded to today); calling next is just taking
     // its head.
@@ -212,6 +219,7 @@ public class QueueService {
                 .claimNextCallable(facilityId, bounds.startOfDay(), bounds.startOfNextDay())
                 .orElseThrow(EmptyQueueException::new);
         next.call(now);
+        waitingTimeService.startStage(next.getVisitId(), WaitingTimeStage.TRIAGE, now);
         queueTokenRepository.save(next);
         auditLogService.append(calledByUserId, facilityId, "QUEUE_TOKEN_CALLED", "QueueToken",
                 next.getId().toString(), null, null);
@@ -220,13 +228,13 @@ public class QueueService {
         return toView(next);
     }
 
-    // Boosting (or demoting) priority in place — the fix for a real bug:
+    // Boosting (or demoting) priority in place â€” the fix for a real bug:
     // this used to be done by calling issueManualToken() again against the
     // same visit, which issues a genuinely new token/token-number rather
     // than changing the existing one. That left the original token sitting
     // in today's list untouched, so boosting a waiting patient produced two
     // visible rows for them instead of moving the one row up the queue.
-    // This mutates the existing token's priority only — no new token, no
+    // This mutates the existing token's priority only â€” no new token, no
     // change to issuedAt or status.
     @Transactional
     public QueueEntryView updatePriority(UUID tokenId, TokenPriority priority, QueueActionReason reasonCode,
@@ -261,6 +269,7 @@ public class QueueService {
             validateReason(reasonCode, reasonNote);
         }
         token.call(now);
+        waitingTimeService.startStage(token.getVisitId(), WaitingTimeStage.TRIAGE, now);
         queueTokenRepository.save(token);
         auditLogService.append(staffUserId, token.getFacilityId(),
                 bypassedOrder ? "QUEUE_TOKEN_CALLED_OUT_OF_ORDER" : "QUEUE_TOKEN_CALLED", "QueueToken",
@@ -296,8 +305,8 @@ public class QueueService {
     // The out-and-back scenario, step one: a nurse/marshall flags a called
     // token as MISSED when the patient doesn't respond, instead of it
     // silently sitting as CALLED forever (queue-appointments-plan.md
-    // §3.8). No automated timeout yet — a deliberate scope cut, see
-    // queue-system-improvements.md §3.
+    // Â§3.8). No automated timeout yet â€” a deliberate scope cut, see
+    // queue-system-improvements.md Â§3.
     @Transactional
     public QueueEntryView markMissed(UUID tokenId, UUID staffUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
@@ -312,7 +321,7 @@ public class QueueService {
         return toView(token);
     }
 
-    // RECQ-US-005 — service finished; the token leaves the active/daily
+    // RECQ-US-005 â€” service finished; the token leaves the active/daily
     // list for good.
     @Transactional
     public QueueEntryView complete(UUID tokenId, UUID staffUserId) {
@@ -328,10 +337,10 @@ public class QueueService {
         return toView(token);
     }
 
-    // RECQ-US-005 — cancellable from ISSUED, CALLED, or MISSED; the reason
+    // RECQ-US-005 â€” cancellable from ISSUED, CALLED, or MISSED; the reason
     // is mandatory (validated at the controller) and stored on the token
     // itself (current-episode snapshot, cancel_reason) as well as this
-    // token's own event history — never as a JSON blob shoved into the
+    // token's own event history â€” never as a JSON blob shoved into the
     // generic audit_log the way this used to work (a real bug: audit_log's
     // before/after_value are jsonb, and a raw string there failed the
     // insert outright). The properly normalized event row replaces that
@@ -352,12 +361,12 @@ public class QueueService {
     }
 
     // A cross-facility transfer, not a new status: reuses cancel()'s exact
-    // guard (ISSUED, CALLED, or MISSED — terminal tokens can't be
+    // guard (ISSUED, CALLED, or MISSED â€” terminal tokens can't be
     // transferred any more than they can be cancelled) rather than teaching
     // QueueToken a new transition, since "this token is done, a new one
     // exists elsewhere" is exactly what cancel-and-reissue already means.
     // The destination gets a genuinely new Visit (Visit.facilityId is
-    // immutable, and QueueToken.facilityId is denormalized from it — see
+    // immutable, and QueueToken.facilityId is denormalized from it â€” see
     // both entities' own why-notes) linked back via
     // Visit.transferredFromVisitId, and a fresh token/token-number in the
     // destination facility's own daily sequence.
@@ -394,14 +403,14 @@ public class QueueService {
         return toView(newToken);
     }
 
-    // ConsultationService.sign()'s "Send to pharmacy" outcome — resolves
+    // ConsultationService.sign()'s "Send to pharmacy" outcome â€” resolves
     // whichever token belongs to this visit (there's no visitId index on
     // the everyday facility/day-scoped queue queries, see
     // QueueTokenRepository's own why-note) and delegates to transferToken()
     // above, the same cross-facility transfer staff already use manually
     // from a visible queue row. An already-terminal token (already
     // completed/cancelled/transferred) fails here exactly the way a
-    // staff-initiated transfer of a terminal token already would —
+    // staff-initiated transfer of a terminal token already would â€”
     // QueueToken.cancel()'s own transition guard, not a separate check.
     @Transactional
     public QueueEntryView transferVisitToFacility(UUID visitId, UUID destinationFacilityId, String reason,
@@ -415,7 +424,7 @@ public class QueueService {
         return queueTokenRepository.findById(tokenId).orElseThrow(QueueTokenNotFoundException::new);
     }
 
-    // RECQ-US-003's ticket print/reprint — the queue page's "Print" button
+    // RECQ-US-003's ticket print/reprint â€” the queue page's "Print" button
     // and the "Visit started" success screen both need to fetch one
     // specific token's full details (patient name/MPI included) by id, not
     // a facility-wide list.
@@ -430,7 +439,7 @@ public class QueueService {
         }
     }
 
-    // The single write path for queue_token_events — every transition
+    // The single write path for queue_token_events â€” every transition
     // method above calls this rather than constructing QueueTokenEvent
     // directly, same discipline AuditLogService.append() already
     // establishes for the generic audit trail.

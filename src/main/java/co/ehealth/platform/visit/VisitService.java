@@ -8,10 +8,12 @@ import co.ehealth.platform.facility.FacilityService;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.patient.PatientService;
+import co.ehealth.platform.recq.WaitingTimeService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,11 +31,12 @@ public class VisitService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
+    private final WaitingTimeService waitingTimeService;
 
     public VisitService(VisitRepository visitRepository, PatientService patientService,
                          FacilityService facilityService, FacilityRepository facilityRepository,
                          QueueService queueService, AuditLogService auditLogService, Clock clock,
-                         PermissionService permissionService) {
+                         PermissionService permissionService, WaitingTimeService waitingTimeService) {
         this.visitRepository = visitRepository;
         this.patientService = patientService;
         this.facilityService = facilityService;
@@ -42,15 +45,16 @@ public class VisitService {
         this.auditLogService = auditLogService;
         this.clock = clock;
         this.permissionService = permissionService;
+        this.waitingTimeService = waitingTimeService;
     }
 
-    // PREG-US-019 + RECQ-US-001 in one atomic call — "Visit w/ valid MPI ->
+    // PREG-US-019 + RECQ-US-001 in one atomic call â€” "Visit w/ valid MPI ->
     // token issued" reads as a single hand-off, not create-visit-then-
     // separately-remember-to-issue-a-token. patientService.get()/
     // facilityService.get() are the "no valid MPI -> blocked" and facility-
     // existence guards; both throw their own NotFoundException before any
     // row is written if either id is wrong, per the module-boundary rule
-    // (StaffService/OrganizationProvisioningService's own precedent) —
+    // (StaffService/OrganizationProvisioningService's own precedent) â€”
     // visit never touches PatientRepository or FacilityRepository directly.
     @Transactional
     public VisitWithToken createVisit(CreateVisitCommand cmd, UUID staffUserId) {
@@ -58,9 +62,12 @@ public class VisitService {
         patientService.get(cmd.patientId());
         facilityService.get(cmd.facilityId());
 
+        Instant registrationStartedAt = clock.instant();
         Visit visit = new Visit(cmd.patientId(), cmd.facilityId(), cmd.visitType(), cmd.serviceStream(),
-                clock.instant(), staffUserId);
+                registrationStartedAt, staffUserId);
         visitRepository.save(visit);
+
+        waitingTimeService.startRegistration(visit, registrationStartedAt);
 
         QueueToken token = queueService.issueAutomaticToken(visit, staffUserId);
 
@@ -75,10 +82,10 @@ public class VisitService {
         return visitRepository.findById(id).orElseThrow(VisitNotFoundException::new);
     }
 
-    // The patient record's own Visits tab — every visit this patient has
+    // The patient record's own Visits tab â€” every visit this patient has
     // ever had, across every facility, newest first. Resolves each one's
     // facility name via a single batch lookup rather than facilityService.get()
-    // per row — same "batch-resolve, don't N+1" shape TriageService.
+    // per row â€” same "batch-resolve, don't N+1" shape TriageService.
     // resolveCapturedByNames() already uses for captured-by names, and the
     // same reasoning: a module boundary crossed via a directly-injected
     // repository (not a second service call) for a read-only enrichment,

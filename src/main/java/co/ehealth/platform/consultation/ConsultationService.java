@@ -10,6 +10,8 @@ import co.ehealth.platform.patient.Patient;
 import co.ehealth.platform.patient.PatientArchivedException;
 import co.ehealth.platform.patient.PatientService;
 import co.ehealth.platform.pharmacy.PrescriptionService;
+import co.ehealth.platform.recq.WaitingTimeService;
+import co.ehealth.platform.recq.WaitingTimeStage;
 import co.ehealth.platform.visit.QueueService;
 import co.ehealth.platform.visit.Visit;
 import co.ehealth.platform.visit.VisitNotFoundException;
@@ -31,14 +33,14 @@ import java.util.UUID;
 public class ConsultationService {
 
     // Gated behind RECQ (Reception, Triage & Queue Management) rather than
-    // a dedicated module — the same module TriageAssessment already
+    // a dedicated module â€” the same module TriageAssessment already
     // extends instead of getting its own, and RECQ:MANAGE is already
     // seeded to exactly these four roles (V13__rbac_matrix_fix_visit_creation.sql).
     private static final Set<String> CLINICAL_ROLES =
             Set.of("Professional Nurse", "Doctor", "Clinician", "Occupational Health Practitioner");
 
     // Deliberately narrower than CLINICAL_ROLES: the design brainstorm
-    // (Docs/vitals-to-consultation-pharmacy-closure-brainstorm.md §13.7)
+    // (Docs/vitals-to-consultation-pharmacy-closure-brainstorm.md Â§13.7)
     // explicitly warns against letting any clinical role sign a
     // consultation without a real service-scope matrix, which this slice
     // doesn't build. Doctor and Clinician are the initial signing-eligible
@@ -61,13 +63,15 @@ public class ConsultationService {
     private final PrescriptionService prescriptionService;
     private final Clock clock;
     private final ObjectMapper objectMapper;
+    private final WaitingTimeService waitingTimeService;
 
     public ConsultationService(ConsultationRepository consultationRepository,
                                 ConsultationDiagnosisRepository consultationDiagnosisRepository,
                                 VisitRepository visitRepository, PatientService patientService,
                                 AuditLogService auditLogService, PermissionService permissionService,
                                 QueueService queueService, FacilityService facilityService,
-                                PrescriptionService prescriptionService, Clock clock, ObjectMapper objectMapper) {
+                                PrescriptionService prescriptionService, Clock clock, ObjectMapper objectMapper,
+                                WaitingTimeService waitingTimeService) {
         this.consultationRepository = consultationRepository;
         this.consultationDiagnosisRepository = consultationDiagnosisRepository;
         this.visitRepository = visitRepository;
@@ -79,9 +83,10 @@ public class ConsultationService {
         this.prescriptionService = prescriptionService;
         this.clock = clock;
         this.objectMapper = objectMapper;
+        this.waitingTimeService = waitingTimeService;
     }
 
-    // AuditLog.beforeValue/afterValue are a raw jsonb column — the caller
+    // AuditLog.beforeValue/afterValue are a raw jsonb column â€” the caller
     // supplies already-serialized text, same discipline as
     // identity.AuthService.serializeLoginState(). Swallows serialization
     // failure the same way: a malformed audit detail must never fail the
@@ -100,7 +105,7 @@ public class ConsultationService {
     // Get-or-create: there is no claim/assignment concept in this slice
     // (that's VisitServiceTask, explicitly out of scope), so "start a
     // consultation" simply means "there is now a draft row for this
-    // visit" — a second call against the same visit returns the existing
+    // visit" â€” a second call against the same visit returns the existing
     // draft rather than creating a sibling.
     @Transactional
     public Consultation createDraft(UUID visitId, UUID staffUserId) {
@@ -117,8 +122,10 @@ public class ConsultationService {
             return existingDraft.get();
         }
 
-        Consultation consultation = new Consultation(visitId, staffUserId, clock.instant());
+        Instant now = clock.instant();
+        Consultation consultation = new Consultation(visitId, staffUserId, now);
         consultationRepository.save(consultation);
+        waitingTimeService.startStage(visitId, WaitingTimeStage.CONSULTATION, now);
         auditLogService.append(staffUserId, visit.getFacilityId(), "CONSULTATION_DRAFT_CREATED", "Consultation",
                 consultation.getId().toString(), null, null);
         return consultation;
@@ -138,7 +145,7 @@ public class ConsultationService {
 
     // Marking a new diagnosis primary auto-clears any existing primary on
     // this same consultation first, so "mark this one primary" always
-    // behaves like a radio button rather than a validation error — the
+    // behaves like a radio button rather than a validation error â€” the
     // database's own partial unique index (V29) is the backstop, not the
     // normal path here.
     @Transactional
@@ -176,7 +183,7 @@ public class ConsultationService {
         if (!diagnosis.getConsultationId().equals(consultationId)) {
             throw new InvalidConsultationException("That diagnosis doesn't belong to this consultation.");
         }
-        // Captured before delete() — after this line the diagnosis text
+        // Captured before delete() â€” after this line the diagnosis text
         // exists nowhere else (unlike sign()/amend(), which snapshot a
         // consultation's full field set at the moment it becomes
         // immutable, a draft's diagnosis rows are just gone once removed).
@@ -190,9 +197,9 @@ public class ConsultationService {
                 "ConsultationDiagnosis", diagnosisId.toString(), serializeText(removedText), null);
     }
 
-    // Does NOT require at least one diagnosis — the design brainstorm
+    // Does NOT require at least one diagnosis â€” the design brainstorm
     // explicitly permits a symptom-based assessment when a definitive
-    // diagnosis isn't available yet (§5).
+    // diagnosis isn't available yet (Â§5).
     @Transactional
     public Consultation sign(UUID id, ConsultationOutcome outcome, String outcomeNotes,
                               List<PrescriptionService.PrescriptionItemInput> pharmacyItems,
@@ -205,8 +212,10 @@ public class ConsultationService {
         requireDestinationFacilityIfNeeded(outcome, destinationFacilityId);
         Consultation consultation = findConsultation(id);
         requireDraft(consultation);
-        consultation.sign(outcome, outcomeNotes, staffUserId, clock.instant());
+        Instant now = clock.instant();
+        consultation.sign(outcome, outcomeNotes, staffUserId, now);
         consultationRepository.save(consultation);
+        waitingTimeService.completeStage(consultation.getVisitId(), WaitingTimeStage.CONSULTATION, now);
         handleSendToPharmacy(consultation, pharmacyItems, staffUserId);
         handleReferOrTransfer(consultation, destinationFacilityId, staffUserId);
 
@@ -216,7 +225,7 @@ public class ConsultationService {
         return consultation;
     }
 
-    // A correction to a SIGNED record never edits it in place — this
+    // A correction to a SIGNED record never edits it in place â€” this
     // creates a brand-new consultation (full field snapshot from cmd, not
     // a diff), signs it immediately, links it back to the original, and
     // marks the original SUPERSEDED. Same authority bar as sign(): amending
@@ -308,7 +317,7 @@ public class ConsultationService {
                 ConsultationStatus.SIGNED);
     }
 
-    // Full timeline, oldest first — DRAFT/SIGNED and SUPERSEDED/
+    // Full timeline, oldest first â€” DRAFT/SIGNED and SUPERSEDED/
     // ENTERED_IN_ERROR entries alike, so a reviewer can see both what's
     // current and what was corrected along the way.
     public List<Consultation> getHistory(UUID visitId) {
@@ -322,7 +331,7 @@ public class ConsultationService {
     }
 
     // SEND_TO_PHARMACY needs real medicine to prescribe, checked before any
-    // of sign()/amend()'s other side effects run — an empty list here would
+    // of sign()/amend()'s other side effects run â€” an empty list here would
     // otherwise sign successfully, transfer the patient, and then either
     // fail confusingly inside PrescriptionService.create() (an empty items
     // list) or silently create nothing for pharmacy to dispense.
@@ -333,11 +342,11 @@ public class ConsultationService {
         }
     }
 
-    // REFER_OR_TRANSFER needs a real destination — same "check before any
+    // REFER_OR_TRANSFER needs a real destination â€” same "check before any
     // side effects run" reasoning as requirePharmacyItemsIfNeeded() above.
     // Unlike SEND_TO_PHARMACY (always the one org-wide pharmacy,
     // FacilityService.findPharmacyFacility()), a referral can go to any
-    // facility this org has, chosen by the signing clinician — there's no
+    // facility this org has, chosen by the signing clinician â€” there's no
     // single sensible default to fall back to.
     private void requireDestinationFacilityIfNeeded(ConsultationOutcome outcome, UUID destinationFacilityId) {
         if (outcome == ConsultationOutcome.REFER_OR_TRANSFER && destinationFacilityId == null) {
@@ -347,15 +356,15 @@ public class ConsultationService {
 
     // Real physical routing, not just a recorded label: signing (or
     // amending to) SEND_TO_PHARMACY transfers the visit's own queue token
-    // to the organization's pharmacy facility — the same cross-facility
-    // transfer staff already use manually (QueueService.transferToken()) —
+    // to the organization's pharmacy facility â€” the same cross-facility
+    // transfer staff already use manually (QueueService.transferToken()) â€”
     // and releases a real prescription against the resulting destination
     // visit, so it actually appears in that facility's dispensing queue
     // (PrescriptionService.listQueue()) rather than just moving a ticket
     // nobody can act on. Runs inside the same @Transactional method as the
     // sign/amend it's called from: a missing pharmacy facility, no
     // transferable token, or a prescriber without a current HPCSA/SANC
-    // registration (PrescriptionService.create()'s own gate — a doctor who
+    // registration (PrescriptionService.create()'s own gate â€” a doctor who
     // can't prescribe outside this flow can't prescribe through it either)
     // rolls the whole sign/amend back rather than leaving a "signed"
     // consultation whose patient was never actually sent anywhere.
@@ -368,12 +377,16 @@ public class ConsultationService {
         Facility pharmacy = facilityService.findPharmacyFacility();
         QueueService.QueueEntryView transferred = queueService.transferVisitToFacility(consultation.getVisitId(),
                 pharmacy.getId(), "Sent to pharmacy from signed consultation", staffUserId);
+        waitingTimeService.linkPharmacyVisit(
+                consultation.getVisitId(),
+                transferred.token().getVisitId(),
+                transferred.token().getIssuedAt());
         var prescriptionCommand = new PrescriptionService.CreatePrescriptionCommand(
                 transferred.token().getVisitId(), pharmacyItems, consultation.getId());
         prescriptionService.create(prescriptionCommand, staffUserId);
     }
 
-    // The general-purpose counterpart to handleSendToPharmacy() above — a
+    // The general-purpose counterpart to handleSendToPharmacy() above â€” a
     // referral to any other facility in this org (a different clinic, a
     // hospital, whatever's been set up), picked by the signing clinician
     // rather than resolved automatically. No prescription side effect here;

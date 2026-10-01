@@ -9,6 +9,8 @@ import co.ehealth.platform.identity.UserRepository;
 import co.ehealth.platform.patient.Patient;
 import co.ehealth.platform.patient.PatientArchivedException;
 import co.ehealth.platform.patient.PatientService;
+import co.ehealth.platform.recq.WaitingTimeService;
+import co.ehealth.platform.recq.WaitingTimeStage;
 import co.ehealth.platform.visit.Visit;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import co.ehealth.platform.visit.VisitRepository;
@@ -33,7 +35,7 @@ import java.util.stream.Collectors;
 @Service
 public class TriageService {
 
-    // Who may capture/correct/override clinical observations — a
+    // Who may capture/correct/override clinical observations â€” a
     // deliberately narrower gate than RECQ:MANAGE alone (PermissionService.
     // requireAnyRole()'s own why-note): RECQ:MANAGE also covers Queue
     // Marshall, Admin Staff, and Facility Manager, none of whom should be
@@ -53,10 +55,12 @@ public class TriageService {
     private final AuditLogService auditLogService;
     private final PermissionService permissionService;
     private final Clock clock;
+    private final WaitingTimeService waitingTimeService;
 
     public TriageService(TriageAssessmentRepository triageAssessmentRepository, VisitRepository visitRepository,
                           PatientService patientService, UserRepository userRepository,
-                          AuditLogService auditLogService, PermissionService permissionService, Clock clock) {
+                          AuditLogService auditLogService, PermissionService permissionService, Clock clock,
+                          WaitingTimeService waitingTimeService) {
         this.triageAssessmentRepository = triageAssessmentRepository;
         this.visitRepository = visitRepository;
         this.patientService = patientService;
@@ -64,9 +68,10 @@ public class TriageService {
         this.auditLogService = auditLogService;
         this.permissionService = permissionService;
         this.clock = clock;
+        this.waitingTimeService = waitingTimeService;
     }
 
-    // RECQ-US-008/009/010 — capture one triage/vitals assessment.
+    // RECQ-US-008/009/010 â€” capture one triage/vitals assessment.
     // Idempotent: a request carrying a key already used for this visit
     // returns the existing row instead of inserting a duplicate (a
     // double-click or a client retry after a dropped response must never
@@ -102,7 +107,7 @@ public class TriageService {
         // Emergency fast path saves the minimum available context and
         // does not wait for a complete set of vitals (SATS's own
         // "start emergency care; do not delay for data entry" workflow,
-        // Docs/vitals-triage-plan.md §1.1) — the requirement below only
+        // Docs/vitals-triage-plan.md Â§1.1) â€” the requirement below only
         // applies once that fast path isn't in play.
         if (!cmd.emergencySign()) {
             requireVitalsForScoring(cmd);
@@ -168,18 +173,20 @@ public class TriageService {
             triageAssessmentRepository.save(superseded);
         }
 
+        waitingTimeService.completeStage(cmd.visitId(), WaitingTimeStage.TRIAGE, now);
+
         auditLogService.append(staffUserId, visit.getFacilityId(), "TRIAGE_ASSESSMENT_CAPTURED",
                 "TriageAssessment", assessment.getId().toString(), null, null);
         return assessment;
     }
 
-    // A senior clinician disagreeing with the calculated colour — kept as
+    // A senior clinician disagreeing with the calculated colour â€” kept as
     // its own action rather than letting a second capture() call silently
     // change a result, so "the algorithm said X, a person changed it to Y,
     // here's why" is always explicit on the record. Scoped to the same
     // clinical roles as capture(); this codebase has no concept of a
     // "senior" clinician role yet to narrow it further than that (a real
-    // gap, not an oversight — see Docs/vitals-triage-plan.md §6).
+    // gap, not an oversight â€” see Docs/vitals-triage-plan.md Â§6).
     @Transactional
     public TriageAssessment override(UUID assessmentId, TriageColour finalColour, String reason, UUID staffUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
@@ -199,7 +206,7 @@ public class TriageService {
         return assessment;
     }
 
-    // A pure mistake — wrong patient, fat-fingered entry — with nothing to
+    // A pure mistake â€” wrong patient, fat-fingered entry â€” with nothing to
     // replace it, unlike capture(..., supersedesAssessmentId) which
     // corrects by replacing. Still never deletes the row.
     @Transactional
@@ -221,7 +228,7 @@ public class TriageService {
         return assessment;
     }
 
-    // Full history, oldest first — read access only needs RECQ:VIEW
+    // Full history, oldest first â€” read access only needs RECQ:VIEW
     // (Pharmacist, Social Worker, Compliance Officer, and other read-only
     // roles can see triage results without being able to capture them).
     public List<TriageAssessment> getHistory(UUID visitId) {
@@ -235,18 +242,18 @@ public class TriageService {
         return active.isEmpty() ? Optional.empty() : Optional.of(active.get(0));
     }
 
-    // The patient-level Vitals tab (PatientDetailPage) — every capture
+    // The patient-level Vitals tab (PatientDetailPage) â€” every capture
     // across every visit this patient has ever had, not just one visit's
     // own timeline, so a clinician can see the trend across a
     // long-standing patient's whole relationship with this facility.
     // from/to filter by observed date (inclusive); either or both may be
     // null for "no bound on that side." Resolves capturedByUserId to a
     // display name here, in the service layer, same as QueueService.toView()
-    // already resolves a token's patientId to a name — a raw UUID isn't
+    // already resolves a token's patientId to a name â€” a raw UUID isn't
     // something a "who captured this" column can show. Paginated the same
     // shape QueueService.listQueueView() already established (page/pageSize
     // clamped, totalElements/totalPages computed, sublist taken after
-    // filtering) — an in-memory page over an already-fetched, already-
+    // filtering) â€” an in-memory page over an already-fetched, already-
     // filtered list, the same accepted trade-off that method documents:
     // one patient's vitals history is nowhere near queue-scale data.
     // ascending flips the default newest-first order to oldest-first,
@@ -279,11 +286,11 @@ public class TriageService {
         return new PatientVitalsHistoryPage(items, safePage, safeSize, totalElements, totalPages);
     }
 
-    // VitalsPrintPage's fetch-by-id — the print button opens a fresh tab
+    // VitalsPrintPage's fetch-by-id â€” the print button opens a fresh tab
     // (window.open(), not an in-memory prop), and unlike the on-screen
     // modal that fresh tab has no surrounding page that already shows whose
     // record this is, so the patient's own name/MPI has to travel with the
-    // assessment itself here — a printed vitals reading with no patient
+    // assessment itself here â€” a printed vitals reading with no patient
     // identifier on it is useless (worse: mixable with someone else's) the
     // moment it leaves the screen. A separate return shape from
     // getPatientVitalsHistory()'s PatientVitalsView rather than adding these
@@ -301,7 +308,7 @@ public class TriageService {
     }
 
     // observedAt is a point in time; from/to are calendar dates a clinician
-    // picked in a date-range filter — UTC is the same pragmatic choice
+    // picked in a date-range filter â€” UTC is the same pragmatic choice
     // deriveScoringProfile() already makes below rather than resolving a
     // specific facility's timezone, since a patient's vitals here can span
     // several facilities with no single timezone to prefer.
@@ -384,7 +391,7 @@ public class TriageService {
         warnOutside(warnings, cmd.diastolicBp(), 20, 200, "Diastolic blood pressure");
         if (cmd.temperatureCelsius() != null
                 && (cmd.temperatureCelsius() < 25 || cmd.temperatureCelsius() > 45)) {
-            warnings.add("Temperature " + cmd.temperatureCelsius() + " °C");
+            warnings.add("Temperature " + cmd.temperatureCelsius() + " Â°C");
         }
         if (cmd.spo2Percent() != null && cmd.spo2Percent() < 50) {
             warnings.add("SpO2 " + cmd.spo2Percent() + "%");
@@ -417,7 +424,7 @@ public class TriageService {
     }
 
     // Age-from-date-of-birth is a pragmatic stand-in for SATS's real,
-    // height-based paediatric bands (ScoringProfile's own why-note) — a
+    // height-based paediatric bands (ScoringProfile's own why-note) â€” a
     // digital form has no way to read a height-based colour tape, and age
     // is the closest single field this system already has. The clinician
     // can always override via scoringProfileOverride when age alone isn't
