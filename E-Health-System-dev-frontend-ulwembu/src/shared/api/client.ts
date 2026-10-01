@@ -8,6 +8,15 @@
 // same origin.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
+// Exposed for the one caller that needs the backend's origin as a real,
+// absolute URL rather than a fetch path — the Microsoft SSO "start" link
+// (LoginScreen.tsx) is a plain <a href>, a full-page browser navigation
+// that has to resolve on its own, unlike every apiClient.* call below
+// which fetch() resolves against API_BASE_URL automatically.
+export function apiOrigin(): string {
+  return API_BASE_URL;
+}
+
 export class ApiError extends Error {
   status: number;
   fieldErrors?: Record<string, string>;
@@ -52,9 +61,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-// Typed client every module's api/ folder is expected to call through —
-// mock modules (facilities.ts, auth.ts, roles.ts) exist only until their
-// matching backend endpoint (Section 4 of the Phase 1 spec) ships.
+// Typed client every module's api/ folder calls through.
 // Optional `init` on each method — platform.ts needs it to attach
 // X-Platform-Key, tenant modules will need it for Authorization/X-Tenant-ID
 // the same way once they're wired up too.

@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Gauge, LogOut, Pill, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
+import { ClipboardList, Gauge, HeartPulse, LogOut, Pill, Settings, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 import { getTenantSlug } from "@/shared/api/auth";
 import { getOrganizationSelf } from "@/shared/api/organization";
@@ -9,6 +9,12 @@ import { getOrganizationSelf } from "@/shared/api/organization";
 function initials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
+
+// Mirrors TriageService.CLINICAL_ROLES exactly — the roles the capture
+// endpoint actually accepts. Gating the nav link on the same set keeps a
+// pharmacist or queue marshall from being handed an entry point to a flow
+// that would just 403 on save; the real enforcement stays server-side.
+const CLINICAL_ROLES = new Set(["Professional Nurse", "Doctor", "Clinician", "Occupational Health Practitioner"]);
 
 // The tenant app's own rail — light surface-raised against the app's
 // surface canvas, brand-500 accent, deliberately the opposite register from
@@ -30,8 +36,15 @@ export function Sidebar() {
     { to: "/app", label: "Dashboard", icon: Gauge, end: true },
     { to: "/app/patients", label: "Patients", icon: UserRound, end: false },
     { to: "/app/queue", label: "Queue", icon: Ticket, end: false },
+    ...(user?.role && CLINICAL_ROLES.has(user.role)
+      ? [{ to: "/app/vitals", label: "Take Vitals", icon: HeartPulse, end: false }]
+      : []),
     { to: "/app/pharmacy", label: "Pharmacy", icon: Pill, end: false },
     ...(user?.role === "ORG_ADMIN" ? [{ to: "/app/staff", label: "Staff", icon: UsersIcon, end: false }] : []),
+    ...(user?.role === "ORG_ADMIN" ? [{ to: "/app/settings", label: "Settings", icon: Settings, end: false }] : []),
+    ...(user?.role === "ORG_ADMIN"
+      ? [{ to: "/app/audit", label: "Audit trail", icon: ClipboardList, end: false }]
+      : []),
   ];
 
   // navigate() before logout(), deliberately — RequireAuth's own redirect

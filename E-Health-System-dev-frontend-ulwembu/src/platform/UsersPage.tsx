@@ -1,14 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Check, Copy, KeyRound, LockKeyholeOpen, Plus, Trash2 } from "lucide-react";
-import {
-  deleteOperator,
-  listPlatformOperators,
-  resetOperatorPassword,
-  setOperatorEnabled,
-  unlockOperator,
-} from "@/shared/api/platform";
+import { Check, Copy, KeyRound, Plus } from "lucide-react";
+import { listPlatformOperators, resetOperatorPassword, setOperatorEnabled } from "@/shared/api/platform";
 import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
@@ -55,7 +49,6 @@ function CopyButton({ text }: { text: string }) {
 export function UsersPage() {
   const queryClient = useQueryClient();
   const [confirmResetId, setConfirmResetId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [revealedPassword, setRevealedPassword] = useState<{ id: string; password: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -85,28 +78,6 @@ export function UsersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["platform", "operators"] }),
     onError: (error) => {
       setActionError(error instanceof ApiError ? error.message : "Couldn't update that account. Try again.");
-    },
-  });
-
-  const unlockAccount = useMutation({
-    mutationFn: (id: string) => unlockOperator(id),
-    onMutate: () => setActionError(null),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["platform", "operators"] }),
-    onError: (error) => {
-      setActionError(error instanceof ApiError ? error.message : "Couldn't unlock that account. Try again.");
-    },
-  });
-
-  const deleteAccount = useMutation({
-    mutationFn: (id: string) => deleteOperator(id),
-    onMutate: () => setActionError(null),
-    onSuccess: () => {
-      setConfirmDeleteId(null);
-      queryClient.invalidateQueries({ queryKey: ["platform", "operators"] });
-    },
-    onError: (error) => {
-      setConfirmDeleteId(null);
-      setActionError(error instanceof ApiError ? error.message : "Couldn't delete that account. Try again.");
     },
   });
 
@@ -206,21 +177,6 @@ export function UsersPage() {
                             Confirm
                           </Button>
                         </div>
-                      ) : confirmDeleteId === op.id ? (
-                        <div className="flex items-center justify-end gap-2">
-                          <span className="text-[12.5px] text-text-secondary">Delete this operator permanently?</span>
-                          <Button size="md" variant="secondary" onClick={() => setConfirmDeleteId(null)}>
-                            Cancel
-                          </Button>
-                          <Button
-                            size="md"
-                            className="bg-danger-500 text-white hover:bg-danger-600"
-                            loading={deleteAccount.isPending}
-                            onClick={() => deleteAccount.mutate(op.id)}
-                          >
-                            Delete
-                          </Button>
-                        </div>
                       ) : (
                         <div className="flex items-center justify-end gap-2">
                           <Button
@@ -231,17 +187,6 @@ export function UsersPage() {
                           >
                             Reset password
                           </Button>
-                          {op.status === "LOCKED" && (
-                            <Button
-                              variant="secondary"
-                              size="md"
-                              icon={<LockKeyholeOpen className="size-3.5" aria-hidden />}
-                              loading={unlockAccount.isPending && unlockAccount.variables === op.id}
-                              onClick={() => unlockAccount.mutate(op.id)}
-                            >
-                              Unlock
-                            </Button>
-                          )}
                           <Button
                             variant="secondary"
                             size="md"
@@ -249,16 +194,6 @@ export function UsersPage() {
                             onClick={() => toggleEnabled.mutate({ id: op.id, enabled: op.status === "DISABLED" })}
                           >
                             {op.status === "DISABLED" ? "Enable" : "Disable"}
-                          </Button>
-                          
-                          <Button
-                            variant="secondary"
-                            size="md"
-                            icon={<Trash2 className="size-3.5" aria-hidden />}
-                            className="text-danger-600"
-                            onClick={() => setConfirmDeleteId(op.id)}
-                          >
-                            Delete
                           </Button>
                         </div>
                       )}

@@ -14,13 +14,20 @@ export const registerPatientSchema = z.object({
     .string()
     .trim()
     .regex(/^\+?[0-9]{9,15}$/, "Enter a valid contact number, e.g. +27821234567"),
+  // Optional — cross-tenant patient migration's own notification email is
+  // the first thing that actually reads this; an empty string is valid
+  // (RegisterPatientPayload's own optional field), a non-empty one must
+  // still look like an email.
+  email: z.string().trim().email("Enter a valid email address").optional().or(z.literal("")),
   medicalAidProvider: z.string().trim().max(100),
   medicalAidNumber: z.string().trim().max(50),
-  nextOfKin: z.array(z.object({
-    name: z.string().trim().min(1, "Name is required").max(200),
-    relationship: z.string().trim().min(1, "Relationship is required").max(100),
-    contactNumber: z.string().trim().regex(/^\+?[0-9]{9,15}$/, "Enter a valid contact number"),
-  })).min(1, "Add at least one next-of-kin or guardian"),
+  // Supplementary to idNumber above, not an alternative to it — see
+  // PatientController.RegisterPatientRequest's own why-note. No format
+  // check beyond length: passport number formats vary too widely across
+  // issuing countries for one regex the way idNumber's SA-specific pattern
+  // works.
+  passportNumber: z.string().trim().max(20),
+  passportExpiry: z.string().trim(),
 });
 
 export type RegisterPatientValues = z.infer<typeof registerPatientSchema>;

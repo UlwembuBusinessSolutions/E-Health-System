@@ -1,0 +1,48 @@
+import { useEffect, useState } from "react";
+import { Link, Navigate, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowRight, ArrowUpRight, Clock, HeartPulse, Mail, MapPin, Menu, Phone, UserRound, UserPlus, X, Plus, MonitorSmartphone } from "lucide-react";
+import { getPublicOrganization } from "@/shared/api/publicOrganization";
+import { ApiError } from "@/shared/api/client";
+import "./tenant-home.css";
+
+export function TenantHomePage() {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [failedLogo, setFailedLogo] = useState<string | null>(null);
+  const query = useQuery({ queryKey: ["public-organization", tenantSlug], queryFn: () => getPublicOrganization(tenantSlug ?? ""), enabled: !!tenantSlug, retry: false });
+  useEffect(() => {
+    if (!query.data) return;
+    const previous = document.title;
+    document.title = `${query.data.displayName} | Your care starts here`;
+    return () => { document.title = previous; };
+  }, [query.data]);
+  if (!tenantSlug) return <Navigate to="/login" replace />;
+  if (query.isPending) return <div className="tenant-home th-state" role="status"><HeartPulse size={36} /><p>Getting things ready for you…</p></div>;
+  if (query.isError || !query.data) return <div className="tenant-home th-state"><HeartPulse size={36} /><h1>{query.error instanceof ApiError && query.error.status === 404 ? "We couldn't find that organization." : "We couldn't load this page."}</h1><p>Please check the address or try again.</p><button className="th-button" onClick={() => void query.refetch()}>Try again</button><Link to="/login">Find your organization</Link></div>;
+  const org = query.data;
+  const base = `/org/${encodeURIComponent(tenantSlug)}`;
+  const contact = [
+    { icon: MapPin, label: "Visit us", value: org.address, href: org.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(org.address)}` : undefined },
+    { icon: Phone, label: "Call us", value: org.contactPhone, href: org.contactPhone ? `tel:${org.contactPhone.replace(/[^+\d]/g, "")}` : undefined },
+    { icon: Mail, label: "Email us", value: org.contactEmail, href: org.contactEmail ? `mailto:${org.contactEmail}` : undefined },
+    { icon: Clock, label: "Opening hours", value: org.businessHours },
+  ].filter(item => item.value);
+  const externalLinks = [{ label: "Website", href: org.websiteUrl }, { label: "Facebook", href: org.facebookUrl }, { label: "Instagram", href: org.instagramUrl }].filter(item => item.href && /^https?:\/\//i.test(item.href));
+  const identity = <><span className="th-logo">{org.logoUrl && failedLogo !== org.logoUrl ? <img src={org.logoUrl} alt="" onError={() => setFailedLogo(org.logoUrl)} /> : <HeartPulse size={27} aria-hidden />}</span><span className="th-brand-name">{org.displayName}<small>YOUR HEALTH. OUR FOCUS.</small></span></>;
+  return <div className="tenant-home">
+    <a className="th-skip" href="#main">Skip to content</a>
+    <div className="th-utility"><div className="th-wrap"><span>Welcome to {org.displayName}</span><div>{org.contactPhone && <a href={`tel:${org.contactPhone.replace(/[^+\d]/g, "")}`}><Phone size={12} aria-hidden />{org.contactPhone}</a>}<Link to={`${base}/login`}>Staff sign in <ArrowUpRight size={13} aria-hidden /></Link></div></div></div>
+    <header className="th-header"><div className="th-wrap th-header-inner"><Link to={base} className="th-brand" aria-label={`${org.displayName} home`}>{identity}</Link><nav className="th-desktop-nav" aria-label="Main navigation"><a href="#welcome">Home</a>{org.description && <a href="#about">About us</a>}<a href="#patient-portal">Patient portal</a>{contact.length > 0 && <a href="#contact">Contact us</a>}</nav><Link className="th-button th-header-cta" to={`${base}/patient/login`}><UserRound size={16} aria-hidden />Patient sign in</Link><button className="th-menu-button" onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen} aria-controls="mobile-navigation" aria-label={menuOpen ? "Close navigation" : "Open navigation"}>{menuOpen ? <X /> : <Menu />}</button></div>
+      {menuOpen && <nav id="mobile-navigation" className="th-mobile-nav" aria-label="Mobile navigation" onClick={() => setMenuOpen(false)}><a href="#welcome">Home</a>{org.description && <a href="#about">About us</a>}<a href="#patient-portal">Patient portal</a>{contact.length > 0 && <a href="#contact">Contact us</a>}<Link to={`${base}/patient/login`}>Patient sign in</Link></nav>}
+    </header>
+    <main id="main">
+      <section id="welcome" className="th-hero"><div className="th-wrap th-hero-grid"><div className="th-hero-copy"><p className="th-eyebrow"><span /> HERE FOR YOU, EVERY STEP</p><h1>Your health.<br />Your journey.<br /><em>Our priority.</em></h1><p className="th-intro">A simpler way to connect with {org.displayName}. Get to know us, find the details you need, and take your first step online.</p><div className="th-actions"><Link to={`${base}/patient/register`} className="th-button">Create a patient account <ArrowRight size={18} aria-hidden /></Link>{contact.length > 0 && <a href="#contact" className="th-text-link">Get in touch <ArrowUpRight size={17} aria-hidden /></a>}</div><div className="th-hero-note"><HeartPulse size={20} aria-hidden /><span>A little more connected.<br /><strong>A little closer to your care.</strong></span></div></div><div className="th-hero-visual"><img src="/login-background.jpg" alt="A healthcare professional speaking with a patient" fetchPriority="high" width="2047" height="1365" /><div className="th-photo-caption"><span className="th-caption-icon"><Plus size={24} aria-hidden /></span><div><strong>It starts with you.</strong><p>Welcome to {org.displayName}.</p></div></div><span className="th-photo-label">PEOPLE AT THE HEART OF CARE</span></div></div></section>
+      <section className="th-quick-section th-wrap" aria-labelledby="quick-heading"><div className="th-section-heading"><p className="th-eyebrow">LET'S GET YOU STARTED</p><h2 id="quick-heading">How can we help you?</h2></div><div className="th-quick-grid"><Link to={`${base}/patient/register`} className="th-quick-card"><UserPlus aria-hidden /><h3>I'm new here</h3><p>Create your patient account.</p><ArrowUpRight className="th-card-arrow" aria-hidden /></Link><Link to={`${base}/patient/login`} className="th-quick-card"><MonitorSmartphone aria-hidden /><h3>My patient portal</h3><p>Sign in to your existing account.</p><ArrowUpRight className="th-card-arrow" aria-hidden /></Link>{contact.length > 0 && <a href="#contact" className="th-quick-card"><MapPin aria-hidden /><h3>Connect with us</h3><p>Find our contact and location details.</p><ArrowUpRight className="th-card-arrow" aria-hidden /></a>}</div></section>
+      {org.description && <section id="about" className="th-about th-wrap"><div><p className="th-eyebrow">GET TO KNOW US</p><h2>Care begins with<br /><em>connection.</em></h2></div><div><h3>Welcome to {org.displayName}</h3><p className="th-description">{org.description}</p>{contact.length > 0 && <a href="#contact" className="th-text-link">Talk to our team <ArrowRight size={17} aria-hidden /></a>}</div></section>}
+      <section id="patient-portal" className="th-wrap th-portal-section"><div className="th-portal"><div className="th-portal-copy"><p className="th-eyebrow">YOUR ONLINE STARTING POINT</p><h2>A familiar face.<br /><em>A new way to connect.</em></h2><p>Your patient account is your first step online with {org.displayName}. Register today, or sign in if you're already part of our community.</p><Link to={`${base}/patient/register`} className="th-button th-button-light">Get started <ArrowRight size={18} aria-hidden /></Link></div><div className="th-portal-steps"><span className="th-portal-symbol"><HeartPulse size={34} aria-hidden /></span><h3>Getting started is simple</h3><ol><li><span>01</span><div><strong>Create your account</strong><p>Register with your personal details.</p></div></li><li><span>02</span><div><strong>Sign in when you need to</strong><p>Use your patient account to access the portal.</p></div></li><li><span>03</span><div><strong>Stay connected</strong><p>Keep our contact details close at hand.</p></div></li></ol></div></div></section>
+      {contact.length > 0 && <section id="contact" className="th-contact th-wrap"><div className="th-section-heading"><p className="th-eyebrow">WE'RE HERE TO HELP</p><h2>Let's get in touch.</h2><p>Find us, call us, or send a message.</p></div><div className="th-contact-grid">{contact.map(({ icon: Icon, label, value, href }) => <div key={label} className="th-contact-item"><Icon size={23} aria-hidden /><h3>{label}</h3>{href ? <a href={href} {...(href.startsWith("https:") ? {target:"_blank", rel:"noopener noreferrer"} : {})}>{value}{href.startsWith("https:") && <span className="th-map-link">Get directions <ArrowUpRight size={14} aria-hidden /></span>}</a> : <p>{value}</p>}</div>)}</div></section>}
+    </main>
+    <footer className="th-footer"><div className="th-wrap"><div className="th-footer-top"><Link className="th-brand" to={base}>{identity}</Link><div className="th-footer-links"><Link to={`${base}/patient/login`}>Patient sign in</Link><Link to={`${base}/login`}>Staff sign in</Link>{externalLinks.map(link => <a key={link.label} href={link.href!} target="_blank" rel="noopener noreferrer">{link.label} <ArrowUpRight size={13} aria-hidden /></a>)}</div></div><div className="th-footer-bottom"><span>© {new Date().getFullYear()} {org.displayName}</span><span>Powered by Ulwembu eHealth</span></div></div></footer>
+  </div>;
+}

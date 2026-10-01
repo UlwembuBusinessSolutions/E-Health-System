@@ -49,6 +49,16 @@ export const createStaffSchema = z
       .string()
       .trim()
       .refine((value) => value === "" || /^\+?[0-9]{9,15}$/.test(value), "Enter a valid contact number"),
+    temporaryPassword: z
+      .string()
+      .min(8, "At least 8 characters")
+      .regex(/[A-Za-z]/, "Include at least one letter")
+      .regex(/[0-9]/, "Include at least one number"),
+    confirmTemporaryPassword: z.string().min(1, "Confirm the temporary password"),
+  })
+  .refine((data) => data.temporaryPassword === data.confirmTemporaryPassword, {
+    message: "Passwords do not match",
+    path: ["confirmTemporaryPassword"],
   });
 
 export type CreateStaffValues = z.infer<typeof createStaffSchema>;

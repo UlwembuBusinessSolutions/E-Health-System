@@ -1,256 +1,720 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { ChevronDown, ClipboardList } from "lucide-react";
-import { listOrganizations, listPlatformAudit, type PlatformAuditEntry } from "@/shared/api/platform";
-import { Card } from "@/shared/components/Card";
-import { PageHeader } from "@/shared/components/PageHeader";
+﻿import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link, useSearchParams } from "react-router-dom";
+import {
+  ArrowRight,
+  Building2,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Download,
+  Filter,
+  History,
+  LockKeyhole,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+import {
+  exportPlatformAudit,
+  listOrganizations,
+  listPlatformAudit,
+  type PlatformAuditEntry,
+} from "@/shared/api/platform";
+import { ApiError } from "@/shared/api/client";
+import { Button } from "@/shared/components/Button";
+import { useToast } from "@/shared/components/toast/ToastProvider";
+import { AuditEventDrawer } from "./AuditEventDrawer";
+import {
+  AUDIT_GROUPS,
+  actionAppearance,
+  actionLabel,
+  auditDate,
+  auditTime,
+} from "./auditPresentation";
+import "./AuditPage.css";
 
-// Fixed, not derived from the data returned — a quiet stretch with zero
-// MODULE_TOGGLED rows shouldn't make that filter option disappear. Matches
-// every recordPlatformAudit()/PlatformAuditLog(...) call site in
-// OrganizationProvisioningService and PlatformOperatorService field-for-field.
-const AUDIT_ACTIONS = [
-  "ORGANIZATION_PROVISIONED",
-  "ORGANIZATION_DETAILS_UPDATED",
-  "ORGANIZATION_SUSPENDED",
-  "ORGANIZATION_REACTIVATED",
-  "ORGANIZATION_LOGO_UPLOADED",
-  "ORGANIZATION_ADMIN_ADDED",
-  "ORGANIZATION_ADMIN_REMOVED",
-  "MODULE_TOGGLED",
-  "PLATFORM_OPERATOR_CREATED",
-  "PLATFORM_OPERATOR_LOGIN",
-] as const;
-
-function actionLabel(action: string): string {
-  const words = action.toLowerCase().split("_");
-  return words.map((word, i) => (i === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word)).join(" ");
+function validDate(value: string | null): string {
+  if (
+    !value ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    Number.isNaN(Date.parse(value))
+  )
+    return "";
+  return new Date(value).toISOString().slice(0, 10) === value ? value : "";
+}
+function periodDates(days: number) {
+  const end = new Date();
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - days + 1);
+  return {
+    from: start.toISOString().slice(0, 10),
+    to: end.toISOString().slice(0, 10),
+  };
 }
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-ZA", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-// AUDT-US-005 — the compliance-facing view of platform_audit_log:
-// every provisioning, suspend/reactivate, module toggle, detail edit, and
-// operator creation, across every organization, in one filterable feed. An
-// organization's own tenant-schema trail (its staff logging in, updating
-// records) is a separate, narrower view — OrganizationDetailPage's own
-// Audit card, reached from that organization's page rather than here.
 export function AuditPage() {
-  const [action, setAction] = useState("");
-  const [organizationId, setOrganizationId] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-
+  const { showToast } = useToast();
+  const [params, setParams] = useSearchParams();
+  const [find, setFind] = useState("");
+  const [selected, setSelected] = useState<PlatformAuditEntry | null>(null);
+  const action = params.get("action") ?? "";
+  const organizationId = params.get("organizationId") ?? "";
+  const from = validDate(params.get("from"));
+  const to = validDate(params.get("to"));
+  const rawPage = Number(params.get("page") ?? 0);
+  const page =
+    Number.isSafeInteger(rawPage) && rawPage >= 0 && rawPage < 1000000
+      ? rawPage
+      : 0;
+  const size = [25, 50, 100].includes(Number(params.get("size")))
+    ? Number(params.get("size"))
+    : 50;
+  const invalidRange = !!from && !!to && from > to;
+  const filters = {
+    action: action || undefined,
+    organizationId: organizationId || undefined,
+    from: from || undefined,
+    to: to || undefined,
+  };
   const organizationsQuery = useQuery({
     queryKey: ["platform", "organizations", "all"],
     queryFn: () => listOrganizations({ sort: "newest" }),
   });
-
   const auditQuery = useQuery({
-    queryKey: ["platform", "audit", { action, organizationId, from, to }],
-    queryFn: () =>
-      listPlatformAudit({
-        action: action || undefined,
-        organizationId: organizationId || undefined,
-        from: from || undefined,
-        to: to || undefined,
-      }),
+    queryKey: ["platform", "audit", { ...filters, page, size }],
+    queryFn: () => listPlatformAudit({ ...filters, page, size }),
+    enabled: !invalidRange,
   });
-
-  const hasActiveFilters = action !== "" || organizationId !== "" || from !== "" || to !== "";
-  const entries = auditQuery.data ?? [];
+  const exportMutation = useMutation({
+    mutationFn: () => exportPlatformAudit(filters),
+    onSuccess: () => showToast("Audit trail exported.", "success"),
+    onError: (error) =>
+      showToast(
+        error instanceof ApiError
+          ? error.message
+          : "Couldn't export the audit trail. Try again.",
+        "error",
+      ),
+  });
+  function update(changes: Record<string, string>, resetPage = true) {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    if (resetPage) next.delete("page");
+    setParams(next);
+    setFind("");
+  }
+  function clearFilters() {
+    update({ action: "", organizationId: "", from: "", to: "" });
+  }
+  const hasFilters = !!(action || organizationId || from || to);
+  const entries = auditQuery.data?.items ?? [];
+  const total = auditQuery.data?.totalItems ?? 0;
+  const term = find.trim().toLowerCase();
+  // This is deliberately a page-local finder: the existing API does not
+  // accept free-text search. Keep scope explicit and exports unambiguous.
+  const visible = entries.filter(
+    (entry) =>
+      !term ||
+      [
+        entry.id,
+        entry.operatorName,
+        entry.operatorEmail,
+        entry.organizationName,
+        entry.action,
+        actionLabel(entry.action),
+        entry.detail,
+        entry.ipAddress,
+      ].some((value) => value?.toLowerCase().includes(term)),
+  );
+  const organizationName = organizationsQuery.data?.find(
+    (org) => org.id === organizationId,
+  )?.displayName;
+  const stale = auditQuery.isError && !!auditQuery.data;
+  const canExport =
+    !invalidRange &&
+    !!auditQuery.data &&
+    total > 0 &&
+    total <= 10000 &&
+    !term &&
+    !auditQuery.isError &&
+    !auditQuery.isFetching;
+  const activePeriod =
+    !from && !to
+      ? 0
+      : [1, 7, 30].find((days) => {
+          const period = periodDates(days);
+          return period.from === from && period.to === to;
+        });
 
   return (
-    <div>
-      <PageHeader title="Audit trail" description="Every platform-level action, across every organization." />
-
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-        <FilterSelect
-          id="audit-action"
-          label="Action"
-          value={action}
-          onChange={setAction}
-          options={[{ value: "", label: "All actions" }, ...AUDIT_ACTIONS.map((a) => ({ value: a, label: actionLabel(a) }))]}
-        />
-        <FilterSelect
-          id="audit-org"
-          label="Organization"
-          value={organizationId}
-          onChange={setOrganizationId}
-          options={[
-            { value: "", label: "All organizations" },
-            ...(organizationsQuery.data ?? []).map((org) => ({ value: org.id, label: org.displayName })),
-          ]}
-        />
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="audit-from" className="text-[13px] font-medium text-text-primary">
-            From
-          </label>
-          <input
-            id="audit-from"
-            type="date"
-            value={from}
-            max={to || undefined}
-            onChange={(e) => setFrom(e.target.value)}
-            className="h-11 w-full rounded-lg border border-border-strong bg-surface-raised px-3.5 text-[14px] text-text-primary outline-none transition-colors duration-150 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 sm:w-40"
-          />
+    <div className="audit-workspace">
+      <header className="audit-page-header">
+        <div>
+          <p className="audit-eyebrow">
+            <ShieldCheck size={14} aria-hidden /> PLATFORM OVERSIGHT
+          </p>
+          <h1>
+            Audit trail
+            <span className="audit-readonly">
+              <LockKeyhole size={11} aria-hidden /> Read only
+            </span>
+          </h1>
+          <p className="audit-page-description">
+            A clear record of who did what, and when.
+          </p>
         </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="audit-to" className="text-[13px] font-medium text-text-primary">
-            To
-          </label>
-          <input
-            id="audit-to"
-            type="date"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => setTo(e.target.value)}
-            className="h-11 w-full rounded-lg border border-border-strong bg-surface-raised px-3.5 text-[14px] text-text-primary outline-none transition-colors duration-150 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 sm:w-40"
-          />
-        </div>
-        {hasActiveFilters && (
-          <button
-            type="button"
-            onClick={() => {
-              setAction("");
-              setOrganizationId("");
-              setFrom("");
-              setTo("");
-            }}
-            className="h-11 shrink-0 rounded-lg px-3 text-[13.5px] font-medium text-text-secondary transition-colors duration-150 hover:bg-surface-sunken hover:text-text-primary"
+        <div className="audit-header-actions">
+          <Button
+            variant="secondary"
+            icon={<RefreshCw size={15} aria-hidden />}
+            loading={auditQuery.isFetching}
+            disabled={invalidRange}
+            onClick={() => void auditQuery.refetch()}
           >
-            Clear filters
-          </button>
-        )}
-      </div>
+            Refresh
+          </Button>
+          <Button
+            icon={<Download size={15} aria-hidden />}
+            loading={exportMutation.isPending}
+            disabled={!canExport}
+            onClick={() => exportMutation.mutate()}
+          >
+            Export CSV
+          </Button>
+        </div>
+      </header>
 
-      <Card className="overflow-hidden p-0">
-        {auditQuery.isLoading ? (
-          <p className="px-5 py-10 text-center text-[14px] text-text-secondary">Loading audit trail…</p>
-        ) : entries.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
-            <ClipboardList className="size-6 text-text-secondary" aria-hidden />
-            <p className="text-[14px] text-text-secondary">
-              {hasActiveFilters ? "No activity matches your filters." : "No platform activity recorded yet."}
+      <section className="audit-overview" aria-label="Audit scope">
+        <div className="audit-overview-intro">
+          <span className="audit-overview-icon">
+            <History size={23} aria-hidden />
+          </span>
+          <div>
+            <strong>Platform activity</strong>
+            <p>Organization changes, access and administration</p>
+          </div>
+        </div>
+        <div className="audit-overview-stat">
+          <span>Matching events</span>
+          <strong>
+            {auditQuery.data && !invalidRange ? total.toLocaleString() : "—"}
+          </strong>
+        </div>
+        <div className="audit-overview-stat">
+          <span>Time standard</span>
+          <strong className="audit-time-standard">
+            <Clock3 size={14} aria-hidden /> UTC
+          </strong>
+        </div>
+      </section>
+
+      <section className="audit-filter-panel" aria-label="Filter audit trail">
+        <div className="audit-filter-top">
+          <span className="audit-filter-caption">
+            <Filter size={14} aria-hidden /> Filter activity
+          </span>
+          <div className="audit-periods" aria-label="Quick date ranges">
+            {[
+              { days: 0, label: "All time" },
+              { days: 1, label: "Today" },
+              { days: 7, label: "7 days" },
+              { days: 30, label: "30 days" },
+            ].map(({ days, label }) => (
+              <button
+                type="button"
+                key={days}
+                aria-pressed={activePeriod === days}
+                onClick={() =>
+                  update(days ? periodDates(days) : { from: "", to: "" })
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="audit-filter-grid">
+          <label>
+            Action
+            <select
+              aria-label="Action"
+              value={action}
+              onChange={(event) => update({ action: event.target.value })}
+            >
+              <option value="">All actions</option>
+              {action &&
+                !AUDIT_GROUPS.some((group) =>
+                  group.actions.includes(action),
+                ) && <option value={action}>{actionLabel(action)}</option>}
+              {AUDIT_GROUPS.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.actions.map((code) => (
+                    <option value={code} key={code}>
+                      {actionLabel(code)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          <label>
+            Organization
+            <select
+              aria-label="Organization"
+              value={organizationId}
+              disabled={organizationsQuery.isLoading}
+              onChange={(event) =>
+                update({ organizationId: event.target.value })
+              }
+            >
+              <option value="">All organizations</option>
+              {organizationId && !organizationName && (
+                <option value={organizationId}>Selected organization</option>
+              )}
+              {(organizationsQuery.data ?? []).map((org) => (
+                <option value={org.id} key={org.id}>
+                  {org.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            From (UTC)
+            <input
+              type="date"
+              value={from}
+              max={to || "9999-12-31"}
+              onChange={(event) => update({ from: event.target.value })}
+            />
+          </label>
+          <label>
+            To (UTC)
+            <input
+              type="date"
+              value={to}
+              min={from || undefined}
+              max="9999-12-31"
+              onChange={(event) => update({ to: event.target.value })}
+            />
+          </label>
+        </div>
+        {organizationsQuery.isError && (
+          <p className="audit-filter-warning" role="alert">
+            Organization options couldn't be loaded.{" "}
+            <button
+              type="button"
+              onClick={() => void organizationsQuery.refetch()}
+            >
+              Retry organization list
+            </button>
+          </p>
+        )}
+        {invalidRange && (
+          <p className="audit-filter-warning" role="alert">
+            Choose an end date on or after the start date.
+          </p>
+        )}
+        {hasFilters && (
+          <div className="audit-filter-chips" aria-label="Active filters">
+            {action && (
+              <button
+                onClick={() => update({ action: "" })}
+                aria-label="Remove action filter"
+              >
+                {actionLabel(action)}
+                <X size={12} aria-hidden />
+              </button>
+            )}
+            {organizationId && (
+              <button
+                onClick={() => update({ organizationId: "" })}
+                aria-label="Remove organization filter"
+              >
+                {organizationName ?? "Selected organization"}
+                <X size={12} aria-hidden />
+              </button>
+            )}
+            {(from || to) && (
+              <button
+                onClick={() => update({ from: "", to: "" })}
+                aria-label="Remove date filter"
+              >
+                <CalendarDays size={12} aria-hidden />
+                {from || "Any start"} – {to || "Any end"}
+                <X size={12} aria-hidden />
+              </button>
+            )}
+            <button className="audit-clear" onClick={clearFilters}>
+              Clear filters
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section
+        className="audit-results"
+        aria-labelledby="audit-activity-title"
+        aria-busy={auditQuery.isFetching}
+      >
+        <div className="audit-results-header">
+          <div>
+            <h2 id="audit-activity-title">
+              Activity log{" "}
+              <span>
+                {auditQuery.data && !invalidRange
+                  ? total.toLocaleString()
+                  : "—"}
+              </span>
+            </h2>
+            <p role="status">
+              {invalidRange
+                ? "Update the date range to view events"
+                : auditQuery.isFetching
+                  ? "Updating activity…"
+                  : stale
+                    ? "Showing previously loaded activity"
+                    : auditQuery.dataUpdatedAt
+                      ? `Updated ${auditTime(new Date(auditQuery.dataUpdatedAt).toISOString())} UTC · Newest first`
+                      : "Platform-level events across your organizations"}
             </p>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr className="border-b border-border-subtle">
-                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
-                    When
-                  </th>
-                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
-                    Action
-                  </th>
-                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
-                    Organization
-                  </th>
-                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
-                    Operator
-                  </th>
-                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
-                    Detail
-                  </th>
-                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
-                    IP / device
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-subtle">
-                {entries.map((entry) => (
-                  <AuditRow key={entry.id} entry={entry} />
-                ))}
-              </tbody>
-            </table>
+          <label className="audit-search">
+            <Search size={15} aria-hidden />
+            <span className="sr-only">Find on this page</span>
+            <input
+              type="search"
+              value={find}
+              onChange={(event) => setFind(event.target.value)}
+              placeholder="Find on this page…"
+              disabled={!entries.length || invalidRange}
+            />
+          </label>
+        </div>
+        {stale && (
+          <div className="audit-stale" role="alert">
+            Refresh failed. These results may be out of date.{" "}
+            <button onClick={() => void auditQuery.refetch()}>Try again</button>
           </div>
         )}
-      </Card>
+        {term && (
+          <div className="audit-find-note" role="status">
+            {visible.length} of {entries.length} events on this page match “
+            {find}”.{" "}
+            <button onClick={() => setFind("")}>Clear page search</button>
+            <span>Clear this search to export the filtered audit trail.</span>
+          </div>
+        )}
+        {invalidRange ? (
+          <EmptyState
+            title="Check your date range"
+            description="The start date must come before or on the end date."
+          />
+        ) : auditQuery.isLoading ? (
+          <div className="audit-skeleton" role="status">
+            <span className="sr-only">Loading audit events</span>
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i}>
+                <span />
+                <span />
+                <span />
+              </div>
+            ))}
+          </div>
+        ) : auditQuery.isError && !auditQuery.data ? (
+          <EmptyState
+            title={
+              auditQuery.error instanceof ApiError &&
+              auditQuery.error.status === 403
+                ? "Audit access is restricted"
+                : "Couldn't load the audit trail"
+            }
+            description="No activity has been confirmed. Try again or check your access."
+            action={
+              <Button
+                variant="secondary"
+                onClick={() => void auditQuery.refetch()}
+              >
+                Retry
+              </Button>
+            }
+          />
+        ) : visible.length === 0 ? (
+          <EmptyState
+            title={
+              term
+                ? "No matches on this page"
+                : hasFilters
+                  ? "No activity matches your filters"
+                  : page > 0
+                    ? "No events on this page"
+                    : "Your audit trail starts here"
+            }
+            description={
+              term
+                ? "Try an operator, organization, action or event reference."
+                : hasFilters
+                  ? "Try a wider date range or remove a filter."
+                  : page > 0
+                    ? "Return to the first page to see the latest activity."
+                    : "Platform activity will appear here as actions are recorded."
+            }
+            action={
+              term ? (
+                <Button variant="secondary" onClick={() => setFind("")}>
+                  Clear page search
+                </Button>
+              ) : hasFilters ? (
+                <Button variant="secondary" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              ) : page > 0 ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => update({ page: "" }, false)}
+                >
+                  First page
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <>
+            <div className="audit-table-wrap" role="region" aria-label="Audit events" tabIndex={0}>
+              <table className="audit-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Event / activity</th>
+                    <th scope="col">Organization</th>
+                    <th scope="col">Operator</th>
+                    <th scope="col">When · UTC</th>
+                    <th scope="col">
+                      <span className="sr-only">Details</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((entry) => (
+                    <AuditRow
+                      key={entry.id}
+                      entry={entry}
+                      onSelect={() => setSelected(entry)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="audit-mobile-events">
+              {visible.map((entry) => {
+                const { icon: Icon, attention } = actionAppearance(
+                  entry.action,
+                );
+                return (
+                  <button
+                    type="button"
+                    className="audit-mobile-event"
+                    key={entry.id}
+                    onClick={() => setSelected(entry)}
+                    aria-label={`View ${actionLabel(entry.action)} details`}
+                  >
+                    <span
+                      className={`audit-event-icon ${attention ? "audit-attention" : ""}`}
+                    >
+                      <Icon size={17} aria-hidden />
+                    </span>
+                    <span>
+                      <strong>{actionLabel(entry.action)}</strong>
+                      <span>
+                        {entry.organizationName ??
+                          (entry.organizationId
+                            ? "Organization"
+                            : "Platform-wide")}
+                      </span>
+                      <span>{entry.operatorName}</span>
+                      <time dateTime={entry.createdAt}>
+                        {auditDate(entry.createdAt)} ·{" "}
+                        {auditTime(entry.createdAt)} UTC
+                      </time>
+                    </span>
+                    <ChevronRight size={15} aria-hidden />
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+        {!invalidRange && auditQuery.data && (
+          <div className="audit-pagination">
+            <p>
+              {total === 0
+                ? "0 events"
+                : entries.length
+                  ? `${page * size + 1}–${page * size + entries.length} of ${total.toLocaleString()} events`
+                  : `Page ${page + 1} · No events`}
+              {term && " · before page search"}
+            </p>
+            <div>
+              <label>
+                Rows
+                <select
+                  aria-label="Events per page"
+                  value={size}
+                  onChange={(event) => update({ size: event.target.value })}
+                >
+                  {[25, 50, 100].map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="audit-icon-button"
+                aria-label="Previous page"
+                disabled={page === 0 || auditQuery.isFetching}
+                onClick={() => update({ page: String(page - 1) }, false)}
+              >
+                <ChevronLeft size={17} aria-hidden />
+              </button>
+              <span>Page {page + 1}</span>
+              <button
+                type="button"
+                className="audit-icon-button"
+                aria-label="Next page"
+                disabled={!auditQuery.data.hasMore || auditQuery.isFetching}
+                onClick={() => update({ page: String(page + 1) }, false)}
+              >
+                <ChevronRight size={17} aria-hidden />
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+      <footer className="audit-page-footer">
+        <span>
+          <LockKeyhole size={12} aria-hidden /> Platform administration only.
+          Clinical history remains in organization records.
+        </span>
+        <span>Dates and times in UTC</span>
+      </footer>
+      {total > 10000 && (
+        <p className="audit-filter-warning">
+          Narrow your filters to 10,000 events or fewer to export a complete
+          CSV.
+        </p>
+      )}
+      {selected && (
+        <AuditEventDrawer
+          key={selected.id}
+          entry={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }
 
-function AuditRow({ entry }: { entry: PlatformAuditEntry }) {
+function AuditRow({
+  entry,
+  onSelect,
+}: {
+  entry: PlatformAuditEntry;
+  onSelect: () => void;
+}) {
+  const { icon: Icon, category, attention } = actionAppearance(entry.action);
+  const initials = entry.operatorName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((name) => name[0])
+    .join("");
   return (
-    <tr className="transition-colors duration-150 hover:bg-surface-sunken">
-      <td className="whitespace-nowrap px-5 py-3.5 font-mono text-[13px] text-text-secondary tabular-nums">
-        {formatDateTime(entry.createdAt)}
+    <tr>
+      <td>
+        <button
+          type="button"
+          className="audit-activity-button"
+          onClick={onSelect}
+          aria-label={`View ${actionLabel(entry.action)} details`}
+        >
+          <span
+            className={`audit-event-icon ${attention ? "audit-attention" : ""}`}
+          >
+            <Icon size={17} aria-hidden />
+          </span>
+          <span>
+            <strong>{actionLabel(entry.action)}</strong>
+            <span className={attention ? "audit-attention-text" : ""}>
+              {category}
+            </span>
+          </span>
+        </button>
       </td>
-      <td className="px-5 py-3.5">
-        <span className="inline-flex rounded bg-brand-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-brand-700">
-          {actionLabel(entry.action)}
-        </span>
-      </td>
-      <td className="px-5 py-3.5 text-[13.5px] text-text-primary">
-        {entry.organizationId && entry.organizationName ? (
-          <Link to={`/platform/organizations/${entry.organizationId}`} className="hover:text-brand-600 hover:underline">
-            {entry.organizationName}
+      <td>
+        {entry.organizationId ? (
+          <Link
+            className="audit-org-link"
+            to={`/platform/organizations/${entry.organizationId}`}
+          >
+            {entry.organizationName ?? "Organization"}
           </Link>
         ) : (
-          <span className="text-text-secondary">—</span>
+          <span className="audit-platform-label">
+            <Building2 size={12} aria-hidden /> Platform-wide
+          </span>
         )}
       </td>
-      <td className="px-5 py-3.5">
-        <p className="text-[13.5px] text-text-primary">{entry.operatorName}</p>
-        <p className="text-[12px] text-text-secondary">{entry.operatorEmail}</p>
+      <td>
+        <div className="audit-actor">
+          <span className="audit-avatar" aria-hidden>
+            {initials}
+          </span>
+          <div>
+            <strong>{entry.operatorName}</strong>
+            <span>{entry.operatorEmail ?? "Email not recorded"}</span>
+          </div>
+        </div>
       </td>
-      <td className="max-w-xs px-5 py-3.5 text-[13px] text-text-secondary">{entry.detail ?? "—"}</td>
-      <td className="max-w-[220px] px-5 py-3.5 text-[12px] text-text-secondary">
-        {entry.ipAddress && <p className="font-mono">{entry.ipAddress}</p>}
-        {entry.deviceSignature && (
-          <p className="truncate" title={entry.deviceSignature}>
-            {entry.deviceSignature}
-          </p>
-        )}
-        {!entry.ipAddress && !entry.deviceSignature && "—"}
+      <td>
+        <time dateTime={entry.createdAt}>
+          <strong>{auditDate(entry.createdAt)}</strong>
+          <span>{auditTime(entry.createdAt)}</span>
+        </time>
+      </td>
+      <td>
+        <button
+          type="button"
+          className="audit-icon-button audit-row-arrow"
+          aria-label={`Open event ${entry.id}`}
+          onClick={onSelect}
+        >
+          <ArrowRight size={16} aria-hidden />
+        </button>
       </td>
     </tr>
   );
 }
-
-interface FilterSelectProps {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}
-
-function FilterSelect({ id, label, value, onChange, options }: FilterSelectProps) {
+function EmptyState({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-[13px] font-medium text-text-primary">
-        {label}
-      </label>
-      <div className="relative">
-        <select
-          id={id}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-11 w-full appearance-none rounded-lg border border-border-strong bg-surface-raised pl-3.5 pr-10 text-[14px] text-text-primary outline-none transition-colors duration-150 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 sm:w-52"
-        >
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-text-secondary"
-          aria-hidden
-        />
-      </div>
+    <div className="audit-empty">
+      <span className="audit-empty-icon">
+        <History size={26} aria-hidden />
+      </span>
+      <h3>{title}</h3>
+      <p>{description}</p>
+      {action}
     </div>
   );
 }

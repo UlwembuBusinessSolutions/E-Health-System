@@ -12,6 +12,7 @@ import {
   checkStaffEmailAvailable,
   checkStaffContactAvailable,
   uploadStaffPhoto,
+  EMPLOYMENT_TYPE_OPTIONS,
   type EmploymentType,
   type StaffSummary,
 } from "@/shared/api/staff";
@@ -20,6 +21,7 @@ import { getRoles } from "@/shared/api/roles";
 import { ApiError } from "@/shared/api/client";
 import type { Gender } from "@/shared/api/types";
 import { Input } from "@/shared/components/Input";
+import { PasswordInput } from "@/shared/components/PasswordInput";
 import { Select } from "@/shared/components/Select";
 import { Button } from "@/shared/components/Button";
 import { Card } from "@/shared/components/Card";
@@ -34,22 +36,13 @@ const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: "OTHER", label: "Other" },
 ];
 
-const EMPLOYMENT_TYPE_OPTIONS = [
-  { value: "PERMANENT", label: "Permanent" },
-  { value: "CONTRACT", label: "Contract" },
-  { value: "INTERN", label: "Intern" },
-  { value: "COMMUNITY_SERVICE", label: "Community service" },
-  { value: "EXTENDED_PUBLIC_WORKS", label: "Extended public works" },
-  { value: "SECONDED", label: "Seconded" },
-];
-
-// Admin-only staff profile creation. Credentials are completed by the new
-// staff member through the one-time link sent after creation.
+// Admin-only — the account this creates is usable immediately with a
+// temporary password the admin sets here, not an invite link. See the
+// "Admin sets temp password" decision in backend-auth-guide.html Section 1.
 export function AddStaffScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [checkingField, setCheckingField] = useState<UniqueField | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [additionalFacilityIds, setAdditionalFacilityIds] = useState<string[]>([]);
 
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
   const rolesQuery = useQuery({ queryKey: ["roles"], queryFn: getRoles });
@@ -59,7 +52,6 @@ export function AddStaffScreen() {
     handleSubmit,
     trigger,
     getValues,
-    watch,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<CreateStaffValues>({
@@ -89,9 +81,10 @@ export function AddStaffScreen() {
       emergencyContactName: "",
       emergencyContactRelationship: "",
       emergencyContactPhone: "",
+      temporaryPassword: "",
+      confirmTemporaryPassword: "",
     },
   });
-  const selectedFacilityId = watch("facilityId");
 
   const mutation = useMutation({
     mutationFn: createStaff,
@@ -133,7 +126,6 @@ export function AddStaffScreen() {
         employmentStartDate: values.employmentStartDate || undefined,
         employmentType: (values.employmentType || undefined) as EmploymentType | undefined,
         facilityId: values.facilityId,
-        additionalFacilityIds: additionalFacilityIds.filter((id) => id !== values.facilityId),
         department: values.department || undefined,
         designation: values.designation || undefined,
         roleId: values.roleId,
@@ -146,6 +138,7 @@ export function AddStaffScreen() {
         emergencyContactName: values.emergencyContactName || undefined,
         emergencyContactRelationship: values.emergencyContactRelationship || undefined,
         emergencyContactPhone: values.emergencyContactPhone || undefined,
+        temporaryPassword: values.temporaryPassword,
       },
       {
         onSuccess: (staff: StaffSummary) => {
@@ -197,8 +190,8 @@ export function AddStaffScreen() {
               </span>
               <h3 className="text-[16px] font-semibold text-text-primary">Staff account created</h3>
               <p className="max-w-sm text-[14px] text-text-secondary">
-                {mutation.data.firstName} {mutation.data.lastName} was created. A password setup link has been emailed
-                to {mutation.data.email}; they must choose their password before signing in.
+                {mutation.data.firstName} {mutation.data.lastName} can sign in now with the temporary password you
+                set. Pass it to them directly — it isn't emailed, and there's no way to view it again after this.
               </p>
 
               <div className="mt-1 flex flex-col items-center gap-2">
@@ -249,7 +242,6 @@ export function AddStaffScreen() {
                   mutation.reset();
                   photoMutation.reset();
                   setPhotoFile(null);
-                  setAdditionalFacilityIds([]);
                 }}
               >
                 Add another staff member
@@ -261,7 +253,8 @@ export function AddStaffScreen() {
             <div className="mb-6">
               <h1 className="text-[20px] font-semibold text-text-primary">Add staff member</h1>
               <p className="mt-1 text-[14px] text-text-secondary">
-                Creates the account, assigns the selected clinic and role, and emails a one-time password setup link.
+                Creates the account immediately with the temporary password below — the staff member must change it
+                on first login.
               </p>
             </div>
 
@@ -401,33 +394,6 @@ export function AddStaffScreen() {
                 />
               </FormRow>
 
-              {(facilitiesQuery.data ?? []).length > 1 && (
-                <fieldset className="rounded-lg border border-border-subtle bg-surface-sunken p-4">
-                  <legend className="px-1 text-[13px] font-semibold text-text-secondary">Additional clinics</legend>
-                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {(facilitiesQuery.data ?? [])
-                      .filter((facility) => facility.id !== selectedFacilityId)
-                      .map((facility) => (
-                      <label key={facility.id} className="flex items-center gap-2 text-[13.5px] text-text-primary">
-                        <input
-                          type="checkbox"
-                          checked={additionalFacilityIds.includes(facility.id)}
-                          onChange={(event) =>
-                            setAdditionalFacilityIds((current) =>
-                              event.target.checked
-                                ? [...current, facility.id]
-                                : current.filter((id) => id !== facility.id),
-                            )
-                          }
-                          className="size-4 accent-brand-500"
-                        />
-                        {facility.name}
-                      </label>
-                      ))}
-                  </div>
-                </fieldset>
-              )}
-
               <FormRow>
                 <Input label="Department" placeholder="Outpatients" error={errors.department?.message} {...register("department")} />
                 <Input
@@ -523,6 +489,24 @@ export function AddStaffScreen() {
                   {...register("emergencyContactPhone")}
                 />
               </div>
+
+              <FormRow>
+                <PasswordInput
+                  label="Temporary password"
+                  required
+                  autoComplete="new-password"
+                  hint={!errors.temporaryPassword ? "At least 8 characters, with a letter and a number." : undefined}
+                  error={errors.temporaryPassword?.message}
+                  {...register("temporaryPassword")}
+                />
+                <PasswordInput
+                  label="Confirm temporary password"
+                  required
+                  autoComplete="new-password"
+                  error={errors.confirmTemporaryPassword?.message}
+                  {...register("confirmTemporaryPassword")}
+                />
+              </FormRow>
 
               <Button type="submit" size="lg" loading={isSubmitting || mutation.isPending} className="mt-1 w-full">
                 Create staff account
