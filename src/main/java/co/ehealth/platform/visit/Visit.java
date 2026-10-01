@@ -46,17 +46,31 @@ public class Visit {
     @Column(name = "created_by_user_id")
     private UUID createdByUserId;
 
+    // Set once, at construction, same as every other field here — never
+    // retrofits Visit.facilityId into something mutable. Only non-null for
+    // the destination-side visit QueueService.transferToken() creates; it
+    // links back to the visit it replaced so a patient's path across
+    // facilities stays traceable.
+    @Column(name = "transferred_from_visit_id")
+    private UUID transferredFromVisitId;
+
     protected Visit() {
     }
 
     public Visit(UUID patientId, UUID facilityId, VisitType visitType, ServiceStream serviceStream,
                  Instant visitDateTime, UUID createdByUserId) {
+        this(patientId, facilityId, visitType, serviceStream, visitDateTime, createdByUserId, null);
+    }
+
+    public Visit(UUID patientId, UUID facilityId, VisitType visitType, ServiceStream serviceStream,
+                 Instant visitDateTime, UUID createdByUserId, UUID transferredFromVisitId) {
         this.patientId = patientId;
         this.facilityId = facilityId;
         this.visitType = visitType;
         this.serviceStream = serviceStream;
         this.visitDateTime = visitDateTime;
         this.createdByUserId = createdByUserId;
+        this.transferredFromVisitId = transferredFromVisitId;
     }
 
     public UUID getId() {
@@ -85,5 +99,9 @@ public class Visit {
 
     public UUID getCreatedByUserId() {
         return createdByUserId;
+    }
+
+    public UUID getTransferredFromVisitId() {
+        return transferredFromVisitId;
     }
 }

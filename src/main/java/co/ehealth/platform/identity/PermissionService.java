@@ -1,7 +1,5 @@
 package co.ehealth.platform.identity;
 
-// lihle | 2026-09-09 | Aligned staff roles and clinic assignments so permissions follow the current clinic context.
-
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import org.springframework.security.core.Authentication;
@@ -13,9 +11,20 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-// Evaluates module permissions using the current request's authorities.
-// ClinicContextFilter refreshes those roles from clinic-scoped assignments;
-// clinical repositories separately constrain records to the active clinic.
+// IAM-US-009's permission-evaluation service: "is the module entitled for
+// this tenant -> does this role hold this permission -> is the record
+// within the user's clinic scope" (FRS Section 3.4) — this covers the
+// middle step only. Module entitlement is OrganizationProvisioningService's
+// own concern (SADM-US-010) and is checked separately; clinic-scope
+// filtering is IAM-US-011 (Scope a user to specific clinics), not yet
+// built. A caller wanting all three still calls each layer itself — there
+// is no single method that chains all three here.
+//
+// Reads role names straight off the JWT's own authorities
+// (JwtAuthenticationFilter already resolves role_id -> role name into
+// ROLE_<name> GrantedAuthority at login) rather than re-querying
+// user_roles, so this never needs the caller's userId at all — just
+// whatever's on SecurityContextHolder for the current request.
 @Service
 public class PermissionService {
 
@@ -44,6 +53,26 @@ public class PermissionService {
             return true;
         }
         return required == PermissionLevel.VIEW && granted.contains(module.name() + ":VIEW");
+    }
+
+    // Module permission alone answers "is this role allowed to operate
+    // this module at all" — it deliberately does not distinguish clinical
+    // from operational roles within a module (RECQ:MANAGE covers both a
+    // Queue Marshall calling the next patient and a nurse capturing
+    // vitals), and this codebase's PermissionLevel is a fixed two-tier
+    // VIEW/MANAGE by design (its own why-note), not per-action. A caller
+    // that needs a narrower "and also must actually hold one of these
+    // clinical roles" gate — TriageService's own why-note on why clinical
+    // documentation needs this on top of RECQ:MANAGE — calls this instead
+    // of re-deriving role names itself. Same "throws, doesn't return a
+    // boolean silently" shape as requireAccess() above, and the same
+    // precedent NotLicensedException already set for PHRM: a permission
+    // check alone isn't always the whole story for a clinical action.
+    public void requireAnyRole(Set<String> allowedRoleNames, String deniedMessage) {
+        boolean hasRole = currentRoleNames().stream().anyMatch(allowedRoleNames::contains);
+        if (!hasRole) {
+            throw new NotAClinicalRoleException(deniedMessage);
+        }
     }
 
     private List<String> currentRoleNames() {

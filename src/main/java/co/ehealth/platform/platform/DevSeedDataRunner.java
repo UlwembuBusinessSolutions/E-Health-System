@@ -1,7 +1,5 @@
 package co.ehealth.platform.platform;
 
-// lihle | 2026-09-09 | Set clinic context during development seeding because patient registration now requires it.
-
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
@@ -113,6 +111,14 @@ public class DevSeedDataRunner implements ApplicationRunner {
                 "12 Cradle Street, Johannesburg", "+27115550101", "Mon-Fri 07:00-17:00");
         Facility satelliteClinic = facilityService.create("Demo Satellite Clinic", "DEMO-02", FacilityType.CLINIC,
                 "44 Baobab Avenue, Soweto", "+27115550102", "Mon-Fri 08:00-16:00");
+        // A genuinely separate destination for ConsultationService's "Send
+        // to pharmacy" outcome (co.ehealth.platform.consultation) — distinct
+        // from the pharmacist staff member seeded below, who dispenses from
+        // the clinic itself under today's PrescriptionService model. This
+        // facility is what a signed consultation's queue-token transfer
+        // actually targets.
+        facilityService.create("Demo Pharmacy", "DEMO-PH", FacilityType.PHARMACY,
+                "12 Cradle Street, Johannesburg", "+27115550103", "Mon-Fri 08:00-17:00");
 
         UUID doctorId = createStaffMember(mainClinic.getId(), "Doctor", "Sipho", "Mahlangu",
                 "EMP-1001", "8501015800083", "s.mahlangu@democlinic.example", "+27821234502",
@@ -144,7 +150,6 @@ public class DevSeedDataRunner implements ApplicationRunner {
         var authentication = new UsernamePasswordAuthenticationToken(
                 principal, null, List.of(new SimpleGrantedAuthority("ROLE_ORG_ADMIN")));
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        co.ehealth.platform.core.clinic.ClinicContext.set(mainClinic.getId());
         try {
             // genderSequence alone determines the parsed-back gender
             // (SouthAfricanIdNumber.parse(): <5000 female, >=5000 male) —
@@ -161,7 +166,6 @@ public class DevSeedDataRunner implements ApplicationRunner {
                     "31 Chris Hani Road, Johannesburg", "+27831112205", "Momentum Health", "MH-556723", adminUserId);
         } finally {
             SecurityContextHolder.clearContext();
-            co.ehealth.platform.core.clinic.ClinicContext.clear();
         }
     }
 
@@ -184,7 +188,8 @@ public class DevSeedDataRunner implements ApplicationRunner {
                                   String medicalAidNumber, UUID registeredByUserId) {
         String idNumber = southAfricanIdNumber(dateOfBirth, genderSequence);
         patientService.register(new PatientService.RegisterPatientCommand(
-                firstName, lastName, idNumber, address, contactNumber, medicalAidProvider, medicalAidNumber),
+                firstName, lastName, idNumber, address, contactNumber, null, medicalAidProvider, medicalAidNumber,
+                null, null),
                 registeredByUserId);
     }
 

@@ -1,33 +1,38 @@
 package co.ehealth.platform.triage;
 
-// lihle | 2026-09-09 | Connected persisted triage reads and validation to the UI while restricting records to the active clinic.
-
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface TriageAssessmentRepository extends JpaRepository<TriageAssessment, UUID> {
-    @org.springframework.data.jpa.repository.Query(value = "select t.* from triage_assessments t join visits v on v.id = t.visit_id "
-            + "where v.facility_id = :clinicId order by t.captured_at desc, t.id desc", nativeQuery = true)
-    java.util.List<TriageAssessment> findAllInClinic(@org.springframework.data.repository.query.Param("clinicId") UUID clinicId);
 
-    @org.springframework.data.jpa.repository.Query(value = "select t.* from triage_assessments t join visits v on v.id = t.visit_id "
-            + "where t.id = :id and v.facility_id = :clinicId", nativeQuery = true)
-    Optional<TriageAssessment> findInClinic(@org.springframework.data.repository.query.Param("id") UUID id,
-            @org.springframework.data.repository.query.Param("clinicId") UUID clinicId);
+    // The full history for a visit, oldest first — TriageService.getHistory()
+    // and the "latest valid" lookup both read from this rather than a
+    // separate "current" query, since ACTIVE-vs-SUPERSEDED/ENTERED_IN_ERROR
+    // is a status filter over the same rows, not a different table.
+    List<TriageAssessment> findByVisitIdOrderByObservedAtAsc(UUID visitId);
 
-    @org.springframework.data.jpa.repository.Query(value = "select t.* from triage_assessments t join visits v on v.id = t.visit_id "
-            + "where t.patient_id = :patientId and v.facility_id = :clinicId and t.captured_at < :before "
-            + "order by t.captured_at desc, t.id desc limit 1", nativeQuery = true)
-    Optional<TriageAssessment> findPriorInClinic(@org.springframework.data.repository.query.Param("patientId") UUID patientId,
-            @org.springframework.data.repository.query.Param("clinicId") UUID clinicId,
-            @org.springframework.data.repository.query.Param("before") java.time.Instant before);
+    // TriageService's idempotency check — a retry (double-click, network
+    // retry) with the same key against the same visit returns the row that
+    // already exists instead of inserting a duplicate.
+    Optional<TriageAssessment> findByVisitIdAndIdempotencyKey(UUID visitId, String idempotencyKey);
 
-    @org.springframework.data.jpa.repository.Query(value = "select t.* from triage_assessments t "
-            + "join visits v on v.id = t.visit_id where t.patient_id = :patientId and v.facility_id = :clinicId "
-            + "order by t.captured_at desc limit 1", nativeQuery = true)
-    Optional<TriageAssessment> findLatestInClinic(
-            @org.springframework.data.repository.query.Param("patientId") UUID patientId,
-            @org.springframework.data.repository.query.Param("clinicId") UUID clinicId);
+    // The patient-level Vitals tab's own history — every capture across
+    // every visit a patient has had (TriageService.getPatientVitalsHistory()
+    // resolves the visit ids via VisitRepository.findByPatientId() first,
+    // same "no cross-package JPQL join, just an injected repository" pattern
+    // this service already uses for Visit lookups elsewhere). Newest first,
+    // unlike findByVisitIdOrderByObservedAtAsc above: a single visit's own
+    // history reads naturally as a timeline since check-in, but a patient's
+    // whole history is read the way most EHR vitals lists are — most recent
+    // reading on top.
+    List<TriageAssessment> findByVisitIdInOrderByObservedAtDesc(List<UUID> visitIds);
+
+    @Query("SELECT ta FROM TriageAssessment ta WHERE ta.visitId = :visitId AND ta.status = 'ACTIVE' "
+            + "ORDER BY ta.observedAt DESC")
+    List<TriageAssessment> findActiveOrderByObservedAtDesc(@Param("visitId") UUID visitId);
 }

@@ -1,7 +1,5 @@
 package co.ehealth.platform.visit;
 
-// lihle | 2026-09-09 | Aligned visit responses and scoped visit/queue access to the active clinic for connected clinical screens.
-
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -9,7 +7,14 @@ import java.util.UUID;
 
 public interface VisitRepository extends JpaRepository<Visit, UUID> {
 
-    List<Visit> findByFacilityIdOrderByVisitDateTimeDesc(UUID facilityId);
+    // TriageService.getPatientVitalsHistory() — every visit this patient has
+    // ever had, across every facility, so that method can pull the vitals
+    // captured against each one. Order doesn't matter here; only the ids
+    // are used, and the assessments themselves get their own ordering.
+    List<Visit> findByPatientId(UUID patientId);
 
-    java.util.Optional<Visit> findByIdAndFacilityId(UUID id, UUID facilityId);
+    // VisitService.getPatientVisitHistory() — the patient record's own
+    // Visits tab, newest first (same convention TriageService's patient-wide
+    // vitals list already reads most-recent-first).
+    List<Visit> findByPatientIdOrderByVisitDateTimeDesc(UUID patientId);
 }

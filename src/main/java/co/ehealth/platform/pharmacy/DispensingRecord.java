@@ -7,12 +7,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 
-// One row per dispensed prescription — prescriptionId is unique because
-// this slice dispenses in full or not at all (Prescription's own why-note),
-// so there's never more than one DispensingRecord per prescription yet.
+// Latest supply summary per item; immutable supply history lives in the stock ledger.
 @Entity
 @Table(name = "dispensing_records")
 public class DispensingRecord {
@@ -21,16 +18,8 @@ public class DispensingRecord {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "prescription_id", nullable = false, unique = true)
-    private UUID prescriptionId;
-
-    // A dispensing event must remain traceable to the same identified person
-    // as its prescription, even when it is read without joining prescriptions.
-    @Column(name = "patient_id", nullable = false)
-    private UUID patientId;
-
-    @Column(name = "patient_mpi", nullable = false, length = 20)
-    private String patientMpi;
+    @Column(name = "prescription_item_id", nullable = false, unique = true)
+    private UUID prescriptionItemId;
 
     @Column(name = "dispensed_by_user_id", nullable = false)
     private UUID dispensedByUserId;
@@ -38,41 +27,25 @@ public class DispensingRecord {
     @Column(name = "dispensed_at", nullable = false)
     private Instant dispensedAt;
 
-    @Column(name = "coverage_until")
-    private LocalDate coverageUntil;
-
     protected DispensingRecord() {
     }
 
-    public DispensingRecord(UUID prescriptionId, UUID patientId, String patientMpi, UUID dispensedByUserId,
-                            Instant dispensedAt) {
-        this(prescriptionId, patientId, patientMpi, dispensedByUserId, dispensedAt, null);
-    }
-
-    public DispensingRecord(UUID prescriptionId, UUID patientId, String patientMpi, UUID dispensedByUserId,
-                            Instant dispensedAt, LocalDate coverageUntil) {
-        this.prescriptionId = prescriptionId;
-        this.patientId = patientId;
-        this.patientMpi = patientMpi;
+    public DispensingRecord(UUID prescriptionItemId, UUID dispensedByUserId, Instant dispensedAt) {
+        this.prescriptionItemId = prescriptionItemId;
         this.dispensedByUserId = dispensedByUserId;
         this.dispensedAt = dispensedAt;
-        this.coverageUntil = coverageUntil;
     }
 
+    public void recordLatestDispense(UUID userId, Instant at) {
+        this.dispensedByUserId = userId;
+        this.dispensedAt = at;
+    }
     public UUID getId() {
         return id;
     }
 
-    public UUID getPrescriptionId() {
-        return prescriptionId;
-    }
-
-    public UUID getPatientId() {
-        return patientId;
-    }
-
-    public String getPatientMpi() {
-        return patientMpi;
+    public UUID getPrescriptionItemId() {
+        return prescriptionItemId;
     }
 
     public UUID getDispensedByUserId() {
@@ -82,6 +55,4 @@ public class DispensingRecord {
     public Instant getDispensedAt() {
         return dispensedAt;
     }
-
-    public LocalDate getCoverageUntil() { return coverageUntil; }
 }

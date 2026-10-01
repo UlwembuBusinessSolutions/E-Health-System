@@ -1,11 +1,14 @@
 package co.ehealth.platform.core.audit;
 
-// lihle | 2026-09-09 | Added clinic context to audit handling so actions can be traced to the clinic where they occurred.
-
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.UUID;
 
-public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
-    java.util.List<AuditLog> findByClinicContextIdOrderByCreatedAtDesc(UUID clinicContextId);
+// JpaSpecificationExecutor backs AuditLogService's date-range filtering —
+// same reasoning as PlatformAuditLogRepository's own why-note: a
+// Specification composes the "only if the caller actually filtered by
+// this" branches list()/listAllForExport() need without a matrix of
+// findByCreatedAtBetween-style derived query methods.
+public interface AuditLogRepository extends JpaRepository<AuditLog, UUID>, JpaSpecificationExecutor<AuditLog> {
 }

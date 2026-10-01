@@ -21,7 +21,10 @@ public class PlatformAuditLog {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "platform_operator_id", nullable = false)
+    // Null only for a login attempt against an email with no matching
+    // operator row (PlatformAuthService's own why-note) — never for any
+    // other action, which all have a real acting operator by definition.
+    @Column(name = "platform_operator_id")
     private UUID platformOperatorId;
 
     @Column(nullable = false, length = 100)

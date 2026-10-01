@@ -10,6 +10,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -58,7 +60,7 @@ public class AuthService {
     @Transactional(noRollbackFor = {InvalidCredentialsException.class, AccountLockedException.class})
     public JwtService.IssuedToken login(String email, String rawPassword) {
         Instant now = clock.instant();
-        Optional<User> maybeUser = userRepository.findByEmail(email);
+        Optional<User> maybeUser = userRepository.findForLoginByEmail(email);
         maybeUser.ifPresent(user -> autoUnlockIfExpired(user, now));
 
         if (maybeUser.isPresent() && maybeUser.get().getStatus() == UserStatus.LOCKED) {
@@ -103,7 +105,7 @@ public class AuthService {
         JwtService.IssuedToken issued = jwtService.issue(
                 user.getId(), TenantContext.getCurrentTenant(), roles, user.getTokenVersion());
 
-        activityStore.recordActivity(issued.jti(), now);
+        registerSession(user, issued, now);
         String afterValue = serializeLoginState(user.getFailedLoginCount(), user.getLastLoginAt());
         auditLogService.append(user.getId(), null, "LOGIN", "User", user.getId().toString(),
                 beforeValue, afterValue);
@@ -128,7 +130,73 @@ public class AuthService {
     private record LoginStateSnapshot(int failedLoginCount, Instant lastLoginAt) {
     }
 
+    // MicrosoftSsoService's own why-note: by the time this runs, Microsoft
+    // has already verified the person's identity (the code exchange
+    // succeeded using this org's real client secret, and email came back
+    // from a live Graph API call) — there's no password to check and
+    // therefore no failed-attempt/lockout bookkeeping the way login()
+    // above has. Still refuses a non-ACTIVE account (LOCKED or DISABLED):
+    // an admin's decision to lock or disable someone shouldn't have a
+    // side door. Returns empty rather than throwing — the caller is a
+    // full-page redirect with nobody to hand a JSON error body to, so
+    // "no session" is a value this method can return, not an exception
+    // that method has to translate.
+    @Transactional
+    public Optional<JwtService.IssuedToken> loginViaSso(String email) {
+        Optional<User> maybeUser = userRepository.findForLoginByEmail(email);
+        if (maybeUser.isEmpty() || maybeUser.get().getStatus() != UserStatus.ACTIVE) {
+            return Optional.empty();
+        }
+
+        User user = maybeUser.get();
+        Instant now = clock.instant();
+        String beforeValue = serializeLoginState(user.getFailedLoginCount(), user.getLastLoginAt());
+        user.setLastLoginAt(now);
+
+        List<String> roles = userRepository.findRoleNames(user.getId());
+        JwtService.IssuedToken issued = jwtService.issue(
+                user.getId(), TenantContext.getCurrentTenant(), roles, user.getTokenVersion());
+
+        registerSession(user, issued, now);
+        String afterValue = serializeLoginState(user.getFailedLoginCount(), user.getLastLoginAt());
+        auditLogService.append(user.getId(), null, "SSO_LOGIN", "User", user.getId().toString(),
+                beforeValue, afterValue);
+
+        return Optional.of(issued);
+    }
+
+    private void registerSession(User user, JwtService.IssuedToken issued, Instant now) {
+        String previous = user.getActiveSessionJti();
+        if (previous != null && user.getActiveSessionExpiresAt() != null
+                && user.getActiveSessionExpiresAt().isAfter(now)) {
+            auditLogService.append(user.getId(), user.getFacilityId(), "SESSION_DISPLACED", "User",
+                    user.getId().toString(), sessionJson(previous), sessionJson(issued.jti()));
+        }
+        // The locked user row is the durable, tenant-scoped session registry.
+        // Registry replacement and its audit record commit in the same transaction.
+        user.activateSession(issued.jti(), issued.expiresAt());
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        if (previous != null) activityStore.clear(previous);
+                        activityStore.recordActivity(issued.jti(), now);
+                    }
+                });
+    }
+
+    private String sessionJson(String jti) {
+        try {
+            return objectMapper.writeValueAsString(java.util.Map.of("sessionId", jti));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Cannot serialize session audit", e);
+        }
+    }
+
+    @Transactional
     public void logout(String jti) {
+        // Compare by session ID so a delayed logout cannot revoke a newer login.
+        userRepository.clearActiveSession(jti);
         activityStore.clear(jti);
     }
 

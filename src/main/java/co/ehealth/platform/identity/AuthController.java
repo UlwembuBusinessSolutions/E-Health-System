@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,24 +23,36 @@ public class AuthController {
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
     private final UserRepository userRepository;
-    private final StaffService staffService;
 
     public AuthController(AuthService authService, PasswordResetService passwordResetService,
-                           UserRepository userRepository, StaffService staffService) {
+                           UserRepository userRepository) {
         this.authService = authService;
         this.passwordResetService = passwordResetService;
         this.userRepository = userRepository;
-        this.staffService = staffService;
     }
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         JwtService.IssuedToken issued = authService.login(request.email(), request.password());
         User user = userRepository.findByEmail(request.email()).orElseThrow();
-        StaffService.LicenseStatus licenseStatus = staffService.getLicenseStatus(user.getId());
         return ResponseEntity.ok(new LoginResponse(issued.token(), issued.expiresAt().toString(),
-                new UserSummary(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName(),
-                        licenseStatus.canPrescribe(), licenseStatus.canDispense())));
+                new UserSummary(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName())));
+    }
+
+    // The frontend's own AuthContext (AuthProvider) starts every fresh page
+    // load with no user in memory, even when a valid tenant token is still
+    // sitting in sessionStorage — window.open()'ing a print ticket, or
+    // simply reloading any /app page, is a genuinely new page load with an
+    // empty React tree. This is what that rehydration path calls: given a
+    // still-valid Authorization header, hand back the same identity
+    // login() already returns, so the app can reconstruct its user state
+    // instead of bouncing a legitimately signed-in person back to the
+    // login screen.
+    @GetMapping("/me")
+    public ResponseEntity<UserSummary> me(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        User user = userRepository.findById(principal.userId()).orElseThrow();
+        return ResponseEntity.ok(new UserSummary(user.getId(), user.getEmail(), user.getFirstName(),
+                user.getLastName()));
     }
 
     @PostMapping("/logout")
@@ -74,12 +87,7 @@ public class AuthController {
     public record LoginResponse(String accessToken, String expiresAt, UserSummary user) {
     }
 
-    // The UI receives the current action capabilities explicitly, rather
-    // than reverse-engineering them from sensitive registration numbers.
-    // PrescriptionService independently enforces these same capabilities on
-    // every request, so a stale client response can never grant API access.
-    public record UserSummary(UUID id, String email, String firstName, String lastName,
-                              boolean canPrescribe, boolean canDispense) {
+    public record UserSummary(UUID id, String email, String firstName, String lastName) {
     }
 
     public record UnlockRequest(@NotBlank String password) {

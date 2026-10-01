@@ -1,7 +1,5 @@
 package co.ehealth.platform.identity;
 
-// lihle | 2026-09-09 | Aligned staff roles and clinic assignments so permissions follow the current clinic context.
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -145,6 +143,21 @@ public class User {
 
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
+
+    @Column(name = "active_session_jti", length = 36)
+    private String activeSessionJti;
+
+    @Column(name = "active_session_expires_at")
+    private Instant activeSessionExpiresAt;
+
+    public String getActiveSessionJti() { return activeSessionJti; }
+
+    public Instant getActiveSessionExpiresAt() { return activeSessionExpiresAt; }
+
+    public void activateSession(String jti, Instant expiresAt) {
+        this.activeSessionJti = jti;
+        this.activeSessionExpiresAt = expiresAt;
+    }
 
     protected User() {
     }
@@ -343,10 +356,6 @@ public class User {
 
     public UUID getFacilityId() {
         return facilityId;
-    }
-
-    public void setFacilityId(UUID facilityId) {
-        this.facilityId = facilityId;
     }
 
     public LocalDate getEmploymentStartDate() {

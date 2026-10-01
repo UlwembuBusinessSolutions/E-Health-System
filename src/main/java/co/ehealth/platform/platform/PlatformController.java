@@ -1,8 +1,10 @@
 package co.ehealth.platform.platform;
 
+import co.ehealth.platform.core.common.CsvExport;
 import co.ehealth.platform.core.security.PlatformOperatorPrincipal;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.core.tenant.Organization;
+import co.ehealth.platform.core.tenant.OrganizationMailSettings;
 import co.ehealth.platform.core.tenant.OrganizationSector;
 import co.ehealth.platform.core.tenant.OrganizationStatus;
 import co.ehealth.platform.facility.Facility;
@@ -15,6 +17,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -30,7 +34,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -43,9 +51,11 @@ import java.util.UUID;
 public class PlatformController {
 
     private final OrganizationProvisioningService provisioningService;
+    private final Clock clock;
 
-    public PlatformController(OrganizationProvisioningService provisioningService) {
+    public PlatformController(OrganizationProvisioningService provisioningService, Clock clock) {
         this.provisioningService = provisioningService;
+        this.clock = clock;
     }
 
     @GetMapping
@@ -202,13 +212,89 @@ public class PlatformController {
     public record LogoUploadResponse(String logoUrl) {
     }
 
+    // The platform-side counterpart to OrganizationMailSettingsController's
+    // own /api/v1/admin/organization/mail-settings — same
+    // request/response shape, deliberately not shared as one type: every
+    // other pair of "tenant self-service" vs "platform operator managing
+    // an arbitrary org" endpoints in this codebase already keeps its own
+    // DTOs (OrganizationSelfResponse vs this controller's OrganizationSummary
+    // being the clearest example), not a shared module boundary this
+    // controller and core.tenant's would otherwise have to agree on.
+    @GetMapping("/{id}/mail-settings")
+    public ResponseEntity<MailSettingsResponse> getMailSettings(@PathVariable UUID id) {
+        return ResponseEntity.ok(toMailSettingsResponse(provisioningService.getMailSettings(id)));
+    }
+
+    @PatchMapping("/{id}/mail-settings")
+    public ResponseEntity<MailSettingsResponse> updateMailSettings(
+            @PathVariable UUID id, @RequestBody MailSettingsRequest request,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+        OrganizationMailSettings updated = provisioningService.updateMailSettings(
+                id, request.host(), request.port(), request.username(), request.password(), request.fromAddress(),
+                operator.operatorId());
+        return ResponseEntity.ok(toMailSettingsResponse(updated));
+    }
+
+    // password is never echoed back, encrypted or not — passwordSet is the
+    // only signal the console gets about whether one's configured, same
+    // reasoning as OrganizationMailSettingsController's own toResponse().
+    private static MailSettingsResponse toMailSettingsResponse(OrganizationMailSettings settings) {
+        boolean passwordSet = settings.encryptedPassword() != null && !settings.encryptedPassword().isBlank();
+        return new MailSettingsResponse(settings.host(), settings.port(), settings.username(), passwordSet,
+                settings.fromAddress());
+    }
+
+    public record MailSettingsRequest(String host, Integer port, String username, String password,
+                                       String fromAddress) {
+    }
+
+    public record MailSettingsResponse(String host, Integer port, String username, boolean passwordSet,
+                                        String fromAddress) {
+    }
+
     // AUDT-US-005/006's platform-side entry point — one organization's own
     // audit trail, viewed by a platform operator rather than that org's own
     // staff. No filters here (unlike GET /platform/audit) — see
     // OrganizationProvisioningService.listTenantAuditLog()'s own why-note.
     @GetMapping("/{id}/audit")
-    public ResponseEntity<Map<String, Object>> listTenantAudit(@PathVariable UUID id) {
-        return ResponseEntity.ok(Map.of("items", provisioningService.listTenantAuditLog(id)));
+    public ResponseEntity<Map<String, Object>> listTenantAudit(@PathVariable UUID id,
+                                                                 @RequestParam(required = false, defaultValue = "0") int page,
+                                                                 @RequestParam(required = false, defaultValue = "50") int size) {
+        var result = provisioningService.listTenantAuditLog(id, page, size);
+        return ResponseEntity.ok(Map.of("items", result.items(), "page", result.page(), "size", result.size(),
+                "totalItems", result.totalItems(), "hasMore", result.hasMore()));
+    }
+
+    // The entire trail, not one page — OrganizationProvisioningService.
+    // listTenantAuditLogForExport()'s own why-note on the cap this is
+    // subject to and why the export itself is recorded as a
+    // platform_audit_log row rather than back into the tenant's own log.
+    @GetMapping("/{id}/audit/export")
+    public ResponseEntity<byte[]> exportTenantAudit(@PathVariable UUID id,
+                                                      @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+        List<OrganizationProvisioningService.TenantAuditEntryView> items =
+                provisioningService.listTenantAuditLogForExport(id, operator.operatorId());
+
+        List<String> header = List.of("When (UTC)", "Action", "Entity type", "Entity ID", "Actor", "Before",
+                "After", "IP address", "Device");
+        List<List<String>> rows = items.stream().map(item -> List.of(
+                CsvExport.cell(item.createdAt()),
+                CsvExport.cell(item.action()),
+                CsvExport.cell(item.entityType()),
+                CsvExport.cell(item.entityId()),
+                CsvExport.cell(item.actorName()),
+                CsvExport.cell(item.beforeValue()),
+                CsvExport.cell(item.afterValue()),
+                CsvExport.cell(item.ipAddress()),
+                CsvExport.cell(item.deviceSignature()))).toList();
+        byte[] csv = CsvExport.toCsv(header, rows).getBytes(StandardCharsets.UTF_8);
+
+        String filename = "organization-audit-" + id + "-" + DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+                .withZone(ZoneOffset.UTC).format(clock.instant()) + ".csv";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .body(csv);
     }
 
     // SADM-US-006 — a platform operator adding a clinic to a tenant, from

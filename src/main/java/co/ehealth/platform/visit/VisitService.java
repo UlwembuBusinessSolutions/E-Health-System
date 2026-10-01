@@ -1,10 +1,9 @@
 package co.ehealth.platform.visit;
 
-// lihle | 2026-09-09 | Aligned visit responses and scoped visit/queue access to the active clinic for connected clinical screens.
-
 import co.ehealth.platform.core.audit.AuditLogService;
-import co.ehealth.platform.core.clinic.ClinicContext;
 import co.ehealth.platform.core.tenant.ModuleCode;
+import co.ehealth.platform.facility.Facility;
+import co.ehealth.platform.facility.FacilityRepository;
 import co.ehealth.platform.facility.FacilityService;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
@@ -14,7 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class VisitService {
@@ -22,17 +24,20 @@ public class VisitService {
     private final VisitRepository visitRepository;
     private final PatientService patientService;
     private final FacilityService facilityService;
+    private final FacilityRepository facilityRepository;
     private final QueueService queueService;
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
 
     public VisitService(VisitRepository visitRepository, PatientService patientService,
-                         FacilityService facilityService, QueueService queueService,
-                         AuditLogService auditLogService, Clock clock, PermissionService permissionService) {
+                         FacilityService facilityService, FacilityRepository facilityRepository,
+                         QueueService queueService, AuditLogService auditLogService, Clock clock,
+                         PermissionService permissionService) {
         this.visitRepository = visitRepository;
         this.patientService = patientService;
         this.facilityService = facilityService;
+        this.facilityRepository = facilityRepository;
         this.queueService = queueService;
         this.auditLogService = auditLogService;
         this.clock = clock;
@@ -50,7 +55,6 @@ public class VisitService {
     @Transactional
     public VisitWithToken createVisit(CreateVisitCommand cmd, UUID staffUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
-        ClinicContext.requireFacility(cmd.facilityId());
         patientService.get(cmd.patientId());
         facilityService.get(cmd.facilityId());
 
@@ -68,12 +72,27 @@ public class VisitService {
 
     public Visit get(UUID id) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
-        return visitRepository.findByIdAndFacilityId(id, ClinicContext.require()).orElseThrow(VisitNotFoundException::new);
+        return visitRepository.findById(id).orElseThrow(VisitNotFoundException::new);
     }
 
-    public List<Visit> list() {
+    // The patient record's own Visits tab — every visit this patient has
+    // ever had, across every facility, newest first. Resolves each one's
+    // facility name via a single batch lookup rather than facilityService.get()
+    // per row — same "batch-resolve, don't N+1" shape TriageService.
+    // resolveCapturedByNames() already uses for captured-by names, and the
+    // same reasoning: a module boundary crossed via a directly-injected
+    // repository (not a second service call) for a read-only enrichment,
+    // already precedented by this exact service's facilityZone()-equivalent
+    // callers elsewhere in this codebase.
+    public List<PatientVisitView> getPatientVisitHistory(UUID patientId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
-        return visitRepository.findByFacilityIdOrderByVisitDateTimeDesc(ClinicContext.require());
+        List<Visit> visits = visitRepository.findByPatientIdOrderByVisitDateTimeDesc(patientId);
+        Set<UUID> facilityIds = visits.stream().map(Visit::getFacilityId).collect(Collectors.toSet());
+        Map<UUID, String> facilityNames = facilityRepository.findAllById(facilityIds).stream()
+                .collect(Collectors.toMap(Facility::getId, Facility::getName));
+        return visits.stream()
+                .map(v -> new PatientVisitView(v, facilityNames.get(v.getFacilityId())))
+                .toList();
     }
 
     public record CreateVisitCommand(UUID patientId, UUID facilityId, VisitType visitType,
@@ -81,5 +100,8 @@ public class VisitService {
     }
 
     public record VisitWithToken(Visit visit, QueueToken token) {
+    }
+
+    public record PatientVisitView(Visit visit, String facilityName) {
     }
 }

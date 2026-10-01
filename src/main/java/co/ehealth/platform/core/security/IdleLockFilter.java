@@ -52,10 +52,12 @@ public class IdleLockFilter extends OncePerRequestFilter {
         Instant now = clock.instant();
         Instant lastActivity = activityStore.getLastActivity(jti);
         boolean isUnlockAttempt = request.getRequestURI().equals("/api/v1/auth/unlock");
+        boolean isLogoutAttempt = request.getMethod().equals("POST")
+                && request.getRequestURI().equals("/api/v1/auth/logout");
 
         if (lastActivity != null
                 && Duration.between(lastActivity, now).compareTo(idleTimeout) > 0
-                && !isUnlockAttempt) {
+                && !isUnlockAttempt && !isLogoutAttempt) {
             // Deliberately does NOT touch activityStore here — a request
             // bounced for being idle must not itself count as activity, or
             // a locked screen silently polling in the background would keep

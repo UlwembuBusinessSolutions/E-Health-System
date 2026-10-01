@@ -1,10 +1,6 @@
 package co.ehealth.platform.visit;
 
-// lihle | 2026-09-09 | Aligned visit responses and scoped visit/queue access to the active clinic for connected clinical screens.
-
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
-import co.ehealth.platform.patient.Patient;
-import co.ehealth.platform.patient.PatientService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
@@ -17,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,11 +23,9 @@ import java.util.UUID;
 public class VisitController {
 
     private final VisitService visitService;
-    private final PatientService patientService;
 
-    public VisitController(VisitService visitService, PatientService patientService) {
+    public VisitController(VisitService visitService) {
         this.visitService = visitService;
-        this.patientService = patientService;
     }
 
     // PREG-US-019 + RECQ-US-001 — creates the visit and, in the same
@@ -48,15 +41,19 @@ public class VisitController {
         return ResponseEntity.status(HttpStatus.CREATED).body(VisitWithTokenResponse.from(result));
     }
 
-    @GetMapping("/api/v1/visits")
-    public ResponseEntity<Map<String, Object>> list() {
-        List<VisitListResponse> items = visitService.list().stream().map(this::toListResponse).toList();
-        return ResponseEntity.ok(Map.of("items", items));
+    @GetMapping("/api/v1/visits/{id}")
+    public ResponseEntity<VisitResponse> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(VisitResponse.from(visitService.get(id)));
     }
 
-    @GetMapping("/api/v1/visits/{id}")
-    public ResponseEntity<VisitListResponse> get(@PathVariable UUID id) {
-        return ResponseEntity.ok(toListResponse(visitService.get(id)));
+    // The patient record's Visits tab — every visit this patient has ever
+    // had, newest first, each one carrying the facility's name so the UI
+    // never has to resolve facilityId itself.
+    @GetMapping("/api/v1/patients/{patientId}/visits")
+    public ResponseEntity<Map<String, Object>> patientVisitHistory(@PathVariable UUID patientId) {
+        var items = visitService.getPatientVisitHistory(patientId).stream()
+                .map(PatientVisitResponse::from).toList();
+        return ResponseEntity.ok(Map.of("items", items));
     }
 
     public record CreateVisitRequest(@NotNull UUID patientId, @NotNull UUID facilityId,
@@ -71,23 +68,20 @@ public class VisitController {
         }
     }
 
-    private VisitListResponse toListResponse(Visit visit) {
-        Patient patient = patientService.get(visit.getPatientId());
-        return new VisitListResponse(visit.getId(), visit.getPatientId(),
-                patient.getFirstName() + " " + patient.getLastName(), patient.getMpiNumber(),
-                visit.getFacilityId(), visit.getVisitType(), visit.getServiceStream(), visit.getVisitDateTime(),
-                visit.getVisitDateTime());
-    }
-
-    public record VisitListResponse(UUID id, UUID patientId, String patientName, String patientMpi,
-                                    UUID facilityId, VisitType visitType, ServiceStream serviceStream,
-                                    Instant visitDateTime, Instant checkedInAt) {
-    }
-
     public record VisitWithTokenResponse(VisitResponse visit, QueueTokenResponse token) {
         static VisitWithTokenResponse from(VisitService.VisitWithToken result) {
             return new VisitWithTokenResponse(VisitResponse.from(result.visit()),
                     QueueTokenResponse.from(result.token()));
+        }
+    }
+
+    public record PatientVisitResponse(UUID id, UUID facilityId, String facilityName, VisitType visitType,
+                                        ServiceStream serviceStream, Instant visitDateTime,
+                                        UUID transferredFromVisitId) {
+        static PatientVisitResponse from(VisitService.PatientVisitView v) {
+            return new PatientVisitResponse(v.visit().getId(), v.visit().getFacilityId(), v.facilityName(),
+                    v.visit().getVisitType(), v.visit().getServiceStream(), v.visit().getVisitDateTime(),
+                    v.visit().getTransferredFromVisitId());
         }
     }
 }

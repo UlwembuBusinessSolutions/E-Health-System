@@ -110,6 +110,18 @@ public class StaffController {
         return ResponseEntity.noContent().build();
     }
 
+    // The other half of "change employment status," alongside offboard()
+    // above — that one means "this person left"; this means "their contract
+    // type changed while they're still here" (a secondment ending, contract
+    // converting to permanent, etc.). Never touches status/employmentEndDate.
+    @PostMapping("/api/v1/admin/staff/{id}/employment-type")
+    public ResponseEntity<Void> updateEmploymentType(@PathVariable UUID id,
+                                                       @Valid @RequestBody UpdateEmploymentTypeRequest request,
+                                                       @AuthenticationPrincipal AuthenticatedPrincipal admin) {
+        staffService.updateEmploymentType(id, request.employmentType(), admin.userId());
+        return ResponseEntity.noContent().build();
+    }
+
     // Separate from staff creation on purpose — race/disability/background-
     // check/health-clearance data arrives later and is more sensitive than
     // the rest of the profile. Callable repeatedly as new information comes
@@ -159,6 +171,9 @@ public class StaffController {
     public record OffboardStaffRequest(@NotNull LocalDate employmentEndDate) {
     }
 
+    public record UpdateEmploymentTypeRequest(@NotNull EmploymentType employmentType) {
+    }
+
     // race/disabilityStatus deliberately not @NotBlank — declining to
     // answer has to be representable, not just "not asked yet."
     public record RecordComplianceRequest(
@@ -188,11 +203,11 @@ public class StaffController {
     // why-note), even though a typical staff member holds exactly one today.
     public record StaffRosterEntry(UUID id, String employeeNumber, String firstName, String lastName, String email,
                                     String contactNumber, List<String> roles, UUID facilityId, String status,
-                                    Instant lastLoginAt) {
+                                    Instant lastLoginAt, EmploymentType employmentType, LocalDate employmentEndDate) {
         static StaffRosterEntry from(StaffService.StaffRosterEntry entry) {
             return new StaffRosterEntry(entry.id(), entry.employeeNumber(), entry.firstName(), entry.lastName(),
                     entry.email(), entry.contactNumber(), entry.roles(), entry.facilityId(),
-                    entry.status().name(), entry.lastLoginAt());
+                    entry.status().name(), entry.lastLoginAt(), entry.employmentType(), entry.employmentEndDate());
         }
     }
 }
