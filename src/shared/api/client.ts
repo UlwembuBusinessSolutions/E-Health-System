@@ -1,4 +1,4 @@
-// Lihle | 2026-09-09 | Add PUT requests and notify the clinic provider when access is rejected so assignments can be saved and clinic access refreshed.
+import { staffSessionFetch } from "./staffSession";
 // Every module's own path already carries its full route ("/api/v1/facilities",
 // "/platform/organizations" — the platform module deliberately isn't under
 // /api/v1 at all, see SecurityConfig), so this is the origin the backend
@@ -7,7 +7,16 @@
 // VITE_API_BASE_URL to the API's own origin (e.g. http://localhost:8081)
 // only when the frontend dev server and the API aren't served from the
 // same origin.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
+
+// Exposed for the one caller that needs the backend's origin as a real,
+// absolute URL rather than a fetch path — the Microsoft SSO "start" link
+// (LoginScreen.tsx) is a plain <a href>, a full-page browser navigation
+// that has to resolve on its own, unlike every apiClient.* call below
+// which fetch() resolves against API_BASE_URL automatically.
+export function apiOrigin(): string {
+  return API_BASE_URL;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -27,19 +36,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // if left alone. Forcing application/json here would silently corrupt
   // every upload.
   const isFormData = init?.body instanceof FormData;
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await staffSessionFetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...init?.headers,
     },
+  }).catch((error: unknown) => {
+    if (error instanceof TypeError) {
+      throw new ApiError(
+        "Cannot connect to the server. Please check your connection and try again.",
+        0,
+      );
+    }
+    throw error;
   });
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    if (res.status === 403 && /not assigned to this active clinic|outside the active clinic context|Select an assigned clinic/i.test(body?.message ?? "")) {
-      window.dispatchEvent(new Event("clinic-access-denied"));
-    }
     throw new ApiError(body?.message ?? res.statusText, res.status, body?.fieldErrors);
   }
 
@@ -56,9 +70,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-// Typed client every module's api/ folder is expected to call through —
-// mock modules (facilities.ts, auth.ts, roles.ts) exist only until their
-// matching backend endpoint (Section 4 of the Phase 1 spec) ships.
+// Typed client every module's api/ folder calls through.
 // Optional `init` on each method — platform.ts needs it to attach
 // X-Platform-Key, tenant modules will need it for Authorization/X-Tenant-ID
 // the same way once they're wired up too.
@@ -72,7 +84,5 @@ export const apiClient = {
     }),
   patch: <T>(path: string, body?: unknown, init?: RequestInit) =>
     request<T>(path, { ...init, method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
-  put: <T>(path: string, body?: unknown, init?: RequestInit) =>
-    request<T>(path, { ...init, method: "PUT", body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: "DELETE" }),
 };

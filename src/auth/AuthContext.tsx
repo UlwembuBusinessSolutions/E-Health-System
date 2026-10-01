@@ -1,14 +1,22 @@
-// Lihle | 2026-09-09 | Restore the signed-in user from session storage and clear cached queries on user changes to avoid stale session data.
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import type { AuthenticatedUser } from "@/shared/api/types";
-import { clearTenantAuth, getTenantToken } from "@/shared/api/auth";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { STAFF_SESSION_ENDED } from "@/shared/api/staffSession";
 import { useQueryClient } from "@tanstack/react-query";
+import type { AuthenticatedUser } from "@/shared/api/types";
+import { clearTenantAuth, getCurrentUser, getTenantToken, revokeStaffSession } from "@/shared/api/auth";
 
 // Auth state is client state — a dedicated context, not React Query — kept
 // separate from the idle-lock timer, which is its own local clock so a
 // locked-but-not-expired session can unlock in place.
 interface AuthContextValue {
   user: AuthenticatedUser | null;
+  // True only during the one rehydration check below, right after this
+  // provider mounts. RequireAuth renders nothing while this is true rather
+  // than treating a not-yet-checked session the same as a signed-out one
+  // — without that distinction, every fresh page load (a reload, or a
+  // window.open()'d print ticket) would flash straight to the login screen
+  // before the token in sessionStorage ever got a chance to prove itself
+  // still valid.
+  isInitializing: boolean;
   setUser: (user: AuthenticatedUser | null) => void;
   logout: () => void;
 }
@@ -16,28 +24,65 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const cache = useQueryClient();
-  const [user, updateUser] = useState<AuthenticatedUser | null>(() => {
-    try { return getTenantToken() ? JSON.parse(sessionStorage.getItem("ulwembu.user") ?? "null") : null; }
-    catch { return null; }
-  });
-  function setUser(value: AuthenticatedUser | null) {
-    cache.clear();
-    if (value) sessionStorage.setItem("ulwembu.user", JSON.stringify(value));
-    else sessionStorage.removeItem("ulwembu.user");
-    updateUser(value);
-  }
+  const queryClient = useQueryClient();
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  useEffect(() => {
+    const endSession = () => {
+      setUser(null);
+      setIsInitializing(false);
+      queryClient.clear();
+    };
+    window.addEventListener(STAFF_SESSION_ENDED, endSession);
+    return () => window.removeEventListener(STAFF_SESSION_ENDED, endSession);
+  }, [queryClient]);
+
+  // A fresh page load starts this whole tree from scratch — user is always
+  // null here regardless of whether sessionStorage still holds a perfectly
+  // valid tenant token, since nothing else ever populated it. Every /app
+  // route reload, and every window.open()'d popup (TicketPrintPage's own
+  // why-note on this), hits exactly this path. Without rehydrating here, a
+  // signed-in person gets bounced to the login screen just for refreshing.
+  useEffect(() => {
+    let cancelled = false;
+    if (!getTenantToken()) {
+      setIsInitializing(false);
+      return;
+    }
+    const initialToken = getTenantToken();
+    getCurrentUser()
+      .then((rehydrated) => {
+        if (!cancelled && getTenantToken() === initialToken) setUser(rehydrated);
+      })
+      .catch(() => {
+        // Expired or invalid — clear it so nothing keeps retrying against a
+        // session that's already gone; falls through to RequireAuth's
+        // normal signed-out redirect.
+        if (!cancelled && getTenantToken() === initialToken) clearTenantAuth();
+      })
+      .finally(() => {
+        if (!cancelled) setIsInitializing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      isInitializing,
       setUser,
       logout: () => {
+        void revokeStaffSession().catch(() => {
+          console.warn("Signed out locally; the server session could not be revoked.");
+        });
         clearTenantAuth();
         setUser(null);
       },
     }),
-    [user],
+    [user, isInitializing],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

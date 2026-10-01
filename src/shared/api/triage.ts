@@ -1,214 +1,207 @@
-// Lihle | 2026-09-09 | Add assessment list and detail requests and whole-number vital validation so triage screens use stored assessments and reject invalid numeric input.
-import { apiClient } from "@/shared/api/client";
-import { tenantAuthHeaders } from "@/shared/api/auth";
+import { apiClient } from "./client";
+import { tenantAuthHeaders } from "./auth";
 
-// Types aligned with backend
-export type AvpuLevel = "ALERT" | "VOICE" | "PAIN" | "UNRESPONSIVE";
+// RECQ-US-008/009/010. Matches TriageController field-for-field.
+export type ScoringProfile = "ADULT" | "PAEDIATRIC_OLDER_CHILD" | "PAEDIATRIC_YOUNGER_CHILD";
+export type Avpu = "ALERT" | "CONFUSED" | "VOICE" | "PAIN" | "UNRESPONSIVE";
+export type Mobility = "WALKING" | "MOBILE_WITH_ASSISTANCE" | "IMMOBILE";
+export type OxygenSupport = "ROOM_AIR" | "SUPPLEMENTAL";
+export type TriageColour = "GREEN" | "YELLOW" | "ORANGE" | "RED";
+export type TriageAssessmentStatus = "ACTIVE" | "SUPERSEDED" | "ENTERED_IN_ERROR";
 
-export interface VitalSigns {
+// A small, representative starter set, not the exhaustive licensed SATS
+// discriminator list — TriageDiscriminator.java's own why-note.
+export type TriageDiscriminator =
+  | "CHEST_PAIN"
+  | "DIFFICULTY_BREATHING"
+  | "ACTIVE_BLEEDING"
+  | "SUSPECTED_STROKE"
+  | "ALTERED_MENTAL_STATUS"
+  | "SEVERE_PAIN"
+  | "SUSPECTED_FRACTURE"
+  | "SEVERE_DEHYDRATION"
+  | "PREGNANCY_COMPLICATION"
+  | "OTHER";
+
+export interface AdditionalObservations {
+  traumaPresent?: boolean | null;
+  weightKg?: number | null;
+  heightCm?: number | null;
+  glucoseMmolL?: number | null;
+  haemoglobinGdl?: number | null;
+  bmi?: number | null;
+  urineProtein?: string | null;
+  urineGlucose?: string | null;
+  urineKetones?: string | null;
+  urineBlood?: string | null;
+  urineLeukocytes?: string | null;
+  urineNitrites?: string | null;
+  pregnancyTest?: string | null;
+}
+
+export interface TriageAssessment {
+  additionalObservations?: AdditionalObservations | null;
   id: string;
   visitId: string;
-  patientId: string;
-  systolicBloodPressure: number;
-  diastolicBloodPressure: number;
-  heartRate: number;
-  temperatureCelsius: string; // BigDecimal from backend
-  respiratoryRate: number;
-  avpu: AvpuLevel;
-  capturedAt: string; // ISO 8601 Instant
+  status: TriageAssessmentStatus;
+  supersedesAssessmentId: string | null;
+  correctionReason: string | null;
+  emergencySign: boolean;
+  emergencySignNote: string | null;
+  scoringProfile: ScoringProfile;
+  profileManuallyConfirmed: boolean;
+  respiratoryRate: number | null;
+  heartRate: number | null;
+  systolicBp: number | null;
+  diastolicBp: number | null;
+  temperatureCelsius: number | null;
+  spo2Percent: number | null;
+  oxygenSupport: OxygenSupport;
+  oxygenDevice: string | null;
+  oxygenFlowLpm: number | null;
+  avpu: Avpu | null;
+  mobility: Mobility | null;
+  painScore: number | null;
+  painScale: string | null;
+  presentingComplaint: string | null;
+  outOfRangeConfirmed: boolean;
+  validationWarnings: string | null;
+  discriminators: TriageDiscriminator[];
+  tewsScore: number | null;
+  scoringVersion: string;
+  calculatedColour: TriageColour;
+  finalColour: TriageColour;
+  overrideReason: string | null;
+  overriddenByUserId: string | null;
   capturedByUserId: string;
+  observedAt: string;
+  recordedAt: string;
 }
 
-export interface CaptureVitalsPayload {
-  systolicBloodPressure: number;
-  diastolicBloodPressure: number;
-  heartRate: number;
-  temperatureCelsius: string;
-  respiratoryRate: number;
-  avpu: AvpuLevel;
-  confirmOutOfRange: boolean;
+export interface CaptureTriagePayload {
+  additionalObservations?: AdditionalObservations;
+  emergencySign: boolean;
+  emergencySignNote?: string;
+  scoringProfileOverride?: ScoringProfile;
+  respiratoryRate?: number;
+  heartRate?: number;
+  systolicBp?: number;
+  diastolicBp?: number;
+  temperatureCelsius?: number;
+  spo2Percent?: number;
+  oxygenSupport?: OxygenSupport;
+  oxygenDevice?: string;
+  oxygenFlowLpm?: number;
+  avpu?: Avpu;
+  mobility?: Mobility;
+  painScore?: number;
+  painScale?: string;
+  presentingComplaint?: string;
+  discriminators?: TriageDiscriminator[];
+  supersedesAssessmentId?: string;
+  idempotencyKey?: string;
+  confirmOutOfRange?: boolean;
+  clinicianConfirmedColour?: TriageColour;
+  colourConfirmationReason?: string;
 }
 
-export interface CaptureVitalsResponse {
-  assessment: VitalSigns;
-  priorAssessment: VitalSigns | null;
+// RECQ-US-008/009/010 — one capture. `idempotencyKey` should be a fresh
+// value per user-initiated submit (a uuid generated client-side), not
+// reused across retries with different data: the backend treats a repeat
+// of the same key on the same visit as "this exact request already
+// happened," returning the original result rather than erroring.
+export async function captureTriage(visitId: string, payload: CaptureTriagePayload): Promise<TriageAssessment> {
+  return apiClient.post<TriageAssessment>(`/api/v1/visits/${visitId}/triage`, payload, {
+    headers: tenantAuthHeaders(),
+  });
 }
 
-// Vital signs ranges for validation (client-side)
-export const VITAL_RANGES = {
-  systolicBP: {
-    min: 40,
-    max: 300,
-    normal: { min: 90, max: 180 },
-    unit: "mmHg",
-  },
-  diastolicBP: {
-    min: 20,
-    max: 200,
-    normal: { min: 60, max: 120 },
-    unit: "mmHg",
-  },
-  heartRate: {
-    min: 20,
-    max: 250,
-    normal: { min: 50, max: 120 },
-    unit: "bpm",
-  },
-  temperature: {
-    min: 30.0,
-    max: 45.0,
-    normal: { min: 35.0, max: 38.0 },
-    unit: "°C",
-  },
-  respiratoryRate: {
-    min: 5,
-    max: 80,
-    normal: { min: 12, max: 20 },
-    unit: "breaths/min",
-  },
-};
-
-/**
- * Capture vital signs for a visit (triage assessment)
- * POST /api/v1/visits/{visitId}/triage-assessments
- */
-export async function captureVitals(
-  visitId: string,
-  payload: CaptureVitalsPayload
-): Promise<CaptureVitalsResponse> {
-  return apiClient.post<CaptureVitalsResponse>(
-    `/api/v1/visits/${visitId}/triage-assessments`,
-    payload,
-    { headers: tenantAuthHeaders() }
-  );
+// Full history, oldest first — ACTIVE and corrected/superseded entries
+// alike, so the timeline shows both what's current and what changed.
+export async function getTriageHistory(visitId: string): Promise<TriageAssessment[]> {
+  const response = await apiClient.get<{ items: TriageAssessment[] }>(`/api/v1/visits/${visitId}/triage`, {
+    headers: tenantAuthHeaders(),
+  });
+  return response.items;
 }
 
-/**
- * Validate vital signs against clinically plausible ranges
- * Returns errors if values are outside acceptable ranges
- */
-export function validateVitalSigns(
-  vitals: Partial<CaptureVitalsPayload>
-): Record<string, string> {
-  const errors: Record<string, string> = {};
-  for (const field of ["systolicBloodPressure", "diastolicBloodPressure", "heartRate", "respiratoryRate"] as const) {
-    if (!Number.isInteger(vitals[field])) errors[field] = "Enter a whole number.";
-  }
-
-  if (vitals.systolicBloodPressure !== undefined) {
-    const sys = vitals.systolicBloodPressure;
-    if (sys < VITAL_RANGES.systolicBP.min || sys > VITAL_RANGES.systolicBP.max) {
-      errors.systolicBloodPressure = `Must be between ${VITAL_RANGES.systolicBP.min} and ${VITAL_RANGES.systolicBP.max} ${VITAL_RANGES.systolicBP.unit}`;
-    }
-  }
-
-  if (vitals.diastolicBloodPressure !== undefined) {
-    const dia = vitals.diastolicBloodPressure;
-    if (dia < VITAL_RANGES.diastolicBP.min || dia > VITAL_RANGES.diastolicBP.max) {
-      errors.diastolicBloodPressure = `Must be between ${VITAL_RANGES.diastolicBP.min} and ${VITAL_RANGES.diastolicBP.max} ${VITAL_RANGES.diastolicBP.unit}`;
-    }
-  }
-
-  if (
-    vitals.systolicBloodPressure !== undefined &&
-    vitals.diastolicBloodPressure !== undefined
-  ) {
-    if (vitals.diastolicBloodPressure >= vitals.systolicBloodPressure) {
-      errors.diastolicBloodPressure =
-        "Must be lower than systolic blood pressure";
-    }
-  }
-
-  if (vitals.heartRate !== undefined) {
-    const hr = vitals.heartRate;
-    if (hr < VITAL_RANGES.heartRate.min || hr > VITAL_RANGES.heartRate.max) {
-      errors.heartRate = `Must be between ${VITAL_RANGES.heartRate.min} and ${VITAL_RANGES.heartRate.max} ${VITAL_RANGES.heartRate.unit}`;
-    }
-  }
-
-  if (vitals.temperatureCelsius !== undefined) {
-    const temp = parseFloat(vitals.temperatureCelsius);
-    if (
-      isNaN(temp) ||
-      temp < VITAL_RANGES.temperature.min ||
-      temp > VITAL_RANGES.temperature.max
-    ) {
-      errors.temperatureCelsius = `Must be between ${VITAL_RANGES.temperature.min} and ${VITAL_RANGES.temperature.max} ${VITAL_RANGES.temperature.unit}`;
-    }
-  }
-
-  if (vitals.respiratoryRate !== undefined) {
-    const rr = vitals.respiratoryRate;
-    if (
-      rr < VITAL_RANGES.respiratoryRate.min ||
-      rr > VITAL_RANGES.respiratoryRate.max
-    ) {
-      errors.respiratoryRate = `Must be between ${VITAL_RANGES.respiratoryRate.min} and ${VITAL_RANGES.respiratoryRate.max} ${VITAL_RANGES.respiratoryRate.unit}`;
-    }
-  }
-
-  return errors;
+export interface PatientVitalsEntry {
+  assessment: TriageAssessment;
+  capturedByName: string | null;
 }
 
-/**
- * Check if vital signs are abnormal but plausible
- * Returns true if any vital is outside normal ranges
- */
-export function isAbnormal(vitals: Omit<CaptureVitalsPayload, "confirmOutOfRange">): boolean {
-  const sys = vitals.systolicBloodPressure;
-  const dia = vitals.diastolicBloodPressure;
-  const hr = vitals.heartRate;
-  const temp = parseFloat(vitals.temperatureCelsius);
-  const rr = vitals.respiratoryRate;
-
-  return (
-    sys < VITAL_RANGES.systolicBP.normal.min ||
-    sys > VITAL_RANGES.systolicBP.normal.max ||
-    dia < VITAL_RANGES.diastolicBP.normal.min ||
-    dia > VITAL_RANGES.diastolicBP.normal.max ||
-    hr < VITAL_RANGES.heartRate.normal.min ||
-    hr > VITAL_RANGES.heartRate.normal.max ||
-    temp < VITAL_RANGES.temperature.normal.min ||
-    temp > VITAL_RANGES.temperature.normal.max ||
-    rr < VITAL_RANGES.respiratoryRate.normal.min ||
-    rr > VITAL_RANGES.respiratoryRate.normal.max ||
-    vitals.avpu !== "ALERT"
-  );
+export interface PatientVitalsHistoryPage {
+  items: PatientVitalsEntry[];
+  page: number;
+  pageSize: number;
+  totalElements: number;
+  totalPages: number;
 }
 
-/**
- * Format vital signs for display
- */
-export interface AssessmentSummary {
-  assessment: VitalSigns;
+// The patient-level Vitals tab (PatientDetailPage) — every capture across
+// every visit this patient has ever had, each one annotated with who
+// captured it. `from`/`to` (yyyy-mm-dd) filter by observed date; either or
+// both may be omitted to leave that side unbounded. `ascending` reverses
+// the default newest-first order. Paginated the same shape listQueue()
+// below already uses — page/pageSize in, items/page/pageSize/totalElements/
+// totalPages out.
+export async function getPatientVitalsHistory(
+  patientId: string,
+  filters?: { from?: string; to?: string; ascending?: boolean; page?: number; pageSize?: number },
+): Promise<PatientVitalsHistoryPage> {
+  const params = new URLSearchParams();
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
+  if (filters?.ascending) params.set("ascending", "true");
+  params.set("page", String(filters?.page ?? 0));
+  params.set("pageSize", String(filters?.pageSize ?? 10));
+  return apiClient.get<PatientVitalsHistoryPage>(`/api/v1/patients/${patientId}/vitals?${params.toString()}`, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export interface VitalsAssessmentDetail {
+  assessment: TriageAssessment;
+  capturedByName: string | null;
   patientName: string;
   patientMpi: string;
 }
 
-export async function listTriageAssessments(): Promise<AssessmentSummary[]> {
-  const response = await apiClient.get<{ items: AssessmentSummary[] }>("/api/v1/triage-assessments", { headers: tenantAuthHeaders() });
-  return response.items;
+// VitalsPrintPage — one assessment by id. Unlike PatientVitalsEntry above,
+// this carries the patient's own name/MPI: the print page opens in a fresh
+// popup with no surrounding page to show whose record it is, so that has to
+// travel with the assessment itself (TriageService.getAssessment()'s own
+// why-note on why this is a separate shape from the list endpoint).
+export async function getVitalsAssessment(assessmentId: string): Promise<VitalsAssessmentDetail> {
+  return apiClient.get<VitalsAssessmentDetail>(`/api/v1/triage/${assessmentId}`, { headers: tenantAuthHeaders() });
 }
 
-export function getTriageAssessment(id: string): Promise<CaptureVitalsResponse> {
-  return apiClient.get<CaptureVitalsResponse>(`/api/v1/triage-assessments/${id}`, { headers: tenantAuthHeaders() });
+export async function getLatestTriage(visitId: string): Promise<TriageAssessment | null> {
+  const response = await apiClient.get<{ item: TriageAssessment | null }>(`/api/v1/visits/${visitId}/triage/latest`, {
+    headers: tenantAuthHeaders(),
+  });
+  return response.item;
 }
 
-export function formatVitals(vitals: VitalSigns): Record<string, string> {
-  return {
-    systolicBP: `${vitals.systolicBloodPressure} mmHg`,
-    diastolicBP: `${vitals.diastolicBloodPressure} mmHg`,
-    bloodPressure: `${vitals.systolicBloodPressure}/${vitals.diastolicBloodPressure} mmHg`,
-    heartRate: `${vitals.heartRate} bpm`,
-    temperature: `${vitals.temperatureCelsius} °C`,
-    respiratoryRate: `${vitals.respiratoryRate} breaths/min`,
-    avpu: vitals.avpu,
-    capturedAt: new Date(vitals.capturedAt).toLocaleDateString("en-ZA", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-  };
+// A pure mistake (wrong patient, fat-fingered) with nothing to replace —
+// unlike capturing again with supersedesAssessmentId set, which corrects
+// by replacing.
+export async function markTriageEnteredInError(assessmentId: string, reason: string): Promise<TriageAssessment> {
+  return apiClient.post<TriageAssessment>(
+    `/api/v1/triage/${assessmentId}/entered-in-error`,
+    { reason },
+    { headers: tenantAuthHeaders() },
+  );
+}
+
+export async function overrideTriageColour(
+  assessmentId: string,
+  finalColour: TriageColour,
+  reason: string,
+): Promise<TriageAssessment> {
+  return apiClient.post<TriageAssessment>(
+    `/api/v1/triage/${assessmentId}/override`,
+    { finalColour, reason },
+    { headers: tenantAuthHeaders() },
+  );
 }

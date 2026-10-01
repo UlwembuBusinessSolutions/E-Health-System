@@ -1,21 +1,10 @@
-// Lihle | 2026-09-09 | Persist the active clinic for this session, send its request header, and reset clinic and user state during authentication changes to avoid stale context.
 import type { AuthenticatedUser } from "./types";
 import { apiClient } from "./client";
+import { clearStaffSessionNotice } from "./staffSession";
 
-// login() is wired to the real backend; requestPasswordReset()/resetPassword()
-// below are still TEMP mocks — out of scope for the staff-creation/photo/
-// logo-upload testing pass this was wired up for. Swap those two the same
-// way once needed.
 
 const TENANT_TOKEN_KEY = "ulwembu.tenantToken";
 const TENANT_SLUG_KEY = "ulwembu.tenantSlug";
-const CLINIC_KEY = "ulwembu.activeClinic";
-
-export function getActiveClinicId(): string | null { return sessionStorage.getItem(CLINIC_KEY); }
-export function setActiveClinicId(id: string | null): void {
-  if (id) sessionStorage.setItem(CLINIC_KEY, id);
-  else sessionStorage.removeItem(CLINIC_KEY);
-}
 
 // sessionStorage, not localStorage — same reasoning as the platform token
 // store (shared/api/platform.ts): clears when the tab closes rather than
@@ -26,6 +15,7 @@ export function getTenantToken(): string | null {
 
 function setTenantToken(token: string): void {
   sessionStorage.setItem(TENANT_TOKEN_KEY, token);
+  clearStaffSessionNotice();
 }
 
 export function getTenantSlug(): string | null {
@@ -50,8 +40,14 @@ function setTenantSlug(slug: string): void {
 // which org signs in next, so nothing goes stale.
 export function clearTenantAuth(): void {
   sessionStorage.removeItem(TENANT_TOKEN_KEY);
-  sessionStorage.removeItem("ulwembu.user");
-  setActiveClinicId(null);
+}
+
+// Capture the session headers before the UI clears its local credentials.
+export async function revokeStaffSession(): Promise<void> {
+  if (!getTenantToken()) return;
+  await apiClient.post<void>("/api/v1/auth/logout", undefined, {
+    headers: tenantAuthHeaders(),
+  });
 }
 
 // Every other tenant-scoped module (staff.ts, organization.ts) sends these
@@ -67,7 +63,6 @@ export function tenantAuthHeaders(): HeadersInit {
   return {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(slug ? { "X-Tenant-ID": slug } : {}),
-    ...(getActiveClinicId() ? { "X-Clinic-ID": getActiveClinicId()! } : {}),
   };
 }
 
@@ -94,10 +89,32 @@ export interface LoginPayload {
   tenantSlug: string;
 }
 
+interface UserSummary {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
 interface LoginResponse {
   accessToken: string;
   expiresAt: string;
-  user: { id: string; email: string; firstName: string; lastName: string };
+  user: UserSummary;
+}
+
+// Shared by login() and getCurrentUser() below — the real LoginResponse/
+// UserSummary has no role field at all (the known drift api-reference.html
+// already flags, "Tenant auth" section); both read it from the token's own
+// roles claim instead of leaving it hardcoded.
+function buildAuthenticatedUser(summary: UserSummary, token: string): AuthenticatedUser {
+  const roles = decodeRolesFromToken(token);
+  return {
+    id: summary.id,
+    email: summary.email,
+    firstName: summary.firstName,
+    lastName: summary.lastName,
+    role: roles.includes("ORG_ADMIN") ? "ORG_ADMIN" : (roles[0] ?? "STAFF"),
+  };
 }
 
 export async function login(payload: LoginPayload): Promise<AuthenticatedUser> {
@@ -108,19 +125,35 @@ export async function login(payload: LoginPayload): Promise<AuthenticatedUser> {
     { headers: { "X-Tenant-ID": payload.tenantSlug } },
   );
   setTenantToken(response.accessToken);
-  setActiveClinicId(null);
+  return buildAuthenticatedUser(response.user, response.accessToken);
+}
 
-  const roles = decodeRolesFromToken(response.accessToken);
-  return {
-    id: response.user.id,
-    email: response.user.email,
-    firstName: response.user.firstName,
-    lastName: response.user.lastName,
-    // The real LoginResponse has no role field at all — this is the known
-    // drift api-reference.html already flags (Section "Tenant auth"). Read
-    // from the token's own roles claim instead of leaving this hardcoded.
-    role: roles.includes("ORG_ADMIN") ? "ORG_ADMIN" : (roles[0] ?? "STAFF"),
-  };
+// SsoCallbackPage's own counterpart to login() above — by the time that
+// page runs, MicrosoftSsoService has already authenticated the person and
+// issued a real token, handed over as a query param on the redirect back
+// from the backend rather than as a JSON response body (there was no fetch
+// call for a response to belong to; this followed a full-page Microsoft
+// sign-in redirect). Stores it exactly the same way login() does, then
+// round-trips through getCurrentUser() to get the name/email login()'s own
+// response carries directly.
+export async function establishSsoSession(tenantSlug: string, accessToken: string): Promise<AuthenticatedUser> {
+  setTenantSlug(tenantSlug);
+  setTenantToken(accessToken);
+  return getCurrentUser();
+}
+
+// AuthProvider's own rehydration on a fresh page load (AuthContext.tsx's
+// own why-note) — a stored tenant token proves someone was signed in, but
+// carries no name/email of its own (JwtService only embeds sub/tenant/
+// roles/tokenVersion), so this round-trips to the server for the same
+// identity login() already returned. Throws (ApiError, typically 401) if
+// the token's expired or invalid — the caller's job to catch that and
+// clear it, not this function's.
+export async function getCurrentUser(): Promise<AuthenticatedUser> {
+  const token = getTenantToken();
+  if (!token) throw new Error("No stored session to rehydrate");
+  const summary = await apiClient.get<UserSummary>("/api/v1/auth/me", { headers: tenantAuthHeaders() });
+  return buildAuthenticatedUser(summary, token);
 }
 
 // Real from here on — PasswordResetService (api-reference.html, "Tenant

@@ -4,8 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-//import { ArrowLeft, Building2, Camera, Check, ClipboardList, Copy, Hospital, KeyRound, Mail, Pencil, Plus, Store, Trash2, UserPlus, X } from "lucide-react";
-import { ArrowLeft, Building2, Camera, Check, ClipboardList, Copy, Hospital, KeyRound, Mail, Pencil, Plus, Store, Trash2, UserPlus, X, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Building2, Camera, Check, Copy, Hospital, KeyRound, Mail, Pencil, Pill, Plus, Store, Trash2, UserPlus, X } from "lucide-react";
 import {
   getOrganization,
   listOrganizationAdmins,
@@ -18,11 +17,9 @@ import {
   updateOrganization,
   listOrganizationModules,
   toggleOrganizationModule,
-  listOrganizationAudit,
   listOrganizationFacilities,
-  listFacilityModules,
-  toggleFacilityModule,
-  type FacilityModuleEntitlement,
+  getOrganizationMailSettings,
+  updateOrganizationMailSettings,
   type ModulePhase,
   type OrganizationSector,
   type FacilityType,
@@ -31,10 +28,14 @@ import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
 import { Input } from "@/shared/components/Input";
+import { PasswordInput } from "@/shared/components/PasswordInput";
 import { Select } from "@/shared/components/Select";
 import { Switch } from "@/shared/components/Switch";
 import { StatusPill } from "@/shared/components/StatusPill";
+import { FormRow } from "@/shared/components/FormRow";
 import { SectorTag, SECTOR_OPTIONS } from "./components/SectorTag";
+
+import { OrganizationAuditTrail } from "./OrganizationAuditTrail";
 
 // Slug isn't part of this — see the backend's own why-note (Organization.rename())
 // on why that one stays permanent.
@@ -44,27 +45,31 @@ const editDetailsSchema = z.object({
 });
 type EditDetailsValues = z.infer<typeof editDetailsSchema>;
 
+// Same shape as settings/OrganizationSettingsPage.tsx's own schema — that
+// one is an org admin editing their own tenant's SMTP account,
+// self-service; this is the platform team doing the same thing on a
+// tenant's behalf (support requests, an admin who isn't set up yet). Kept
+// as two copies rather than a shared module: the tenant and platform apps
+// don't otherwise share form code, same call the rest of this codebase
+// already makes between core.tenant's two mail-settings controllers.
+const mailSettingsSchema = z.object({
+  host: z.string().trim().min(1, "SMTP host is required").max(255),
+  port: z
+    .string()
+    .trim()
+    .min(1, "Port is required")
+    .refine((value) => {
+      const port = Number(value);
+      return Number.isInteger(port) && port > 0 && port <= 65535;
+    }, "Enter a valid port number"),
+  username: z.string().trim().min(1, "Username is required").max(255),
+  password: z.string().max(255),
+  fromAddress: z.string().trim().min(1, "\"From\" address is required").email("Enter a valid email address"),
+});
+type MailSettingsValues = z.infer<typeof mailSettingsSchema>;
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-ZA", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-// SCREAMING_SNAKE_CASE (AuditLog.action's own convention) -> "Sentence
-// case" for display — AuditPage.tsx keeps its own copy of this rather than
-// a shared util, same call as duplicating formatDate above: two three-line
-// pure functions, not worth a shared module for.
-function actionLabel(action: string): string {
-  const words = action.toLowerCase().split("_");
-  return words.map((word, i) => (i === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word)).join(" ");
 }
 
 function initials(firstName: string, lastName: string): string {
@@ -75,12 +80,14 @@ const FACILITY_TYPE_ICON: Record<FacilityType, typeof Building2> = {
   CLINIC: Building2,
   HOSPITAL: Hospital,
   STORE: Store,
+  PHARMACY: Pill,
 };
 
 const FACILITY_TYPE_LABEL: Record<FacilityType, string> = {
   CLINIC: "Clinic",
   HOSPITAL: "Hospital",
   STORE: "Store",
+  PHARMACY: "Pharmacy",
 };
 
 function CopyButton({ text }: { text: string }) {
@@ -134,10 +141,8 @@ export function OrganizationDetailPage() {
   const [moduleError, setModuleError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
-  const [expandedFacilityId, setExpandedFacilityId] = useState<string | null>(null);
-  const [facilityModuleError, setFacilityModuleError] = useState<string | null>(null);
-  const [togglingFacilityModule, setTogglingFacilityModule] = useState<string | null>(null);
-
+  const [isEditingMail, setIsEditingMail] = useState(false);
+  const [mailError, setMailError] = useState<string | null>(null);
 
   const orgQuery = useQuery({
     queryKey: ["platform", "organizations", organizationId],
@@ -174,6 +179,53 @@ export function OrganizationDetailPage() {
     },
   });
 
+  const mailSettingsQuery = useQuery({
+    queryKey: ["platform", "organizations", organizationId, "mail-settings"],
+    queryFn: () => getOrganizationMailSettings(organizationId),
+    enabled: !!organizationId,
+  });
+
+  const {
+    register: registerMail,
+    handleSubmit: handleMailSubmit,
+    reset: resetMailForm,
+    formState: { errors: mailErrors, isSubmitting: isSubmittingMail },
+  } = useForm<MailSettingsValues>({
+    resolver: zodResolver(mailSettingsSchema),
+    defaultValues: { host: "", port: "587", username: "", password: "", fromAddress: "" },
+  });
+
+  const startEditingMail = () => {
+    if (!mailSettingsQuery.data) return;
+    resetMailForm({
+      host: mailSettingsQuery.data.host ?? "",
+      port: mailSettingsQuery.data.port ? String(mailSettingsQuery.data.port) : "587",
+      username: mailSettingsQuery.data.username ?? "",
+      password: "",
+      fromAddress: mailSettingsQuery.data.fromAddress ?? "",
+    });
+    setMailError(null);
+    setIsEditingMail(true);
+  };
+
+  const updateMailSettings = useMutation({
+    mutationFn: (values: MailSettingsValues) =>
+      updateOrganizationMailSettings(organizationId, {
+        host: values.host,
+        port: Number(values.port),
+        username: values.username,
+        password: values.password || undefined,
+        fromAddress: values.fromAddress,
+      }),
+    onSuccess: () => {
+      setIsEditingMail(false);
+      queryClient.invalidateQueries({ queryKey: ["platform", "organizations", organizationId, "mail-settings"] });
+    },
+    onError: (error) => {
+      setMailError(error instanceof ApiError ? error.message : "Couldn't save those settings. Try again.");
+    },
+  });
+
   const adminsQuery = useQuery({
     queryKey: ["platform", "organizations", organizationId, "admins"],
     queryFn: () => listOrganizationAdmins(organizationId),
@@ -184,36 +236,6 @@ export function OrganizationDetailPage() {
     queryKey: ["platform", "organizations", organizationId, "facilities"],
     queryFn: () => listOrganizationFacilities(organizationId),
     enabled: !!organizationId,
-  });
-
-
-  // SADM-US-011 — only fetched once a clinic's own modules panel is
-  // opened, not for every clinic up front: a tenant can have many clinics,
-  // and nobody needs this data until they actually expand one.
-  const facilityModulesQuery = useQuery({
-    queryKey: ["platform", "organizations", organizationId, "facilities", expandedFacilityId, "modules"],
-    queryFn: () => listFacilityModules(organizationId, expandedFacilityId as string),
-    enabled: !!expandedFacilityId,
-  });
-
-  const toggleFacilityModuleMutation = useMutation({
-    mutationFn: ({ facilityId, code, enabled }: { facilityId: string; code: string; enabled: boolean }) =>
-      toggleFacilityModule(organizationId, facilityId, code, enabled),
-    onMutate: ({ code }) => {
-      setFacilityModuleError(null);
-      setTogglingFacilityModule(code);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["platform", "organizations", organizationId, "facilities", expandedFacilityId, "modules"],
-      });
-    },
-    onError: (error) => {
-      setFacilityModuleError(
-        error instanceof ApiError ? error.message : "Couldn't update that module for this clinic. Try again.",
-      );
-    },
-    onSettled: () => setTogglingFacilityModule(null),
   });
 
   const toggleStatus = useMutation({
@@ -306,17 +328,10 @@ export function OrganizationDetailPage() {
     },
   });
 
-  const auditQuery = useQuery({
-    queryKey: ["platform", "organizations", organizationId, "audit"],
-    queryFn: () => listOrganizationAudit(organizationId),
-    enabled: !!organizationId,
-  });
-
   const admins = adminsQuery.data ?? [];
   const facilities = facilitiesQuery.data ?? [];
   const modules = modulesQuery.data ?? [];
   const enabledCount = modules.filter((m) => m.enabled).length;
-  const auditEntries = auditQuery.data ?? [];
 
   return (
     <div>
@@ -441,6 +456,132 @@ export function OrganizationDetailPage() {
             {(uploadLogo.isPending || logoError) && (
               <p className={`mt-3 text-[12.5px] ${logoError ? "text-danger-600" : "text-text-secondary"}`}>
                 {logoError ?? "Uploading logo…"}
+              </p>
+            )}
+          </Card>
+
+          <Card className="mb-6 p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2.5">
+                <span className="flex size-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                  <Mail className="size-[18px]" aria-hidden />
+                </span>
+                <div>
+                  <h2 className="text-[14.5px] font-semibold text-text-primary">Email settings</h2>
+                  <p className="text-[12.5px] text-text-secondary">
+                    The SMTP account this organization sends every outbound email through — account creation,
+                    password resets, and sign-in related notices.
+                  </p>
+                </div>
+              </div>
+              {!isEditingMail && mailSettingsQuery.data && (
+                <button
+                  type="button"
+                  onClick={startEditingMail}
+                  className="flex size-8 shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors duration-150 hover:bg-surface-sunken hover:text-text-primary"
+                  aria-label="Edit email settings"
+                  title="Edit email settings"
+                >
+                  <Pencil className="size-3.5" aria-hidden />
+                </button>
+              )}
+            </div>
+
+            {mailSettingsQuery.isLoading ? (
+              <p className="mt-4 text-[13.5px] text-text-secondary">Loading…</p>
+            ) : isEditingMail ? (
+              <form
+                onSubmit={handleMailSubmit((values) => updateMailSettings.mutate(values))}
+                noValidate
+                className="mt-4 flex flex-col gap-4"
+              >
+                <FormRow>
+                  <Input
+                    label="SMTP host"
+                    required
+                    placeholder="smtp.yourprovider.example"
+                    autoComplete="off"
+                    error={mailErrors.host?.message}
+                    {...registerMail("host")}
+                  />
+                  <Input
+                    label="Port"
+                    required
+                    inputMode="numeric"
+                    placeholder="587"
+                    autoComplete="off"
+                    error={mailErrors.port?.message}
+                    {...registerMail("port")}
+                  />
+                </FormRow>
+                <FormRow>
+                  <Input
+                    label="Username"
+                    required
+                    placeholder="noreply@yourcompany.example"
+                    autoComplete="off"
+                    error={mailErrors.username?.message}
+                    {...registerMail("username")}
+                  />
+                  <PasswordInput
+                    label="Password"
+                    autoComplete="new-password"
+                    hint={mailSettingsQuery.data?.passwordSet ? "Leave blank to keep the current password." : undefined}
+                    error={mailErrors.password?.message}
+                    {...registerMail("password")}
+                  />
+                </FormRow>
+                <Input
+                  label={'"From" address'}
+                  required
+                  type="email"
+                  placeholder="noreply@yourcompany.example"
+                  autoComplete="off"
+                  error={mailErrors.fromAddress?.message}
+                  {...registerMail("fromAddress")}
+                />
+                {mailError && (
+                  <p role="alert" className="text-[12.5px] text-danger-600">
+                    {mailError}
+                  </p>
+                )}
+                <div className="flex items-center gap-3">
+                  <Button type="submit" loading={isSubmittingMail || updateMailSettings.isPending}>
+                    Save email settings
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => setIsEditingMail(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            ) : mailSettingsQuery.data?.host ? (
+              <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 text-[13.5px] sm:grid-cols-2">
+                <div>
+                  <dt className="text-text-secondary">SMTP host</dt>
+                  <dd className="text-text-primary">
+                    {mailSettingsQuery.data.host}:{mailSettingsQuery.data.port}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-text-secondary">Username</dt>
+                  <dd className="text-text-primary">{mailSettingsQuery.data.username}</dd>
+                </div>
+                <div>
+                  <dt className="text-text-secondary">Password</dt>
+                  <dd className="text-text-primary">{mailSettingsQuery.data.passwordSet ? "Set" : "Not set"}</dd>
+                </div>
+                <div>
+                  <dt className="text-text-secondary">"From" address</dt>
+                  <dd className="text-text-primary">{mailSettingsQuery.data.fromAddress}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="mt-4 text-[13.5px] text-text-secondary">
+                Not configured yet — this organization's emails send through the platform's default account.{" "}
+                <button type="button" onClick={startEditingMail} className="font-medium text-brand-600 hover:underline">
+                  Set it up
+                </button>
+                .
               </p>
             )}
           </Card>
@@ -603,55 +744,27 @@ export function OrganizationDetailPage() {
               )}
               {facilities.map((facility) => {
                 const Icon = FACILITY_TYPE_ICON[facility.type];
-                const isExpanded = expandedFacilityId === facility.id;
                 return (
-                  <div key={facility.id}>
-                    <div className="flex items-center justify-between gap-3 px-5 py-3.5">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink-100 text-ink-600">
-                          <Icon className="size-4" aria-hidden />
-                        </span>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="truncate text-[13.5px] font-medium text-text-primary">{facility.name}</p>
-                            <StatusPill tone={facility.active ? "success" : "neutral"}>
-                              {facility.active ? "Active" : "Inactive"}
-                            </StatusPill>
-                          </div>
-                          <p className="truncate text-[12.5px] text-text-secondary">
-                            {facility.code} · {FACILITY_TYPE_LABEL[facility.type]}
-                            {facility.address ? ` · ${facility.address}` : ""}
-                          </p>
+                  <div key={facility.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink-100 text-ink-600">
+                        <Icon className="size-4" aria-hidden />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-[13.5px] font-medium text-text-primary">{facility.name}</p>
+                          <StatusPill tone={facility.active ? "success" : "neutral"}>
+                            {facility.active ? "Active" : "Inactive"}
+                          </StatusPill>
                         </div>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        {facility.operatingHours && (
-                          <span className="text-[12px] text-text-secondary">{facility.operatingHours}</span>
-                        )}
-                        <Button
-                          variant="secondary"
-                          size="md"
-                          icon={isExpanded ? <ChevronUp className="size-3.5" aria-hidden /> : <ChevronDown className="size-3.5" aria-hidden />}
-                          onClick={() => {
-                            setFacilityModuleError(null);
-                            setExpandedFacilityId(isExpanded ? null : facility.id);
-                          }}
-                        >
-                          Modules
-                        </Button>
+                        <p className="truncate text-[12.5px] text-text-secondary">
+                          {facility.code} · {FACILITY_TYPE_LABEL[facility.type]}
+                          {facility.address ? ` · ${facility.address}` : ""}
+                        </p>
                       </div>
                     </div>
-
-                    {isExpanded && (
-                      <FacilityModulesPanel
-                        modules={facilityModulesQuery.data}
-                        isLoading={facilityModulesQuery.isLoading}
-                        error={facilityModuleError}
-                        togglingCode={togglingFacilityModule}
-                        onToggle={(code, enabled) =>
-                          toggleFacilityModuleMutation.mutate({ facilityId: facility.id, code, enabled })
-                        }
-                      />
+                    {facility.operatingHours && (
+                      <span className="shrink-0 text-[12px] text-text-secondary">{facility.operatingHours}</span>
                     )}
                   </div>
                 );
@@ -714,148 +827,12 @@ export function OrganizationDetailPage() {
             )}
           </Card>
 
-          <Card className="mt-6 overflow-hidden p-0">
-            <div className="border-b border-border-subtle px-5 py-4">
-              <h2 className="text-[14.5px] font-semibold text-text-primary">Audit trail</h2>
-              <p className="text-[12.5px] text-text-secondary">This organization's own activity — its staff signing in and updating records.</p>
-            </div>
-
-            {auditQuery.isLoading ? (
-              <p className="px-5 py-8 text-center text-[13.5px] text-text-secondary">Loading audit trail…</p>
-            ) : auditEntries.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
-                <ClipboardList className="size-5 text-text-secondary" aria-hidden />
-                <p className="text-[13.5px] text-text-secondary">No activity recorded for this organization yet.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border-subtle">
-                {auditEntries.map((entry) => (
-                  <div key={entry.id} className="flex flex-col gap-1 px-5 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <span className="shrink-0 rounded bg-brand-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-brand-700">
-                          {actionLabel(entry.action)}
-                        </span>
-                        <span className="truncate text-[13px] text-text-secondary">
-                          {entry.actorName} · {entry.entityType}
-                        </span>
-                      </div>
-                      <span className="shrink-0 font-mono text-[12.5px] text-text-secondary tabular-nums">
-                        {formatDateTime(entry.createdAt)}
-                      </span>
-                    </div>
-                    {(entry.beforeValue || entry.afterValue) && (
-                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 pl-0.5 font-mono text-[11px] text-text-secondary">
-                        {entry.beforeValue && <span>before: {entry.beforeValue}</span>}
-                        {entry.afterValue && <span>after: {entry.afterValue}</span>}
-                      </div>
-                    )}
-                    {(entry.ipAddress || entry.deviceSignature) && (
-                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 pl-0.5 font-mono text-[11px] text-text-secondary">
-                        {entry.ipAddress && <span>ip: {entry.ipAddress}</span>}
-                        {entry.deviceSignature && (
-                          <span className="max-w-[420px] truncate" title={entry.deviceSignature}>
-                            device: {entry.deviceSignature}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
+          <OrganizationAuditTrail
+            key={organizationId}
+            organizationId={organizationId}
+            organizationName={orgQuery.data.displayName}
+          />
         </>
-      )}
-    </div>
-  );
-}
-
-
-// SADM-US-011's own panel, rendered inline under an expanded clinic row.
-// Deliberately reuses PHASE_ORDER/PHASE_LABELS/Switch — same visual
-// language as the tenant-level Modules card above, just one clinic's
-// picture instead of the whole organization's. A module the tenant
-// hasn't switched on renders its Switch disabled with an explanatory
-// caption rather than letting the click through and surfacing the 409
-// only after the fact — the AC's own "explains the tenant-level
-// entitlement must be enabled first" is satisfied before the click, not
-// just in the error banner after it.
-function FacilityModulesPanel({
-  modules,
-  isLoading,
-  error,
-  togglingCode,
-  onToggle,
-}: {
-  modules: FacilityModuleEntitlement[] | undefined;
-  isLoading: boolean;
-  error: string | null;
-  togglingCode: string | null;
-  onToggle: (code: string, enabled: boolean) => void;
-}) {
-  return (
-    <div className="border-t border-border-subtle bg-surface-sunken px-5 py-4">
-      {error && (
-        <p role="alert" className="mb-3 text-[12.5px] text-danger-600">
-          {error}
-        </p>
-      )}
-      {isLoading ? (
-        <p className="text-[13px] text-text-secondary">Loading this clinic's modules…</p>
-      ) : !modules || modules.length === 0 ? (
-        <p className="text-[13px] text-text-secondary">Couldn't load this clinic's modules.</p>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {PHASE_ORDER.map((phase) => {
-            const phaseModules = modules.filter((m) => m.phase === phase);
-            if (phaseModules.length === 0) return null;
-            return (
-              <div key={phase}>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-secondary">
-                  {PHASE_LABELS[phase]}
-                </p>
-                <div className="grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
-                  {phaseModules.map((mod) => (
-                    <div key={mod.code} className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="shrink-0 rounded bg-brand-50 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-brand-700">
-                            {mod.code}
-                          </span>
-                          <span className="truncate text-[13px] text-text-primary">{mod.displayName}</span>
-                          {mod.overridden && !mod.foundation && (
-                            <span
-                              className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-medium text-amber-600"
-                              title="This clinic's setting differs from its organization's default"
-                            >
-                              Overridden
-                            </span>
-                          )}
-                        </div>
-                        {!mod.foundation && !mod.tenantEnabled && (
-                          <p className="mt-0.5 text-[11.5px] text-text-secondary">
-                            Off at the organization level — enable it there first.
-                          </p>
-                        )}
-                      </div>
-                      {mod.foundation ? (
-                        <span className="shrink-0 text-[11px] font-medium text-text-secondary">Always on</span>
-                      ) : (
-                        <Switch
-                          checked={mod.enabled}
-                          disabled={togglingCode === mod.code || (!mod.tenantEnabled && !mod.enabled)}
-                          onChange={(enabled) => onToggle(mod.code, enabled)}
-                          label={`${mod.enabled ? "Disable" : "Enable"} ${mod.displayName} for this clinic`}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       )}
     </div>
   );

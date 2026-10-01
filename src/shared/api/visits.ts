@@ -1,4 +1,3 @@
-// Lihle | 2026-09-09 | Normalize array and paginated visit responses and reject malformed data so visit selectors can load supported backend responses.
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
 import type { QueueToken } from "./queue";
@@ -14,13 +13,10 @@ export type ServiceStream = "GENERAL" | "CHRONIC_CARE" | "MATERNAL_CHILD" | "OCC
 export interface Visit {
   id: string;
   patientId: string;
-  patientName: string;
-  patientMpi: string;
   facilityId: string;
   visitType: VisitType;
   serviceStream: ServiceStream;
   visitDateTime: string;
-  checkedInAt: string;
 }
 
 export interface CreateVisitPayload {
@@ -42,18 +38,22 @@ export async function createVisit(payload: CreateVisitPayload): Promise<VisitWit
   return apiClient.post<VisitWithToken>("/api/v1/visits", payload, { headers: tenantAuthHeaders() });
 }
 
-export async function listVisits(): Promise<Visit[]> {
-  const response = await apiClient.get<Visit[] | { items?: Visit[]; content?: Visit[] }>(
-    "/api/v1/visits",
-    { headers: tenantAuthHeaders() },
-  );
-  const visits = Array.isArray(response) ? response : response?.items ?? response?.content;
-  if (!Array.isArray(visits)) {
-    throw new Error("The server returned an invalid visit list. Please reload visits.");
-  }
-  return visits;
+// The patient record's Visits tab — every visit this patient has ever had,
+// across every facility, newest first. facilityName travels with each row
+// (resolved server-side) so the page never has to look it up itself.
+export interface PatientVisit {
+  id: string;
+  facilityId: string;
+  facilityName: string | null;
+  visitType: VisitType;
+  serviceStream: ServiceStream;
+  visitDateTime: string;
+  transferredFromVisitId: string | null;
 }
 
-export async function getVisit(id: string): Promise<Visit> {
-  return apiClient.get<Visit>(`/api/v1/visits/${id}`, { headers: tenantAuthHeaders() });
+export async function getPatientVisitHistory(patientId: string): Promise<PatientVisit[]> {
+  const response = await apiClient.get<{ items: PatientVisit[] }>(`/api/v1/patients/${patientId}/visits`, {
+    headers: tenantAuthHeaders(),
+  });
+  return response.items;
 }
