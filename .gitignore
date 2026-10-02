@@ -7,7 +7,9 @@ data/
 .vscode/
 .DS_Store
 
-# Local/build files
-.m2/
-target/
-.vscode/
+# Database dumps
+*.sql
+
+# Application logs
+*.log
+api-log.txt

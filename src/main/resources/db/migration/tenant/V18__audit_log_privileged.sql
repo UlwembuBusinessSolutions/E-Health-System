@@ -1,1 +1,0 @@
-ALTER TABLE audit_log ADD COLUMN privileged BOOLEAN NOT NULL DEFAULT false;

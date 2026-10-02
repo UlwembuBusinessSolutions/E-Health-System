@@ -1,7 +1,7 @@
 package co.ehealth.platform.core.security;
 
 import co.ehealth.platform.identity.UserRepository;
-import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.patient.PatientAccountRepository;
 import co.ehealth.platform.platform.PlatformOperatorRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -37,17 +37,20 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(
-            HttpSecurity http, JwtService jwtService, UserRepository userRepository, AuditLogService auditLogService,
+            HttpSecurity http, JwtService jwtService, UserRepository userRepository,
             PlatformJwtService platformJwtService, PlatformOperatorRepository platformOperatorRepository,
+            PatientJwtService patientJwtService, PatientAccountRepository patientAccountRepository,
             SessionActivityStore activityStore, Clock clock,
             @Value("${app.idle-lock.timeout-minutes}") long idleTimeoutMinutes,
             CorsConfigurationSource corsConfigurationSource) throws Exception {
 
-        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository, auditLogService);
+        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository, activityStore, clock);
         IdleLockFilter idleLockFilter =
                 new IdleLockFilter(activityStore, Duration.ofMinutes(idleTimeoutMinutes), clock);
         PlatformJwtAuthenticationFilter platformJwtFilter =
                 new PlatformJwtAuthenticationFilter(platformJwtService, platformOperatorRepository);
+        PatientJwtAuthenticationFilter patientJwtFilter =
+                new PatientJwtAuthenticationFilter(patientJwtService, patientAccountRepository);
 
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource))
@@ -55,14 +58,21 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/password-reset/**",
-                        "/actuator/health").permitAll()
+                        "/api/v1/auth/sso/**", "/api/v1/public/**", "/actuator/health").permitAll()
                 // Getting a token in the first place can't require one.
-                .requestMatchers("/platform/auth/login", "/platform/auth/register").permitAll()
+                .requestMatchers("/platform/auth/login").permitAll()
+                // Same reasoning, patient portal's own two pre-auth
+                // endpoints — must be listed before the broader
+                // /api/v1/patient/** rule below, since Spring Security
+                // matches requestMatchers in declaration order.
+                .requestMatchers("/api/v1/patient/register", "/api/v1/patient/auth/login").permitAll()
                 // Everything else under /platform/** needs a real,
                 // ACTIVE, correctly-signed operator token — PlatformJwtAuthenticationFilter
                 // is what actually populates that Authentication; this
                 // just says what it has to look like once it's there.
                 .requestMatchers("/platform/**").hasRole("PLATFORM_OPERATOR")
+                // Same shape, PatientJwtAuthenticationFilter populates it.
+                .requestMatchers("/api/v1/patient/**").hasRole("PATIENT")
                 .requestMatchers("/api/v1/admin/**").hasRole("ORG_ADMIN")
                 // Creating a facility is an admin action even though the
                 // path isn't under /api/v1/admin/** — GET on the same path
@@ -79,6 +89,7 @@ public class SecurityConfig {
                 // and closes an unnecessary public-data exposure.
                 .anyRequest().authenticated())
             .addFilterBefore(platformJwtFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(patientJwtFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterAfter(idleLockFilter, JwtAuthenticationFilter.class);
 
@@ -94,12 +105,21 @@ public class SecurityConfig {
         // genuinely RESTful "edit this resource" endpoint in the app;
         // without it here, a real browser's preflight for that call would
         // reject PATCH before the request ever reached the filter chain.
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE"));
         // X-Platform-Key listed alongside the tenant headers — a header not
         // listed here gets stripped by the browser's CORS preflight before
         // it ever reaches PlatformJwtAuthenticationFilter, which would look
-        // identical to a missing token from the server's side.
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Tenant-ID", "X-Platform-Key"));
+        // identical to a missing token from the server's side. Idempotency-Key
+        // is the same failure mode, found by real browser testing rather
+        // than reading: PharmacyReceiptController's posting endpoint 500%
+        // reachable via curl (which never enforces CORS at all) but a real
+        // browser's preflight rejected the request outright with "Request
+        // header field idempotency-key is not allowed by
+        // Access-Control-Allow-Headers" before it ever left the page —
+        // curl-only verification of that endpoint had no way to catch this.
+        configuration.setAllowedHeaders(
+                List.of("Authorization", "Content-Type", "X-Tenant-ID", "X-Platform-Key", "X-Patient-Key",
+                        "Idempotency-Key"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;

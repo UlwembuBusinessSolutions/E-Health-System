@@ -48,6 +48,12 @@ public class Facility {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Column(name = "daily_appointment_limit")
+    private Integer dailyAppointmentLimit;
+
+    public Integer getDailyAppointmentLimit() { return dailyAppointmentLimit; }
+    public void setDailyAppointmentLimit(Integer limit) { this.dailyAppointmentLimit = limit; }
+
     protected Facility() {
     }
 
@@ -59,6 +65,12 @@ public class Facility {
 
     public void setAddress(String address) {
         this.address = address;
+    }
+
+    public void updateDetails(String name, String code, FacilityType type) {
+        this.name = name;
+        this.code = code;
+        this.type = type;
     }
 
     public void setPhone(String phone) {

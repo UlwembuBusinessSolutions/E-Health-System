@@ -2,11 +2,13 @@ package co.ehealth.platform.identity;
 
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.security.DummyHash;
+import co.ehealth.platform.core.security.InvalidTokenException;
 import co.ehealth.platform.core.security.JwtService;
 import co.ehealth.platform.core.security.SessionActivityStore;
 import co.ehealth.platform.core.tenant.TenantContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,10 +34,12 @@ public class AuthService {
     private final SessionActivityStore activityStore;
     private final Clock clock;
     private final ObjectMapper objectMapper;
+    private final Duration idleTimeout;
 
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService,
                         AuditLogService auditLogService, SessionActivityStore activityStore, Clock clock,
-                        ObjectMapper objectMapper) {
+                        ObjectMapper objectMapper,
+                        @Value("${app.idle-lock.timeout-minutes}") long idleTimeoutMinutes) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -43,6 +47,7 @@ public class AuthService {
         this.activityStore = activityStore;
         this.clock = clock;
         this.objectMapper = objectMapper;
+        this.idleTimeout = Duration.ofMinutes(idleTimeoutMinutes);
     }
 
     // noRollbackFor is load-bearing, not defensive polish: this method
@@ -103,6 +108,7 @@ public class AuthService {
         JwtService.IssuedToken issued = jwtService.issue(
                 user.getId(), TenantContext.getCurrentTenant(), roles, user.getTokenVersion());
 
+        activityStore.registerSession(issued.jti(), now, issued.expiresAt(), now);
         activityStore.recordActivity(issued.jti(), now);
         String afterValue = serializeLoginState(user.getFailedLoginCount(), user.getLastLoginAt());
         auditLogService.append(user.getId(), null, "LOGIN", "User", user.getId().toString(),
@@ -128,8 +134,80 @@ public class AuthService {
     private record LoginStateSnapshot(int failedLoginCount, Instant lastLoginAt) {
     }
 
-    public void logout(String jti) {
-        activityStore.clear(jti);
+    // MicrosoftSsoService's own why-note: by the time this runs, Microsoft
+    // has already verified the person's identity (the code exchange
+    // succeeded using this org's real client secret, and email came back
+    // from a live Graph API call) — there's no password to check and
+    // therefore no failed-attempt/lockout bookkeeping the way login()
+    // above has. Still refuses a non-ACTIVE account (LOCKED or DISABLED):
+    // an admin's decision to lock or disable someone shouldn't have a
+    // side door. Returns empty rather than throwing — the caller is a
+    // full-page redirect with nobody to hand a JSON error body to, so
+    // "no session" is a value this method can return, not an exception
+    // that method has to translate.
+    @Transactional
+    public Optional<JwtService.IssuedToken> loginViaSso(String email) {
+        Optional<User> maybeUser = userRepository.findByEmail(email);
+        if (maybeUser.isEmpty() || maybeUser.get().getStatus() != UserStatus.ACTIVE) {
+            return Optional.empty();
+        }
+
+        User user = maybeUser.get();
+        Instant now = clock.instant();
+        String beforeValue = serializeLoginState(user.getFailedLoginCount(), user.getLastLoginAt());
+        user.setLastLoginAt(now);
+
+        List<String> roles = userRepository.findRoleNames(user.getId());
+        JwtService.IssuedToken issued = jwtService.issue(
+                user.getId(), TenantContext.getCurrentTenant(), roles, user.getTokenVersion());
+
+        activityStore.registerSession(issued.jti(), now, issued.expiresAt(), now);
+        activityStore.recordActivity(issued.jti(), now);
+        String afterValue = serializeLoginState(user.getFailedLoginCount(), user.getLastLoginAt());
+        auditLogService.append(user.getId(), null, "SSO_LOGIN", "User", user.getId().toString(),
+                beforeValue, afterValue);
+
+        return Optional.of(issued);
+    }
+
+    public void logout(String jti, Instant expiresAt) {
+        activityStore.revoke(jti, expiresAt);
+    }
+
+    public SessionStatus session(String jti, Instant expiresAt) {
+        Instant now = clock.instant();
+        Instant lastActivity = activityStore.getLastActivity(jti);
+        if (expiresAt == null || !expiresAt.isAfter(now) || lastActivity == null || activityStore.isRevoked(jti)) {
+            throw new InvalidTokenException("Session expired", null);
+        }
+        return new SessionStatus(now, expiresAt, lastActivity.plus(idleTimeout), idleTimeout.toSeconds(),
+                Math.min(60, Math.max(1, idleTimeout.toSeconds() / 2)));
+    }
+
+    @Transactional(readOnly = true)
+    public ContinuedSession continueSession(UUID userId, String jti, Instant expiresAt, int tokenVersion) {
+        session(jti, expiresAt);
+        User user = userRepository.findById(userId).orElseThrow(() -> new InvalidTokenException("Session expired", null));
+        if (user.getStatus() != UserStatus.ACTIVE || user.getTokenVersion() != tokenVersion) {
+            throw new InvalidTokenException("Session expired", null);
+        }
+        List<String> roles = userRepository.findRoleNames(userId);
+        JwtService.IssuedToken issued = jwtService.renew(userId, TenantContext.getCurrentTenant(), roles,
+                user.getTokenVersion(), jti);
+        Instant now = clock.instant();
+        activityStore.registerSession(jti, now, issued.expiresAt(), now);
+        activityStore.recordActivity(jti, now);
+        SessionStatus status = session(jti, issued.expiresAt());
+        return new ContinuedSession(issued.token(), status.serverTime(), status.expiresAt(), status.idleExpiresAt(),
+                status.idleTimeoutSeconds(), status.warningSeconds());
+    }
+
+    public record SessionStatus(Instant serverTime, Instant expiresAt, Instant idleExpiresAt,
+                                long idleTimeoutSeconds, long warningSeconds) {
+    }
+
+    public record ContinuedSession(String accessToken, Instant serverTime, Instant expiresAt, Instant idleExpiresAt,
+                                   long idleTimeoutSeconds, long warningSeconds) {
     }
 
     @Transactional

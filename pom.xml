@@ -86,6 +86,12 @@
       <artifactId>s3</artifactId>
       <version>2.28.11</version>
     </dependency>
+    <!-- No separate s3-presigner dependency — S3Presigner and its request
+         types (GetObjectPresignRequest, etc.) ship inside this same s3
+         artifact, not a standalone module. core/storage's own S3Presigner
+         bean (used for patient documents' short-lived download URLs) needs
+         nothing beyond what's already here. -->
+
 
     <dependency>
       <groupId>org.springframework.boot</groupId>

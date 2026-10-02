@@ -30,6 +30,17 @@ public class Organization {
     @Column(name = "display_name", nullable = false, length = 200)
     private String displayName;
 
+    // Cross-tenant patient migration's MPI-collision fix — prefixed onto
+    // every MPI PatientService.register() generates from this tenant on
+    // (MpiNumberFormat.generate()), so two tenants can never issue the same
+    // number. Immutable, same reasoning as slug/schemaName below: it's baked
+    // into every MPI already issued under it, so renaming later would create
+    // ambiguity worse than the old/new-MPI-format ambiguity this feature
+    // already accepts for pre-existing patients. Generated once, at
+    // provisioning, by TenantCodeGenerator — never settable after.
+    @Column(name = "tenant_code", nullable = false, unique = true, length = 10)
+    private String tenantCode;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private OrganizationStatus status;
@@ -49,6 +60,30 @@ public class Organization {
     @Column(columnDefinition = "jsonb", nullable = false)
     private OrganizationBranding branding = OrganizationBranding.empty();
 
+    // Same JSONB-column pattern as branding above (see
+    // V8__organization_mail_settings.sql) — the tenant's own outbound-email
+    // (SMTP) settings, read/written by OrganizationMailSettingsService and
+    // consumed by EmailService to decide whether to send through this
+    // org's mail account instead of the platform-wide default.
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "mail_settings", columnDefinition = "jsonb", nullable = false)
+    private OrganizationMailSettings mailSettings = OrganizationMailSettings.empty();
+
+    // Same JSONB-column pattern as branding/mailSettings above (see
+    // V9__organization_profile.sql) — org-wide contact/location info a
+    // future public tenant site reads instead of anything being hardcoded.
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "profile", columnDefinition = "jsonb", nullable = false)
+    private OrganizationProfile profile = OrganizationProfile.empty();
+
+    // Same JSONB-column pattern as branding/mailSettings/profile above (see
+    // V11__organization_sso_settings.sql) — this org's own Microsoft SSO
+    // (Azure AD) configuration, read/written by OrganizationSsoSettingsService
+    // and consumed by MicrosoftSsoService to drive the staff login flow.
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "sso_settings", columnDefinition = "jsonb", nullable = false)
+    private OrganizationSsoSettings ssoSettings = OrganizationSsoSettings.empty();
+
     protected Organization() {
     }
 
@@ -59,11 +94,13 @@ public class Organization {
     // starting value the way status always starts ACTIVE, so the caller has
     // to supply one (PlatformController's @NotNull is what actually
     // enforces that nobody can omit it).
-    public Organization(String slug, String schemaName, String displayName, OrganizationSector sector) {
+    public Organization(String slug, String schemaName, String displayName, OrganizationSector sector,
+                         String tenantCode) {
         this.slug = slug;
         this.schemaName = schemaName;
         this.displayName = displayName;
         this.sector = sector;
+        this.tenantCode = tenantCode;
         this.status = OrganizationStatus.ACTIVE;
         this.createdAt = Instant.now();
     }
@@ -111,6 +148,10 @@ public class Organization {
         return schemaName;
     }
 
+    public String getTenantCode() {
+        return tenantCode;
+    }
+
     public String getDisplayName() {
         return displayName;
     }
@@ -133,5 +174,29 @@ public class Organization {
 
     public void setBranding(OrganizationBranding branding) {
         this.branding = branding;
+    }
+
+    public OrganizationMailSettings getMailSettings() {
+        return mailSettings;
+    }
+
+    public void setMailSettings(OrganizationMailSettings mailSettings) {
+        this.mailSettings = mailSettings;
+    }
+
+    public OrganizationProfile getProfile() {
+        return profile;
+    }
+
+    public void setProfile(OrganizationProfile profile) {
+        this.profile = profile;
+    }
+
+    public OrganizationSsoSettings getSsoSettings() {
+        return ssoSettings;
+    }
+
+    public void setSsoSettings(OrganizationSsoSettings ssoSettings) {
+        this.ssoSettings = ssoSettings;
     }
 }

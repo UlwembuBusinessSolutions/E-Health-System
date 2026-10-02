@@ -55,6 +55,26 @@ public class PermissionService {
         return required == PermissionLevel.VIEW && granted.contains(module.name() + ":VIEW");
     }
 
+    // Module permission alone answers "is this role allowed to operate
+    // this module at all" — it deliberately does not distinguish clinical
+    // from operational roles within a module (RECQ:MANAGE covers both a
+    // Queue Marshall calling the next patient and a nurse capturing
+    // vitals), and this codebase's PermissionLevel is a fixed two-tier
+    // VIEW/MANAGE by design (its own why-note), not per-action. A caller
+    // that needs a narrower "and also must actually hold one of these
+    // clinical roles" gate — TriageService's own why-note on why clinical
+    // documentation needs this on top of RECQ:MANAGE — calls this instead
+    // of re-deriving role names itself. Same "throws, doesn't return a
+    // boolean silently" shape as requireAccess() above, and the same
+    // precedent NotLicensedException already set for PHRM: a permission
+    // check alone isn't always the whole story for a clinical action.
+    public void requireAnyRole(Set<String> allowedRoleNames, String deniedMessage) {
+        boolean hasRole = currentRoleNames().stream().anyMatch(allowedRoleNames::contains);
+        if (!hasRole) {
+            throw new NotAClinicalRoleException(deniedMessage);
+        }
+    }
+
     private List<String> currentRoleNames() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         // Not AuthenticatedPrincipal specifically — a platform operator's

@@ -148,13 +148,22 @@ public class StaffService {
         return userRepository.findAll().stream()
                 .map(u -> new StaffRosterEntry(u.getId(), u.getEmployeeNumber(), u.getFirstName(), u.getLastName(),
                         u.getEmail(), u.getContactNumber(), userRepository.findRoleNames(u.getId()),
-                        u.getFacilityId(), u.getStatus(), u.getLastLoginAt()))
+                        u.getFacilityId(), u.getStatus(), u.getLastLoginAt(), u.getEmploymentType(),
+                        u.getEmploymentEndDate()))
                 .toList();
     }
 
     public record StaffRosterEntry(UUID id, String employeeNumber, String firstName, String lastName, String email,
                                     String contactNumber, List<String> roles, UUID facilityId, UserStatus status,
-                                    Instant lastLoginAt) {
+                                    Instant lastLoginAt, EmploymentType employmentType, LocalDate employmentEndDate) {
+    }
+
+    // The single-record read behind the edit-details form — listStaff()'s
+    // own StaffRosterEntry is a roster summary and deliberately doesn't
+    // carry department/designation/manager/license numbers/emergency
+    // contact, none of which a table row needs but an edit form does.
+    public User get(UUID userId) {
+        return userRepository.findById(userId).orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
     }
 
     // PHRM-US-009: "Restrict prescribing/dispensing to licensed users ...
@@ -278,6 +287,106 @@ public class StaffService {
         userRepository.save(user);
         auditLogService.append(actingAdminId, user.getFacilityId(), "STAFF_OFFBOARDED",
                 "User", userId.toString(), null, null);
+    }
+
+    // The reverse of offboardStaff() above — someone who left comes back.
+    // Clears employmentEndDate (the HR fact offboarding recorded no longer
+    // holds) and re-enables login in the same transaction, same "no window
+    // where the two facts disagree" reasoning offboardStaff()'s own comment
+    // gives for setting them together. Deliberately its own operation
+    // rather than reusing setEnabled(true, ...) — re-enabling login alone
+    // would leave a stale employmentEndDate on someone who is, as of this
+    // call, actively employed again, which every "already offboarded" check
+    // elsewhere (StaffListPage's own row-action gating) uses as its signal.
+    @Transactional
+    public void reboardStaff(UUID userId, UUID actingAdminId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
+        user.setEmploymentEndDate(null);
+        user.setStatus(UserStatus.ACTIVE);
+        userRepository.save(user);
+        auditLogService.append(actingAdminId, user.getFacilityId(), "STAFF_REBOARDED",
+                "User", userId.toString(), null, null);
+    }
+
+    // Changing someone's contract type (permanent/contract/intern/etc.) after
+    // hiring — createStaff() only ever sets this once, at creation, and
+    // there was previously no way to correct or update it afterwards (a
+    // secondment ending, a contract converting to permanent, and so on).
+    // Deliberately doesn't touch UserStatus or employmentEndDate either way
+    // — same "one lever per real-world fact" reasoning as offboardStaff()
+    // and setEnabled() above.
+    @Transactional
+    public void updateEmploymentType(UUID userId, EmploymentType employmentType, UUID actingAdminId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
+        user.setEmploymentType(employmentType);
+        userRepository.save(user);
+        auditLogService.append(actingAdminId, user.getFacilityId(), "STAFF_EMPLOYMENT_TYPE_CHANGED",
+                "User", userId.toString(), null, null);
+    }
+
+    // The general "correct this person's own details" lever — name, contact
+    // info, ID number, department/designation, manager and professional
+    // registration numbers. Deliberately excludes everything that already
+    // has its own dedicated, more carefully-reasoned-about endpoint:
+    // email (login identifier), facility/role assignment, employmentType
+    // (updateEmploymentType above), status/employmentEndDate (setEnabled/
+    // offboardStaff), password, and the race/disability/background-check
+    // fields (recordComplianceDetails) — each of those is a real-world
+    // event in its own right, not a plain profile edit, same "one lever
+    // per fact" reasoning as offboardStaff()'s own why-note.
+    @Transactional
+    public User updateDetails(UUID userId, UpdateStaffDetailsCommand cmd, UUID actingAdminId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown staff member"));
+
+        requireUnique("contactNumber", userRepository.existsByContactNumberAndIdNot(cmd.contactNumber(), userId));
+        if (cmd.idNumber() != null) {
+            requireUnique("idNumber", userRepository.existsByIdNumberAndIdNot(cmd.idNumber(), userId));
+        }
+        if (cmd.sancNumber() != null) {
+            requireUnique("sancNumber", userRepository.existsBySancNumberAndIdNot(cmd.sancNumber(), userId));
+        }
+        if (cmd.hpcsaNumber() != null) {
+            requireUnique("hpcsaNumber", userRepository.existsByHpcsaNumberAndIdNot(cmd.hpcsaNumber(), userId));
+        }
+        if (cmd.sapcNumber() != null) {
+            requireUnique("sapcNumber", userRepository.existsBySapcNumberAndIdNot(cmd.sapcNumber(), userId));
+        }
+        if (cmd.managerId() != null && !userRepository.existsById(cmd.managerId())) {
+            throw new IllegalArgumentException("Unknown manager");
+        }
+
+        user.setFirstName(cmd.firstName());
+        user.setLastName(cmd.lastName());
+        user.setContactNumber(cmd.contactNumber());
+        user.setIdNumber(cmd.idNumber());
+        user.setDepartment(cmd.department());
+        user.setDesignation(cmd.designation());
+        user.setManagerId(cmd.managerId());
+        user.setDateOfBirth(cmd.dateOfBirth());
+        user.setSancNumber(cmd.sancNumber());
+        user.setSancExpiryDate(cmd.sancExpiryDate());
+        user.setHpcsaNumber(cmd.hpcsaNumber());
+        user.setHpcsaExpiryDate(cmd.hpcsaExpiryDate());
+        user.setSapcNumber(cmd.sapcNumber());
+        user.setSapcExpiryDate(cmd.sapcExpiryDate());
+        user.setEmergencyContactName(cmd.emergencyContactName());
+        user.setEmergencyContactRelationship(cmd.emergencyContactRelationship());
+        user.setEmergencyContactPhone(cmd.emergencyContactPhone());
+        userRepository.save(user);
+
+        auditLogService.append(actingAdminId, user.getFacilityId(), "STAFF_DETAILS_UPDATED",
+                "User", userId.toString(), null, null);
+        return user;
+    }
+
+    public record UpdateStaffDetailsCommand(
+            String firstName, String lastName, String contactNumber, String idNumber, String department,
+            String designation, UUID managerId, LocalDate dateOfBirth, String sancNumber, LocalDate sancExpiryDate,
+            String hpcsaNumber, LocalDate hpcsaExpiryDate, String sapcNumber, LocalDate sapcExpiryDate,
+            String emergencyContactName, String emergencyContactRelationship, String emergencyContactPhone) {
     }
 
     // Admin-triggered, unlike the self-service /api/v1/auth/password-reset/**

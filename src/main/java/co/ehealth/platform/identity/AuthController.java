@@ -7,13 +7,17 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.CacheControl;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.time.Instant;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -38,10 +42,50 @@ public class AuthController {
                 new UserSummary(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName())));
     }
 
+    // The frontend's own AuthContext (AuthProvider) starts every fresh page
+    // load with no user in memory, even when a valid tenant token is still
+    // sitting in sessionStorage — window.open()'ing a print ticket, or
+    // simply reloading any /app page, is a genuinely new page load with an
+    // empty React tree. This is what that rehydration path calls: given a
+    // still-valid Authorization header, hand back the same identity
+    // login() already returns, so the app can reconstruct its user state
+    // instead of bouncing a legitimately signed-in person back to the
+    // login screen.
+    @GetMapping("/me")
+    public ResponseEntity<UserSummary> me(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        User user = userRepository.findById(principal.userId()).orElseThrow();
+        return ResponseEntity.ok(new UserSummary(user.getId(), user.getEmail(), user.getFirstName(),
+                user.getLastName()));
+    }
+
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
-        authService.logout(principal.jti());
+    public ResponseEntity<Void> logout(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                      @RequestAttribute("jwtExpiresAt") Instant expiresAt) {
+        authService.logout(principal.jti(), expiresAt);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/session")
+    public ResponseEntity<AuthService.SessionStatus> session(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                                            @RequestAttribute("jwtExpiresAt") Instant expiresAt) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(authService.session(principal.jti(), expiresAt));
+    }
+
+    @PostMapping("/session/activity")
+    public ResponseEntity<AuthService.SessionStatus> activity(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                                             @RequestAttribute("jwtExpiresAt") Instant expiresAt) {
+        // IdleLockFilter records this explicit interaction only after checking
+        // that the session has not already timed out.
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(authService.session(principal.jti(), expiresAt));
+    }
+
+    @PostMapping("/session/continue")
+    public ResponseEntity<AuthService.ContinuedSession> continueSession(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @RequestAttribute("jwtExpiresAt") Instant expiresAt,
+            @RequestAttribute("jwtTokenVersion") int tokenVersion) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
+                authService.continueSession(principal.userId(), principal.jti(), expiresAt, tokenVersion));
     }
 
     @PostMapping("/unlock")

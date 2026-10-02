@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 // No @RequestMapping("/api/v1/admin/...") — starting a patient's visit is
@@ -45,6 +46,16 @@ public class VisitController {
         return ResponseEntity.ok(VisitResponse.from(visitService.get(id)));
     }
 
+    // The patient record's Visits tab — every visit this patient has ever
+    // had, newest first, each one carrying the facility's name so the UI
+    // never has to resolve facilityId itself.
+    @GetMapping("/api/v1/patients/{patientId}/visits")
+    public ResponseEntity<Map<String, Object>> patientVisitHistory(@PathVariable UUID patientId) {
+        var items = visitService.getPatientVisitHistory(patientId).stream()
+                .map(PatientVisitResponse::from).toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
     public record CreateVisitRequest(@NotNull UUID patientId, @NotNull UUID facilityId,
                                       @NotNull VisitType visitType, @NotNull ServiceStream serviceStream) {
     }
@@ -61,6 +72,16 @@ public class VisitController {
         static VisitWithTokenResponse from(VisitService.VisitWithToken result) {
             return new VisitWithTokenResponse(VisitResponse.from(result.visit()),
                     QueueTokenResponse.from(result.token()));
+        }
+    }
+
+    public record PatientVisitResponse(UUID id, UUID facilityId, String facilityName, VisitType visitType,
+                                        ServiceStream serviceStream, Instant visitDateTime,
+                                        UUID transferredFromVisitId) {
+        static PatientVisitResponse from(VisitService.PatientVisitView v) {
+            return new PatientVisitResponse(v.visit().getId(), v.visit().getFacilityId(), v.facilityName(),
+                    v.visit().getVisitType(), v.visit().getServiceStream(), v.visit().getVisitDateTime(),
+                    v.visit().getTransferredFromVisitId());
         }
     }
 }

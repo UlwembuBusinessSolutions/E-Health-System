@@ -13,9 +13,12 @@ import co.ehealth.platform.core.tenant.ModuleEntitlementRepository;
 import co.ehealth.platform.core.tenant.ModuleEntitlementView;
 import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationBrandingService;
+import co.ehealth.platform.core.tenant.OrganizationMailSettings;
+import co.ehealth.platform.core.tenant.OrganizationMailSettingsService;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
 import co.ehealth.platform.core.tenant.OrganizationSector;
 import co.ehealth.platform.core.tenant.OrganizationStatus;
+import co.ehealth.platform.core.tenant.TenantCodeGenerator;
 import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.core.tenant.TenantMigrationRunner;
 import co.ehealth.platform.identity.DuplicateFieldException;
@@ -94,6 +97,9 @@ public class OrganizationProvisioningService {
     // game across modules" reasoning as TenantContext/TenantMigrationRunner
     // above, not a second exception to the module-boundary rule.
     private final OrganizationBrandingService organizationBrandingService;
+    // Same "shared core package, fair game across modules" reasoning as
+    // organizationBrandingService above.
+    private final OrganizationMailSettingsService organizationMailSettingsService;
     private final ModuleEntitlementRepository moduleEntitlementRepository;
     private final ModuleEntitlementQueryService moduleEntitlementQueryService;
     // facility.FacilityService, not FacilityRepository directly — same
@@ -104,6 +110,7 @@ public class OrganizationProvisioningService {
             TenantMigrationRunner migrationRunner, StaffService staffService, AuditLogService auditLogService,
             PlatformAuditLogRepository platformAuditLogRepository, EmailService emailService,
             OrganizationBrandingService organizationBrandingService,
+            OrganizationMailSettingsService organizationMailSettingsService,
             ModuleEntitlementRepository moduleEntitlementRepository,
             ModuleEntitlementQueryService moduleEntitlementQueryService,
             FacilityService facilityService) {
@@ -114,6 +121,7 @@ public class OrganizationProvisioningService {
         this.platformAuditLogRepository = platformAuditLogRepository;
         this.emailService = emailService;
         this.organizationBrandingService = organizationBrandingService;
+        this.organizationMailSettingsService = organizationMailSettingsService;
         this.moduleEntitlementRepository = moduleEntitlementRepository;
         this.moduleEntitlementQueryService = moduleEntitlementQueryService;
         this.facilityService = facilityService;
@@ -136,8 +144,9 @@ public class OrganizationProvisioningService {
         // — [a-z][a-z0-9_]{2,62} — which is the thing that actually gets
         // concatenated into SET search_path.
         String schemaName = slug.replace('-', '_');
+        String tenantCode = TenantCodeGenerator.generate(slug, organizationRepository);
 
-        Organization organization = new Organization(slug, schemaName, cmd.displayName(), cmd.sector());
+        Organization organization = new Organization(slug, schemaName, cmd.displayName(), cmd.sector(), tenantCode);
         organizationRepository.save(organization);
         seedDefaultModuleEntitlements(organization.getId(), cmd.sector());
 
@@ -217,16 +226,48 @@ public class OrganizationProvisioningService {
     // staffService.resolveUserNames() rather than reaching into
     // UserRepository directly, same module-boundary rule as everywhere else
     // this service crosses into identity/.
-    public List<TenantAuditEntryView> listTenantAuditLog(UUID organizationId) {
+    public TenantAuditPage listTenantAuditLog(UUID organizationId, int page, int size) {
         Organization organization = organizationRepository.findById(organizationId)
                 .orElseThrow(OrganizationNotFoundException::new);
         TenantContext.setCurrentTenant(organization.getSchemaName());
         try {
-            List<AuditLog> rows = auditLogService.listAll();
+            var resultPage = auditLogService.list(page, size);
+            List<AuditLog> rows = resultPage.getContent();
             Set<UUID> userIds = rows.stream().map(AuditLog::getUserId).filter(Objects::nonNull)
                     .collect(Collectors.toSet());
             Map<UUID, String> namesByUserId = staffService.resolveUserNames(userIds);
-            return rows.stream().map(row -> new TenantAuditEntryView(
+            List<TenantAuditEntryView> items = rows.stream().map(row -> new TenantAuditEntryView(
+                    row.getId(), row.getAction(), row.getEntityType(), row.getEntityId(), row.getCreatedAt(),
+                    namesByUserId.getOrDefault(row.getUserId(), "Unknown user"),
+                    row.getBeforeValue(), row.getAfterValue(),
+                    row.getIpAddress(), row.getDeviceSignature())).toList();
+            return new TenantAuditPage(items, resultPage.getNumber(), resultPage.getSize(),
+                    resultPage.getTotalElements(), resultPage.hasNext());
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    // The CSV export's read half — this organization's entire trail, not
+    // just whichever page a viewer last had open. Recorded as a
+    // platform_audit_log row (ORGANIZATION_AUDIT_EXPORTED), same convention
+    // as every other platform-operator action taken against a tenant
+    // (resetAdminPassword(), setAdminEnabled(), ...) rather than a row in
+    // the tenant's own audit_log — writing "an operator exported this log"
+    // back into the very log being exported is exactly the recursive-
+    // logging loop the audit plan's own event-coverage backlog warns
+    // against.
+    public List<TenantAuditEntryView> listTenantAuditLogForExport(UUID organizationId, UUID actingOperatorId) {
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(OrganizationNotFoundException::new);
+        TenantContext.setCurrentTenant(organization.getSchemaName());
+        List<TenantAuditEntryView> items;
+        try {
+            List<AuditLog> rows = auditLogService.listAllForExport();
+            Set<UUID> userIds = rows.stream().map(AuditLog::getUserId).filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            Map<UUID, String> namesByUserId = staffService.resolveUserNames(userIds);
+            items = rows.stream().map(row -> new TenantAuditEntryView(
                     row.getId(), row.getAction(), row.getEntityType(), row.getEntityId(), row.getCreatedAt(),
                     namesByUserId.getOrDefault(row.getUserId(), "Unknown user"),
                     row.getBeforeValue(), row.getAfterValue(),
@@ -234,6 +275,8 @@ public class OrganizationProvisioningService {
         } finally {
             TenantContext.clear();
         }
+        recordPlatformAudit(actingOperatorId, "ORGANIZATION_AUDIT_EXPORTED", organizationId);
+        return items;
     }
 
     // The write half — the actual fix for "an admin is locked out / left,
@@ -355,6 +398,31 @@ public class OrganizationProvisioningService {
         String url = organizationBrandingService.uploadLogoForOrganization(organization, file);
         recordPlatformAudit(actingOperatorId, "ORGANIZATION_LOGO_UPLOADED", organizationId);
         return url;
+    }
+
+    // The platform-side counterpart to
+    // OrganizationMailSettingsService.getOwnMailSettings()/updateOwnMailSettings()
+    // — lets the platform team configure (or fix) a tenant's outbound-email
+    // account on their behalf, same reasoning as uploadLogo() above being
+    // the platform-side counterpart to the tenant's own logo upload: an
+    // org admin who's locked out, hasn't been trained on the Settings tab
+    // yet, or asks support to just set it up shouldn't be stuck without a
+    // path here.
+    public OrganizationMailSettings getMailSettings(UUID organizationId) {
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(OrganizationNotFoundException::new);
+        return organizationMailSettingsService.getMailSettingsForOrganization(organization);
+    }
+
+    public OrganizationMailSettings updateMailSettings(UUID organizationId, String host, Integer port,
+                                                         String username, String password, String fromAddress,
+                                                         UUID actingOperatorId) {
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(OrganizationNotFoundException::new);
+        OrganizationMailSettings updated = organizationMailSettingsService.updateMailSettingsForOrganization(
+                organization, host, port, username, password, fromAddress);
+        recordPlatformAudit(actingOperatorId, "ORGANIZATION_MAIL_SETTINGS_UPDATED", organizationId);
+        return updated;
     }
 
     // SADM-US-006 — a platform operator adding a clinic to a tenant that
@@ -635,5 +703,9 @@ public class OrganizationProvisioningService {
     public record TenantAuditEntryView(
             UUID id, String action, String entityType, String entityId, Instant createdAt, String actorName,
             String beforeValue, String afterValue, String ipAddress, String deviceSignature) {
+    }
+
+    public record TenantAuditPage(List<TenantAuditEntryView> items, int page, int size, long totalItems,
+                                   boolean hasMore) {
     }
 }

@@ -31,6 +31,21 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsBySapcNumber(String sapcNumber);
 
+    // StaffService.updateDetails()'s own uniqueness checks — same
+    // constraints as createStaff() enforces, but excluding the record
+    // being edited itself, so saving a staff member's own unchanged
+    // contact number/id number/license number doesn't falsely collide
+    // with the very row it belongs to.
+    boolean existsByContactNumberAndIdNot(String contactNumber, UUID id);
+
+    boolean existsByIdNumberAndIdNot(String idNumber, UUID id);
+
+    boolean existsBySancNumberAndIdNot(String sancNumber, UUID id);
+
+    boolean existsByHpcsaNumberAndIdNot(String hpcsaNumber, UUID id);
+
+    boolean existsBySapcNumberAndIdNot(String sapcNumber, UUID id);
+
     @Query(value = "select r.name from roles r, user_roles ur where ur.role_id = r.id and ur.user_id = :userId",
            nativeQuery = true)
     List<String> findRoleNames(@Param("userId") UUID userId);

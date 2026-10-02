@@ -1,10 +1,10 @@
 package co.ehealth.platform.core.security;
 
 import co.ehealth.platform.core.common.FilterResponses;
-import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
+import co.ehealth.platform.identity.UserStatus;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -16,6 +16,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,17 +25,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
-    private final AuditLogService auditLogService;
+    private final SessionActivityStore activityStore;
+    private final Clock clock;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository, AuditLogService auditLogService) {
+    public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository,
+                                   SessionActivityStore activityStore, Clock clock) {
         this.jwtService = jwtService;
         this.userRepository = userRepository;
-        this.auditLogService = auditLogService;
-    }
-
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        return request.getRequestURI().startsWith("/platform/");
+        this.activityStore = activityStore;
+        this.clock = clock;
     }
 
     @Override
@@ -65,30 +64,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String tokenTenant = claims.get("tenant", String.class);
-        if (!tokenTenant.equals(TenantContext.getCurrentTenant())) {
-            if (isTenantAuditRequest(request)) {
-                // The request was routed by X-Tenant-ID to a different
-                // organisation, but this signed token names the caller's
-                // own schema. Switch only long enough to record the denied
-                // attempt there; the target schema is never queried.
-                String requestedTenant = TenantContext.getCurrentTenant();
-                try {
-                    TenantContext.setCurrentTenant(tokenTenant);
-                    UUID userId = UUID.fromString(claims.getSubject());
-                    auditLogService.append(userId, null, "AUDIT_ACCESS_DENIED", "AuditLog",
-                            requestedTenant == null ? "unknown" : requestedTenant, null,
-                            "{\"requestedTenant\":\"" + requestedTenant + "\"}");
-                } finally {
-                    if (requestedTenant == null) {
-                        TenantContext.clear();
-                    } else {
-                        TenantContext.setCurrentTenant(requestedTenant);
-                    }
-                }
-                FilterResponses.writeJsonError(response, HttpServletResponse.SC_FORBIDDEN,
-                        "You may only view your organization's audit events.");
-                return;
-            }
+        if (tokenTenant == null || !tokenTenant.equals(TenantContext.getCurrentTenant())
+                || claims.getId() == null || claims.getIssuedAt() == null || claims.getExpiration() == null) {
             // A token minted for one client presented against another
             // client's subdomain — reject even though the signature itself
             // is valid, since every tenant currently shares one signing key.
@@ -101,10 +78,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         Optional<User> user = userRepository.findById(userId);
         int tokenVersion = claims.get("tokenVersion", Integer.class);
 
-        if (user.isEmpty() || user.get().getTokenVersion() != tokenVersion) {
+        if (user.isEmpty() || user.get().getTokenVersion() != tokenVersion
+                || user.get().getStatus() != UserStatus.ACTIVE) {
             // Password changed, or the account was disabled, since this
             // token was issued — tokenVersion no longer matches, so it's
             // treated as revoked even though it hasn't naturally expired.
+            FilterResponses.writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED,
+                    "Session expired. Please sign in again.");
+            return;
+        }
+
+        activityStore.registerSession(claims.getId(), claims.getIssuedAt().toInstant(),
+                claims.getExpiration().toInstant(), clock.instant());
+        if (activityStore.isRevoked(claims.getId())) {
             FilterResponses.writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED,
                     "Session expired. Please sign in again.");
             return;
@@ -120,11 +106,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 new AuthenticatedPrincipal(userId, claims.getId()), null, authorities);
         SecurityContextHolder.getContext().setAuthentication(authentication);
         request.setAttribute("jti", claims.getId());
+        request.setAttribute("jwtExpiresAt", claims.getExpiration().toInstant());
+        request.setAttribute("jwtTokenVersion", tokenVersion);
 
         chain.doFilter(request, response);
-    }
-
-    private boolean isTenantAuditRequest(HttpServletRequest request) {
-        return request.getRequestURI().equals("/api/v1/admin/audit");
     }
 }

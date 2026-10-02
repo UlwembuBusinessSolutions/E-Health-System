@@ -118,8 +118,15 @@ public class TenantFilter extends OncePerRequestFilter {
         // could successfully call this API cross-origin at all, for any
         // endpoint under a tenant. Confirmed by testing with a real
         // preflight request, not found by reading the filter in isolation.
+        // /api/v1/auth/sso/ — SsoAuthController's own why-note: a real
+        // browser redirecting in from Microsoft's sign-in page, or landing
+        // fresh from the login screen's own link, carries neither
+        // X-Tenant-ID nor a subdomain this app resolves one from, so
+        // there's no tenant for this filter to find here either — the
+        // organization slug travels as an explicit query parameter that
+        // SsoAuthController/MicrosoftSsoService resolve themselves instead.
         String uri = request.getRequestURI();
         return uri.startsWith("/actuator/health") || uri.startsWith("/platform/")
-                || "OPTIONS".equalsIgnoreCase(request.getMethod());
+                || uri.startsWith("/api/v1/auth/sso/") || "OPTIONS".equalsIgnoreCase(request.getMethod());
     }
 }

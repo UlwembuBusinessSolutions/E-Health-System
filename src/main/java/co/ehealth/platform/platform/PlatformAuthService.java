@@ -4,7 +4,6 @@ import co.ehealth.platform.core.security.DummyHash;
 import co.ehealth.platform.core.security.PlatformJwtService;
 import co.ehealth.platform.identity.AccountLockedException;
 import co.ehealth.platform.identity.InvalidCredentialsException;
-import co.ehealth.platform.identity.DuplicateFieldException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,22 +45,6 @@ public class PlatformAuthService {
         this.platformAuditLogRepository = platformAuditLogRepository;
     }
 
-    @Transactional
-    public RegisteredOperator register(String firstName, String lastName, String email, String rawPassword) {
-        if (platformOperatorRepository.existsByEmail(email)) {
-            throw new DuplicateFieldException("email", "A platform operator with this email already exists.");
-        }
-
-        PlatformOperator operator = new PlatformOperator(
-                email, firstName, lastName, passwordEncoder.encode(rawPassword));
-        platformOperatorRepository.save(operator);
-        platformAuditLogRepository.save(
-                new PlatformAuditLog(operator.getId(), "PLATFORM_OPERATOR_REGISTERED", null, clock.instant()));
-
-        PlatformJwtService.IssuedToken issued = platformJwtService.issue(operator.getId(), operator.getTokenVersion());
-        return new RegisteredOperator(operator, issued);
-    }
-
     // noRollbackFor is load-bearing — same reasoning as identity.AuthService.
     // login(): this method mutates the PlatformOperator entity to record a
     // failed attempt and then throws to signal the failure, and Spring's
@@ -74,6 +57,11 @@ public class PlatformAuthService {
         maybeOperator.ifPresent(operator -> autoUnlockIfExpired(operator, now));
 
         if (maybeOperator.isPresent() && maybeOperator.get().getStatus() == PlatformOperatorStatus.LOCKED) {
+            // Denied, not failed: no password was even checked. Attributed
+            // to the real operator id — unlike the unknown-email branch
+            // below, this account definitely exists.
+            platformAuditLogRepository.save(new PlatformAuditLog(maybeOperator.get().getId(),
+                    "PLATFORM_OPERATOR_LOGIN_DENIED", null, "Attempted login while locked", now));
             throw new AccountLockedException(remainingLockoutSeconds(maybeOperator.get(), now));
         }
 
@@ -82,8 +70,22 @@ public class PlatformAuthService {
 
         if (maybeOperator.isEmpty() || !passwordMatches
                 || maybeOperator.get().getStatus() != PlatformOperatorStatus.ACTIVE) {
+            // The one write path here that can run with no real operator id
+            // at all — an unknown email leaves platformOperatorId null
+            // (PlatformAuditLog's own why-note), which is honest: inventing
+            // one would misattribute the attempt, and silence would hide
+            // exactly the account-enumeration probing this exists to catch.
+            String detail = maybeOperator.isEmpty() ? "email: " + email : null;
+            platformAuditLogRepository.save(new PlatformAuditLog(
+                    maybeOperator.map(PlatformOperator::getId).orElse(null),
+                    "PLATFORM_OPERATOR_LOGIN_FAILED", null, detail, now));
             maybeOperator.filter(operator -> operator.getStatus() != PlatformOperatorStatus.DISABLED)
                     .ifPresent(operator -> registerFailedAttempt(operator, now));
+            if (maybeOperator.isPresent() && maybeOperator.get().getStatus() == PlatformOperatorStatus.LOCKED) {
+                platformAuditLogRepository.save(new PlatformAuditLog(maybeOperator.get().getId(),
+                        "PLATFORM_OPERATOR_LOCKED", null,
+                        "failedLoginCount: " + maybeOperator.get().getFailedLoginCount(), now));
+            }
             throw new InvalidCredentialsException();
         }
 
@@ -130,8 +132,5 @@ public class PlatformAuthService {
         if (operator.getFailedLoginCount() >= MAX_FAILED_ATTEMPTS) {
             operator.lock(now);
         }
-    }
-
-    public record RegisteredOperator(PlatformOperator operator, PlatformJwtService.IssuedToken token) {
     }
 }

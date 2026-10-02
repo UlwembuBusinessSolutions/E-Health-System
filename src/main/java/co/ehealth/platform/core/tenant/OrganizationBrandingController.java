@@ -1,9 +1,15 @@
 package co.ehealth.platform.core.tenant;
 
+import co.ehealth.platform.core.security.AuthenticatedPrincipal;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -28,11 +34,14 @@ public class OrganizationBrandingController {
 
     private final OrganizationBrandingService brandingService;
     private final ModuleEntitlementQueryService moduleEntitlementQueryService;
+    private final ModuleEntitlementService moduleEntitlementService;
 
     public OrganizationBrandingController(OrganizationBrandingService brandingService,
-                                           ModuleEntitlementQueryService moduleEntitlementQueryService) {
+                                           ModuleEntitlementQueryService moduleEntitlementQueryService,
+                                           ModuleEntitlementService moduleEntitlementService) {
         this.brandingService = brandingService;
         this.moduleEntitlementQueryService = moduleEntitlementQueryService;
+        this.moduleEntitlementService = moduleEntitlementService;
     }
 
     // Any authenticated staff member, not just ORG_ADMIN — every field here
@@ -46,9 +55,12 @@ public class OrganizationBrandingController {
     public ResponseEntity<OrganizationSelfResponse> getOrganization() {
         Organization organization = brandingService.getOwnOrganization();
         OrganizationBranding branding = organization.getBranding();
+        OrganizationProfile profile = organization.getProfile();
         return ResponseEntity.ok(new OrganizationSelfResponse(
                 organization.getDisplayName(), organization.getSlug(), organization.getStatus(),
-                organization.getSector(), branding.logoUrl(), branding.primaryColor(), branding.shortName()));
+                organization.getSector(), branding.logoUrl(), branding.primaryColor(), branding.shortName(),
+                profile.description(), profile.contactEmail(), profile.contactPhone(), profile.address(),
+                profile.businessHours(), profile.websiteUrl(), profile.facebookUrl(), profile.instagramUrl()));
     }
 
     // The tenant dashboard's "enabled modules" card (SADM-US-010, self-
@@ -60,6 +72,24 @@ public class OrganizationBrandingController {
         UUID organizationId = brandingService.getOwnOrganization().getId();
         List<ModuleEntitlementView> modules = moduleEntitlementQueryService.listForOrganization(organizationId);
         return ResponseEntity.ok(Map.of("items", modules));
+    }
+
+    // The write half of the modules picture above — ORG_ADMIN self-service,
+    // same underlying ModuleEntitlement rows a platform operator's own
+    // POST /platform/organizations/{id}/modules/{moduleCode} writes, just
+    // always targeting the caller's own org (ModuleEntitlementService's own
+    // why-note on why this doesn't just delegate to
+    // OrganizationProvisioningService.toggleModule()). Falls under
+    // SecurityConfig's /api/v1/admin/** -> ORG_ADMIN matcher for free.
+    @PostMapping("/api/v1/admin/organization/modules/{moduleCode}")
+    public ResponseEntity<Void> toggleModule(@PathVariable ModuleCode moduleCode,
+                                              @Valid @RequestBody ToggleModuleRequest request,
+                                              @AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        moduleEntitlementService.toggleOwnModule(moduleCode, request.enabled(), principal.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    public record ToggleModuleRequest(@NotNull Boolean enabled) {
     }
 
     // Multipart, not JSON — same reasoning as StaffController.uploadPhoto():
@@ -79,6 +109,8 @@ public class OrganizationBrandingController {
 
     public record OrganizationSelfResponse(String displayName, String slug, OrganizationStatus status,
                                             OrganizationSector sector, String logoUrl, String primaryColor,
-                                            String shortName) {
+                                            String shortName, String description, String contactEmail,
+                                            String contactPhone, String address, String businessHours,
+                                            String websiteUrl, String facebookUrl, String instagramUrl) {
     }
 }
