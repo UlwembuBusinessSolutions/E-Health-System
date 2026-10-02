@@ -1,3 +1,4 @@
+
 import { AppProviders } from "@/app/providers";
 import { AppRouter } from "@/app/router";
 
@@ -10,3 +11,4 @@ function App() {
 }
 
 export default App;
+

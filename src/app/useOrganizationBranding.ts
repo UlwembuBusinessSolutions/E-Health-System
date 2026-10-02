@@ -1,3 +1,4 @@
+
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getOrganizationSelf } from "@/shared/api/organization";
@@ -48,3 +49,4 @@ export function useOrganizationBranding() {
     };
   }, [org]);
 }
+

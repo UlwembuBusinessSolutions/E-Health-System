@@ -1,3 +1,4 @@
+
 import type { Role } from "./types";
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
@@ -10,3 +11,4 @@ export async function getRoles(): Promise<Role[]> {
   const response = await apiClient.get<{ items: Role[] }>("/api/v1/roles", { headers: tenantAuthHeaders() });
   return response.items;
 }
+

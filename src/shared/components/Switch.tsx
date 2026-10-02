@@ -1,3 +1,4 @@
+
 import clsx from "clsx";
 
 interface SwitchProps {
@@ -32,3 +33,4 @@ export function Switch({ checked, onChange, disabled, label }: SwitchProps) {
     </button>
   );
 }
+

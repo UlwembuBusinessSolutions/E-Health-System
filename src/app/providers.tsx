@@ -1,8 +1,10 @@
+
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "@/auth/AuthContext";
 import { PlatformAuthProvider } from "@/platform/PlatformAuthContext";
+import { PatientAuthProvider } from "@/patient-portal/PatientAuthContext";
 import { ToastProvider } from "@/shared/components/toast/ToastProvider";
 
 const queryClient = new QueryClient({
@@ -20,10 +22,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <PlatformAuthProvider>
-            <ToastProvider>{children}</ToastProvider>
+            <PatientAuthProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </PatientAuthProvider>
           </PlatformAuthProvider>
         </AuthProvider>
       </QueryClientProvider>
     </BrowserRouter>
   );
 }
+

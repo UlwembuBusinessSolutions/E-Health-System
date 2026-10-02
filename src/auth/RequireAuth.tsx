@@ -1,3 +1,4 @@
+
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
@@ -14,10 +15,17 @@ import { getTenantSlug } from "@/shared/api/auth";
 // this tab (a stale bookmark to /app with no prior login), matching
 // FindOrganizationScreen's own role as the gate for exactly that case.
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, isInitializing } = useAuth();
+  // AuthContext's own rehydration check hasn't resolved yet — render
+  // nothing rather than redirect, so a signed-in person's still-valid
+  // session gets a chance to prove itself before this decides they're
+  // signed out (AuthContext.tsx's own why-note on why every fresh page
+  // load starts with user === null regardless of session validity).
+  if (isInitializing) return null;
   if (!user) {
     const slug = getTenantSlug();
     return <Navigate to={slug ? `/org/${slug}/login` : "/login"} replace />;
   }
   return <>{children}</>;
 }
+

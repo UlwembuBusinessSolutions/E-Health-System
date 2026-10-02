@@ -1,3 +1,4 @@
+
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
 
@@ -23,10 +24,40 @@ export interface OrganizationSelf {
   logoUrl: string | null;
   primaryColor: string | null;
   shortName: string | null;
+  description: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  address: string | null;
+  businessHours: string | null;
+  websiteUrl: string | null;
+  facebookUrl: string | null;
+  instagramUrl: string | null;
 }
 
 export async function getOrganizationSelf(): Promise<OrganizationSelf> {
   return apiClient.get<OrganizationSelf>("/api/v1/organization", { headers: tenantAuthHeaders() });
+}
+
+// Backs OrganizationProfileController — ORG_ADMIN-only write for the
+// "Contact info" section of the tenant app's Settings tab. The read half
+// rides along on getOrganizationSelf() above (OrganizationSelf's own
+// description/contactEmail/... fields) rather than a separate GET, same
+// "open to any staff, only writes are admin-gated" split branding uses.
+export interface UpdateOrganizationProfilePayload {
+  description?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  address?: string;
+  businessHours?: string;
+  websiteUrl?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
+}
+
+export async function updateOrganizationProfile(
+  payload: UpdateOrganizationProfilePayload,
+): Promise<void> {
+  await apiClient.patch<void>("/api/v1/admin/organization/profile", payload, { headers: tenantAuthHeaders() });
 }
 
 // SADM-US-010's self-service half — the same 20-module picture a platform
@@ -49,6 +80,18 @@ export async function getOrganizationModules(): Promise<ModuleEntitlement[]> {
   return response.items;
 }
 
+// The write half — ORG_ADMIN self-service toggling, same underlying rows
+// a platform operator's own toggleOrganizationModule() (shared/api/platform.ts)
+// writes, just always the caller's own org. Foundation modules 409 if
+// targeted, same reasoning as the platform-operator equivalent.
+export async function toggleOrganizationModule(moduleCode: string, enabled: boolean): Promise<void> {
+  await apiClient.post<void>(
+    `/api/v1/admin/organization/modules/${moduleCode}`,
+    { enabled },
+    { headers: tenantAuthHeaders() },
+  );
+}
+
 export interface LogoUploadResponse {
   logoUrl: string;
 }
@@ -60,3 +103,82 @@ export async function uploadOrganizationLogo(file: File): Promise<LogoUploadResp
     headers: tenantAuthHeaders(),
   });
 }
+
+// Backs OrganizationMailSettingsController — ORG_ADMIN-only, the "Email"
+// section of the tenant app's Settings tab. Same SMTP credentials every
+// outbound email (staff/admin account created, password reset) goes
+// through once configured — see core/notification/EmailService.java.
+// password is never returned by the GET: passwordSet is the only signal
+// the form gets, so it renders the password field blank and only sends a
+// new value when the admin actually types one (see updateOrganizationMailSettings).
+export interface OrganizationMailSettings {
+  host: string | null;
+  port: number | null;
+  username: string | null;
+  passwordSet: boolean;
+  fromAddress: string | null;
+}
+
+export interface UpdateOrganizationMailSettingsPayload {
+  host: string;
+  port: number;
+  username: string;
+  // Omit (or send blank) to keep the currently stored password — mirrors
+  // OrganizationMailSettingsService.updateOwnMailSettings()'s "blank means
+  // leave it alone" rule.
+  password?: string;
+  fromAddress: string;
+}
+
+export async function getOrganizationMailSettings(): Promise<OrganizationMailSettings> {
+  return apiClient.get<OrganizationMailSettings>("/api/v1/admin/organization/mail-settings", {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export async function updateOrganizationMailSettings(
+  payload: UpdateOrganizationMailSettingsPayload,
+): Promise<OrganizationMailSettings> {
+  return apiClient.patch<OrganizationMailSettings>("/api/v1/admin/organization/mail-settings", payload, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+// Backs OrganizationSsoSettingsController — ORG_ADMIN-only, the "Single
+// sign-on" section of the tenant app's Settings tab. Same "bring your own
+// account, secret never round-trips" shape as the mail settings pair
+// above: clientSecretSet is the only signal the GET gives about whether
+// one's stored, and usable mirrors OrganizationSsoSettings.isUsable() —
+// enabled alone doesn't mean the login button actually has anywhere to
+// send someone yet.
+export interface OrganizationSsoSettings {
+  enabled: boolean;
+  microsoftTenantId: string | null;
+  clientId: string | null;
+  clientSecretSet: boolean;
+  usable: boolean;
+}
+
+export interface UpdateOrganizationSsoSettingsPayload {
+  enabled: boolean;
+  microsoftTenantId: string;
+  clientId: string;
+  // Omit (or send blank) to keep the currently stored secret — mirrors
+  // UpdateOrganizationMailSettingsPayload's own password field.
+  clientSecret?: string;
+}
+
+export async function getOrganizationSsoSettings(): Promise<OrganizationSsoSettings> {
+  return apiClient.get<OrganizationSsoSettings>("/api/v1/admin/organization/sso-settings", {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export async function updateOrganizationSsoSettings(
+  payload: UpdateOrganizationSsoSettingsPayload,
+): Promise<OrganizationSsoSettings> {
+  return apiClient.patch<OrganizationSsoSettings>("/api/v1/admin/organization/sso-settings", payload, {
+    headers: tenantAuthHeaders(),
+  });
+}
+

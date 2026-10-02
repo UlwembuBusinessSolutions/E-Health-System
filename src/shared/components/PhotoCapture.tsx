@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useState, type ChangeEvent, type ComponentType } from "react";
 import { Camera, Upload, User, X } from "lucide-react";
 import { Button } from "./Button";
@@ -200,3 +201,4 @@ export function PhotoCapture({
     </div>
   );
 }
+

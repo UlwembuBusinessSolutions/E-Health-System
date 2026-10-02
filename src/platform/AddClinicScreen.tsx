@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,6 +18,7 @@ const TYPE_OPTIONS: { value: FacilityType; label: string }[] = [
   { value: "CLINIC", label: "Clinic" },
   { value: "HOSPITAL", label: "Hospital" },
   { value: "STORE", label: "Store" },
+  { value: "PHARMACY", label: "Pharmacy" },
 ];
 
 // SADM-US-006 — a platform operator adding a clinic to a tenant, from the
@@ -162,3 +164,4 @@ export function AddClinicScreen() {
     </div>
   );
 }
+

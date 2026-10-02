@@ -1,3 +1,4 @@
+
 export interface Facility {
   id: string;
   name: string;
@@ -20,3 +21,4 @@ export interface AuthenticatedUser {
   // names pass through unused until staff-facing screens exist.
   role: string;
 }
+

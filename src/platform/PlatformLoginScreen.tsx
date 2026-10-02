@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -132,16 +133,10 @@ export function PlatformLoginScreen() {
             <Button type="submit" size="lg" loading={isSubmitting || mutation.isPending} className="mt-1 w-full">
               Sign in
             </Button>
-            <button
-              type="button"
-              className="text-[13px] font-medium text-brand-600 hover:text-brand-700"
-              onClick={() => navigate("/platform/register")}
-            >
-              Create the first platform account
-            </button>
           </form>
         </Card>
       </div>
     </div>
   );
 }
+

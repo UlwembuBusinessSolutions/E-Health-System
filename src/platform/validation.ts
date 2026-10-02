@@ -1,3 +1,4 @@
+
 import { z } from "zod";
 
 // Mirrors PlatformController.AdminRequest field-for-field — one admin's
@@ -69,15 +70,6 @@ export const platformLoginSchema = z.object({
 
 export type PlatformLoginValues = z.infer<typeof platformLoginSchema>;
 
-export const platformRegisterSchema = z.object({
-  firstName: z.string().trim().min(1, "First name is required").max(100),
-  lastName: z.string().trim().min(1, "Last name is required").max(100),
-  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-});
-
-export type PlatformRegisterValues = z.infer<typeof platformRegisterSchema>;
-
 // Mirrors PlatformController.AddClinicRequest field-for-field (SADM-US-006).
 // Only name/code/type are required — the backend's own address/phone/
 // operatingHours fields are plain nullable strings, same optionality as
@@ -116,3 +108,4 @@ export const createOperatorSchema = z.object({
 });
 
 export type CreateOperatorValues = z.infer<typeof createOperatorSchema>;
+

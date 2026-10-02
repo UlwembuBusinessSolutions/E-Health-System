@@ -4,10 +4,18 @@ node_modules/
 # Build output
 dist/
 
+# Test results
+test-results/
+
 # Environment files
 .env
 .env.*
 !.env.example
+
+# Maven / Java
+.m2/
+.tools/
+target/
 
 # IDE
 .idea/
@@ -17,8 +25,10 @@ dist/
 # OS
 .DS_Store
 
-# Backend
-target/
+# Application logs
+.run/
+*.log
 
 # Local data
 data/
+debug-key.mjs

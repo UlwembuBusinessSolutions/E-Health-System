@@ -1,3 +1,4 @@
+
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { MobileTopBar } from "./components/MobileTopBar";
@@ -23,3 +24,4 @@ export function AppShell() {
     </div>
   );
 }
+

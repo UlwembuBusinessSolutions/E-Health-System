@@ -1,3 +1,4 @@
+
 @import "@fontsource/ibm-plex-sans/400.css";
 @import "@fontsource/ibm-plex-sans/500.css";
 @import "@fontsource/ibm-plex-sans/600.css";
@@ -25,3 +26,4 @@
   --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
   font-family: var(--font-sans);
 }
+

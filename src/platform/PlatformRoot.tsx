@@ -1,3 +1,4 @@
+
 import { Outlet } from "react-router-dom";
 import "./platform.css";
 
@@ -15,3 +16,4 @@ export function PlatformRoot() {
     </div>
   );
 }
+

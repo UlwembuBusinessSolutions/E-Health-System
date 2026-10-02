@@ -1,23 +1,17 @@
-# --- Build stage ---
-# Maven image, not a bare JDK + separately installed Maven — matches this
-# repo's own assumption (mvn, no committed mvnw wrapper yet).
-FROM maven:3.9-eclipse-temurin-21 AS build
-WORKDIR /build
-
-# pom.xml copied and dependencies resolved before the source — Docker's
-# layer cache then only re-runs the (slow) dependency download when pom.xml
-# itself changes, not on every source edit.
-COPY pom.xml .
-RUN mvn dependency:go-offline -B
-
-COPY src ./src
-RUN mvn package -DskipTests -B
-
-# --- Runtime stage ---
-# JRE, not the JDK build image above — no compiler needed to run a jar,
-# smaller final image.
-FROM eclipse-temurin:21-jre
+# Dev-mode image only — runs the Vite dev server with hot reload, not a
+# production build. docker-compose.yml (in Backend/) bind-mounts this
+# directory over /app at runtime, so the COPY below only matters for the
+# image's own layer cache / a build with no bind mount at all.
+FROM node:20-alpine
 WORKDIR /app
-COPY --from=build /build/target/*.jar app.jar
-EXPOSE 8081
-ENTRYPOINT ["java", "-jar", "app.jar"]
+
+COPY package.json package-lock.json* ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 5173
+# --host binds 0.0.0.0 instead of Vite's default localhost — without it,
+# the dev server is unreachable from outside the container even with the
+# port published.
+CMD ["npm", "run", "dev", "--", "--host"]

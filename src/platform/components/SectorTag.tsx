@@ -1,3 +1,4 @@
+
 import type { OrganizationSector } from "@/shared/api/platform";
 
 const LABELS: Record<OrganizationSector, string> = {
@@ -60,3 +61,4 @@ export function SectorTag({ sector }: { sector: OrganizationSector }) {
     </span>
   );
 }
+

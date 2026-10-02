@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { clearPlatformToken, type PlatformOperator } from "@/shared/api/platform";
 
@@ -37,3 +38,4 @@ export function usePlatformAuth(): PlatformAuthContextValue {
   if (!ctx) throw new Error("usePlatformAuth must be used within PlatformAuthProvider");
   return ctx;
 }
+
