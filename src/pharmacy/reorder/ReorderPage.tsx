@@ -1,27 +1,32 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { listReorderSuppliers, type PurchaseOrder } from "@/shared/api/pharmacyPlanning";
+import { listReorderSuppliers, type PurchaseOrder, type ReorderSupplier } from "@/shared/api/pharmacyPlanning";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { FacilityField } from "../components/FacilityField";
 import { SkeletonRows } from "../components/SkeletonRows";
 import { describeError } from "../lib/problem";
-import { usePharmacyFacility } from "../lib/usePharmacyFacility";
+import { pharmacyKeys } from "../lib/queryKeys";
+import { useFacilitySelection } from "../lib/useFacilitySelection";
 import { PurchaseOrderView } from "./PurchaseOrderView";
-import { reorderKeys } from "./reorderKeys";
 import { SupplierOrderPanel } from "./SupplierOrderPanel";
 import { SupplierSidebar } from "./SupplierSidebar";
+
+interface PlacedOrder {
+  order: PurchaseOrder;
+  supplier: ReorderSupplier;
+}
 
 // `/app/pharmacy/reorder`: supplier first, because a pharmacist orders from a
 // supplier, not from a list of products.
 export function ReorderPage() {
-  const { facilityId, facilities, setFacilityId } = usePharmacyFacility();
+  const { facilityId, facilities, selectFacility } = useFacilitySelection();
   const [supplierId, setSupplierId] = useState("");
-  const [order, setOrder] = useState<PurchaseOrder | null>(null);
+  const [placed, setPlaced] = useState<PlacedOrder | null>(null);
 
   const suppliers = useQuery({
-    queryKey: reorderKeys.suppliers(facilityId),
+    queryKey: pharmacyKeys.reorder.suppliers(facilityId),
     queryFn: () => listReorderSuppliers(facilityId),
     enabled: facilityId !== "",
     staleTime: 30_000,
@@ -31,7 +36,12 @@ export function ReorderPage() {
   // Until one is chosen, the first supplier is shown.
   const supplier = list.find((candidate) => candidate.id === supplierId) ?? list[0];
 
-  if (order) return <PurchaseOrderView order={order} onBack={() => setOrder(null)} />;
+  if (placed) {
+    const facilityName = facilities.find((facility) => facility.id === facilityId)?.name ?? "";
+    return (
+      <PurchaseOrderView order={placed.order} facilityName={facilityName} supplier={placed.supplier} onBack={() => setPlaced(null)} />
+    );
+  }
 
   return (
     <div>
@@ -40,7 +50,7 @@ export function ReorderPage() {
         facilities={facilities}
         value={facilityId}
         onChange={(id) => {
-          setFacilityId(id);
+          selectFacility(id);
           setSupplierId("");
         }}
       />
@@ -53,7 +63,12 @@ export function ReorderPage() {
       {supplier && (
         <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
           <SupplierSidebar suppliers={list} selectedId={supplier.id} onSelect={setSupplierId} />
-          <SupplierOrderPanel key={supplier.id} facilityId={facilityId} supplier={supplier} onOrderCreated={setOrder} />
+          <SupplierOrderPanel
+            key={supplier.id}
+            facilityId={facilityId}
+            supplier={supplier}
+            onOrderCreated={(order) => setPlaced({ order, supplier })}
+          />
         </div>
       )}
     </div>

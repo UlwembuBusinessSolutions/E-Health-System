@@ -7,7 +7,7 @@ import { Card } from "@/shared/components/Card";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { Select } from "@/shared/components/Select";
 import { LinkButton } from "../stock/LinkButton";
-import { useFacilitySelection } from "../stock/useFacilitySelection";
+import { useFacilitySelection } from "../lib/useFacilitySelection";
 import { ProductForm } from "./ProductForm";
 
 // Route: /app/pharmacy/products/new  (?copyFrom=<productId>&facilityId=<id>)

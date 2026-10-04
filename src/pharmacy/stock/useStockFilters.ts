@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { StockStatusFilter } from "@/shared/api/pharmacyStock";
 
-export type StockFilter = "ALL" | StockStatusFilter | "ARCHIVED";
+export type StockFilter = "ALL" | StockStatusFilter;
 
 // Search, chip and page move together: any change to what is being looked at
 // returns to the first page, otherwise "page 3 of the old list" can land on
@@ -37,9 +37,7 @@ export function useStockFilters() {
     page,
     searchResetKey,
     isFiltered: query !== "" || filter !== "ALL",
-    // The API takes the status chips as `status` and the archive view as its own flag.
-    status: filter === "ALL" || filter === "ARCHIVED" ? null : filter,
-    archived: filter === "ARCHIVED",
+    status: filter === "ALL" ? null : filter,
     setSearch,
     setFilter,
     setPage,

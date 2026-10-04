@@ -1,13 +1,12 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Pill } from "lucide-react";
-import { getFacilities } from "@/shared/api/facilities";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { Select } from "@/shared/components/Select";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { SkeletonRows } from "../components/SkeletonRows";
 import { describeError } from "../lib/problem";
+import { useFacilitySelection } from "../lib/useFacilitySelection";
 import { useDispensingQueue } from "./hooks/useDispensingQueue";
 import { OpenedPrescription } from "./OpenedPrescription";
 import { PrescriptionCard } from "./PrescriptionCard";
@@ -18,20 +17,16 @@ import { StockArrivalsBanner } from "./StockArrivalsBanner";
 // does not pre-check it. A 403 surfaces as a toast on the action that was
 // refused, which is harder to miss than a banner at the top of a long queue.
 export function DispensingQueuePage() {
-  const [chosenFacilityId, setChosenFacilityId] = useState("");
   const [openedId, setOpenedId] = useState<string | null>(null);
-
-  const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
-  const facilities = facilitiesQuery.data ?? [];
-  // Default to the first facility without an effect: derived state cannot go stale.
-  const facilityId = chosenFacilityId || facilities[0]?.id || "";
+  const { facilities, facilityId, selectFacility, isLoading: facilitiesLoading, error: facilitiesError, refetch: refetchFacilities } =
+    useFacilitySelection();
 
   const queue = useDispensingQueue(facilityId);
   // A pinned card replaces its own copy in the queue rather than appearing twice.
   const waiting = (queue.data ?? []).filter((p) => p.id !== openedId);
 
   function changeFacility(id: string) {
-    setChosenFacilityId(id);
+    selectFacility(id);
     setOpenedId(null);
   }
 
@@ -61,10 +56,8 @@ export function DispensingQueuePage() {
       )}
 
       <section aria-label="Waiting to be dispensed" className="flex flex-col gap-3">
-        {facilitiesQuery.isError && (
-          <ErrorState message={describeError(facilitiesQuery.error)} onRetry={() => void facilitiesQuery.refetch()} />
-        )}
-        {(facilitiesQuery.isLoading || queue.isLoading) && <SkeletonRows rows={4} />}
+        {facilitiesError && <ErrorState message={describeError(facilitiesError)} onRetry={() => void refetchFacilities()} />}
+        {(facilitiesLoading || queue.isLoading) && <SkeletonRows rows={4} />}
         {queue.isError && (
           <ErrorState message={describeError(queue.error)} onRetry={() => void queue.refetch()} retrying={queue.isFetching} />
         )}

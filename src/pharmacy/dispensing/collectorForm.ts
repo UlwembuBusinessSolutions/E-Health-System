@@ -86,8 +86,8 @@ export function toCollectorDetails(form: CollectorFormState): CollectorDetails {
     name: form.name.trim(),
     idType: form.idType,
     idNumber: form.idNumber.trim(),
-    relationship: form.relationship as CollectorRelationship,
-    relationshipDescription: form.relationship === "OTHER" ? form.relationshipDescription.trim() : undefined,
+    // The server keeps one free-text relationship, so "Other" travels as what was typed.
+    relationship: form.relationship === "OTHER" ? form.relationshipDescription.trim() : form.relationship,
     phone: form.phone.trim(),
     authorisationType: form.authorisation as AuthorisationType,
   };

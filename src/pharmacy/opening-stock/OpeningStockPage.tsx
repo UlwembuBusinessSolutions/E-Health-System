@@ -7,8 +7,9 @@ import { Card } from "@/shared/components/Card";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { FacilityField } from "../components/FacilityField";
 import { StepIndicator } from "../components/StepIndicator";
-import { formatDate, pluralise } from "../lib/format";
-import { usePharmacyFacility } from "../lib/usePharmacyFacility";
+import { pluralise } from "../lib/format";
+import { invalidateAfterStockMovement } from "../lib/queryKeys";
+import { useFacilitySelection } from "../lib/useFacilitySelection";
 import { ReviewStep } from "./ReviewStep";
 import { UploadStep } from "./UploadStep";
 
@@ -22,7 +23,7 @@ const LINK_CLASS =
 // `/app/pharmacy/opening-stock`: first-day setup, loaded once so the ledger starts true.
 export function OpeningStockPage() {
   const queryClient = useQueryClient();
-  const { facilityId, facilities, setFacilityId } = usePharmacyFacility();
+  const { facilityId, facilities, selectFacility } = useFacilitySelection();
   const [stage, setStage] = useState<Stage>("paste");
   const [text, setText] = useState("");
   const [rows, setRows] = useState<OpeningStockRow[]>([]);
@@ -31,8 +32,7 @@ export function OpeningStockPage() {
   function posted(done: PostOpeningStockResult) {
     setResult(done);
     setStage("done");
-    // Balances, ledger and reorder figures all changed.
-    void queryClient.invalidateQueries({ queryKey: ["pharmacy"] });
+    void invalidateAfterStockMovement(queryClient);
   }
 
   return (
@@ -41,7 +41,7 @@ export function OpeningStockPage() {
         title="Load opening stock"
         description="First-day setup. Bring in what is already on the shelf, once, so the ledger starts true."
       />
-      <FacilityField facilities={facilities} value={facilityId} onChange={setFacilityId} />
+      <FacilityField facilities={facilities} value={facilityId} onChange={selectFacility} />
       <StepIndicator steps={STEPS} current={STEP_INDEX[stage]} />
 
       {stage === "paste" && (
@@ -64,9 +64,9 @@ export function OpeningStockPage() {
             <div>
               <h2 className="text-[17px] font-semibold text-text-primary">Opening stock posted</h2>
               <p className="text-[13.5px] text-text-secondary">
-                {pluralise(result.lotCount, "lot")}, {pluralise(result.totalUnits, "unit")}. Every entry is marked Opening
-                balance and dated {formatDate(result.postedAt)}. This list can&apos;t be imported again. To change a quantity
-                later, use Adjust on the Stock screen, which adds a new entry.
+                {pluralise(result.rowsLoaded, "lot")}, {pluralise(result.totalUnits, "unit")}. Every entry is marked Opening
+                balance. This list can&apos;t be imported again. To change a quantity later, use Adjust on the Stock
+                screen, which adds a new entry.
               </p>
             </div>
           </div>

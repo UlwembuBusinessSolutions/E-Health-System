@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import { Link2 } from "lucide-react";
-import { searchMappableProducts, type ProductRef } from "@/shared/api/pharmacy";
+import type { ProductRef } from "@/shared/api/pharmacy";
 import { Button } from "@/shared/components/Button";
 import { SearchInput } from "../components/SearchInput";
 import { describeError } from "../lib/problem";
+import { useProductSearch } from "../lib/productSearch";
 
 interface ProductPickerProps {
   drugName: string;
@@ -22,15 +22,11 @@ export function ProductPicker({ drugName, suggestion, loading, onConfirm }: Prod
   const [query, setQuery] = useState("");
 
   const searching = query.trim().length >= 2;
-  const results = useQuery({
-    queryKey: ["pharmacy", "products", "for-mapping", query],
-    queryFn: () => searchMappableProducts(query),
-    enabled: searching,
-    staleTime: 30_000,
-  });
+  const results = useProductSearch(searching ? query : "");
+  const found: ProductRef[] = (results.data?.items ?? []).map((product) => ({ id: product.id, name: product.displayName }));
   // Before the pharmacist types, the only choice on offer is the server's suggestion.
   const suggestionOnly = suggestion ? [suggestion] : [];
-  const options = searching ? (results.data ?? []) : suggestionOnly;
+  const options = searching ? found : suggestionOnly;
 
   return (
     <div className="mt-3 flex flex-col gap-2.5 rounded-lg border border-amber-500/40 bg-amber-50 p-3.5">
@@ -65,7 +61,7 @@ export function ProductPicker({ drugName, suggestion, loading, onConfirm }: Prod
           </li>
         ))}
       </ul>
-      {searching && results.data?.length === 0 && (
+      {searching && results.data?.items.length === 0 && (
         <p className="text-[13px] text-text-secondary">No product matches. Check the spelling.</p>
       )}
       <Button

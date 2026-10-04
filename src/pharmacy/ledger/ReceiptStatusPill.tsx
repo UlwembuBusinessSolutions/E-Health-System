@@ -1,20 +1,29 @@
 import clsx from "clsx";
 import { CircleCheck, CircleDashed, Undo2, type LucideIcon } from "lucide-react";
-import type { ReceiptStatus } from "@/shared/api/pharmacyLedger";
+import type { ReceiptLineState, ReceiptSummary } from "@/shared/api/pharmacyLedger";
 
-const STATUS: Record<ReceiptStatus, { label: string; icon: LucideIcon; classes: string }> = {
+const STATE: Record<ReceiptLineState, { label: string; icon: LucideIcon; classes: string }> = {
   ON_SHELF: { label: "On shelf", icon: CircleCheck, classes: "bg-success-50 text-success-600" },
   PARTLY_USED: { label: "Partly used", icon: CircleDashed, classes: "bg-amber-50 text-amber-600" },
   REVERSED: { label: "Reversed", icon: Undo2, classes: "bg-surface-sunken text-text-secondary" },
 };
 
-export function receiptStatusLabel(status: ReceiptStatus): string {
-  return STATUS[status].label;
+/**
+ * Where a whole receipt stands, in the same words as its lines. The server only
+ * says POSTED or REVERSED and flags separately whether any stock was used.
+ */
+export function receiptStanding(receipt: Pick<ReceiptSummary, "status" | "usedStock">): ReceiptLineState {
+  if (receipt.status === "REVERSED") return "REVERSED";
+  return receipt.usedStock ? "PARTLY_USED" : "ON_SHELF";
+}
+
+export function receiptStateLabel(state: ReceiptLineState): string {
+  return STATE[state].label;
 }
 
 // Used for both a whole receipt and each of its lines - they share one vocabulary.
-export function ReceiptStatusPill({ status }: { status: ReceiptStatus }) {
-  const { label, icon: Icon, classes } = STATUS[status];
+export function ReceiptStatusPill({ state }: { state: ReceiptLineState }) {
+  const { label, icon: Icon, classes } = STATE[state];
   return (
     <span
       className={clsx(

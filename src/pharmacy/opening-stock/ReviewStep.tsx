@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { postOpeningStock, validateOpeningStock, type OpeningStockRow, type PostOpeningStockResult } from "@/shared/api/pharmacyPlanning";
 import { Button } from "@/shared/components/Button";
@@ -7,6 +6,7 @@ import { ErrorState } from "../components/ErrorState";
 import { SkeletonRows } from "../components/SkeletonRows";
 import { SummaryRail } from "../components/SummaryRail";
 import { describeError } from "../lib/problem";
+import { pharmacyKeys } from "../lib/queryKeys";
 import { CsvReviewTable } from "./CsvReviewTable";
 import { STATUS_LABELS, summarise } from "./openingCsv";
 
@@ -20,11 +20,9 @@ interface ReviewStepProps {
 
 export function ReviewStep({ facilityId, rows, onRowsChange, onBack, onPosted }: ReviewStepProps) {
   const { showToast } = useToast();
-  // One key for this review: posting twice (double click, retry) cannot load the stock twice.
-  const idempotencyKey = useRef(crypto.randomUUID());
 
   const check = useQuery({
-    queryKey: ["pharmacy", "opening-stock", "validate", facilityId, rows],
+    queryKey: pharmacyKeys.opening.validate(facilityId, rows),
     queryFn: () => validateOpeningStock({ facilityId, rows }),
     enabled: rows.length > 0,
     placeholderData: keepPreviousData,
@@ -32,12 +30,13 @@ export function ReviewStep({ facilityId, rows, onRowsChange, onBack, onPosted }:
   });
 
   const post = useMutation({
-    mutationFn: () => postOpeningStock({ facilityId, rows }, idempotencyKey.current),
+    // Posting twice (double click, retry) cannot load the stock twice: the server refuses a second opening balance.
+    mutationFn: () => postOpeningStock({ facilityId, rows }),
     onSuccess: onPosted,
     onError: (error) => showToast(describeError(error), "error"),
   });
 
-  const results = check.data?.results ?? [];
+  const results = check.data?.rows ?? [];
   const summary = summarise(rows, results);
   const canPost = rows.length > 0 && !check.isFetching && results.length === rows.length && summary.needFixing === 0;
 

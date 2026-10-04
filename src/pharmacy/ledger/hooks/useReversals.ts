@@ -1,40 +1,26 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { reverseReceipt, reverseTransaction, type ReversePayload } from "@/shared/api/pharmacyLedger";
+import { invalidateAfterStockMovement } from "@/pharmacy/lib/queryKeys";
+import { describeReversal } from "../lib/movementEvents";
 
-export interface ReverseVariables {
-  id: string;
-  payload: ReversePayload;
-  /** One key per dialog opening, so a retry of the same attempt cannot reverse twice. */
-  idempotencyKey: string;
-}
-
-// A reversal changes the ledger, the receipts' status, product balances and
-// the dashboard counters - and nothing else. Naming those prefixes avoids a
-// blanket refetch of every pharmacy query.
-function useInvalidateAfterReversal() {
-  const queryClient = useQueryClient();
-  return () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["pharmacy", "ledger"] }),
-      queryClient.invalidateQueries({ queryKey: ["pharmacy", "receipts"] }),
-      queryClient.invalidateQueries({ queryKey: ["pharmacy", "stock"] }),
-      queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] }),
-    ]);
-}
-
+// A reversal puts stock back where it was, so it makes everything a stock
+// movement touches stale: the ledger, receipts, stock list and dashboard,
+// reorder suggestions, counts and the scheduled-medicines register.
 export function useReverseTransaction() {
-  const invalidate = useInvalidateAfterReversal();
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload, idempotencyKey }: ReverseVariables) =>
-      reverseTransaction(id, payload, idempotencyKey),
-    onSuccess: invalidate,
+    mutationFn: ({ transactionId, payload }: { transactionId: string; payload: ReversePayload }) =>
+      reverseTransaction(transactionId, payload),
+    onSuccess: () => invalidateAfterStockMovement(queryClient),
   });
 }
 
 export function useReverseReceipt() {
-  const invalidate = useInvalidateAfterReversal();
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, payload, idempotencyKey }: ReverseVariables) => reverseReceipt(id, payload, idempotencyKey),
-    onSuccess: invalidate,
+    // The receipt endpoint takes one free-text reason, so the picked reason and note are joined.
+    mutationFn: ({ receiptId, payload }: { receiptId: string; payload: ReversePayload }) =>
+      reverseReceipt(receiptId, describeReversal(payload)),
+    onSuccess: () => invalidateAfterStockMovement(queryClient),
   });
 }

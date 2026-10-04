@@ -4,8 +4,8 @@ import type { CountSummary } from "@/shared/api/pharmacyCounts";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { FacilityField } from "../components/FacilityField";
 import { StepIndicator } from "../components/StepIndicator";
-import { usePharmacyFacility } from "../lib/usePharmacyFacility";
-import { countKeys } from "./countKeys";
+import { useFacilitySelection } from "../lib/useFacilitySelection";
+import { pharmacyKeys } from "../lib/queryKeys";
 import { CountStep } from "./CountStep";
 import { DoneView } from "./DoneView";
 import { ReviewStep } from "./ReviewStep";
@@ -21,7 +21,7 @@ const STEP_INDEX: Record<Stage, number> = { setup: 0, count: 1, review: 2, done:
 // reloading never loses a typed number.
 export function StockCountPage() {
   const queryClient = useQueryClient();
-  const { facilityId, facilities, setFacilityId } = usePharmacyFacility();
+  const { facilityId, facilities, selectFacility } = useFacilitySelection();
   const [stage, setStage] = useState<Stage>("setup");
   const [countId, setCountId] = useState("");
   const [result, setResult] = useState<CountSummary | null>(null);
@@ -38,12 +38,12 @@ export function StockCountPage() {
   }
 
   function saveForLater() {
-    void queryClient.invalidateQueries({ queryKey: countKeys.list(facilityId, "DRAFT") });
+    void queryClient.invalidateQueries({ queryKey: pharmacyKeys.counts.list(facilityId, "DRAFT") });
     backToSetup();
   }
 
   function changeFacility(id: string) {
-    setFacilityId(id);
+    selectFacility(id);
     backToSetup();
   }
 

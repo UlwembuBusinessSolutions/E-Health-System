@@ -5,9 +5,8 @@ import { Button } from "@/shared/components/Button";
 import { Card } from "@/shared/components/Card";
 import { Switch } from "@/shared/components/Switch";
 import { useToast } from "@/shared/components/toast/ToastProvider";
-import { formatDate } from "../lib/format";
 import { describeError } from "../lib/problem";
-import { countKeys } from "./countKeys";
+import { pharmacyKeys } from "../lib/queryKeys";
 import { DraftCountsList } from "./DraftCountsList";
 import { PastCountsList } from "./PastCountsList";
 import { INITIAL_SCOPE, isScopeComplete, toStartPayload, type ScopeChoice } from "./scopeChoice";
@@ -26,7 +25,7 @@ export function SetupStep({ facilityId, onCountReady }: SetupStepProps) {
   const [blind, setBlind] = useState(true);
 
   const setup = useQuery({
-    queryKey: countKeys.setup(facilityId),
+    queryKey: pharmacyKeys.counts.setup(facilityId),
     queryFn: () => getCountSetup(facilityId),
     enabled: facilityId !== "",
     staleTime: 60_000,
@@ -35,13 +34,11 @@ export function SetupStep({ facilityId, onCountReady }: SetupStepProps) {
   const start = useMutation({
     mutationFn: () => startCount(toStartPayload(choice, facilityId, blind)),
     onSuccess: (count) => {
-      void queryClient.invalidateQueries({ queryKey: countKeys.list(facilityId, "DRAFT") });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.counts.list(facilityId, "DRAFT") });
       onCountReady(count.id);
     },
     onError: (error) => showToast(describeError(error, "Couldn't start the count. Try again."), "error"),
   });
-
-  const lastCounted = setup.data?.lastCountedAt;
 
   return (
     <div className="flex flex-col gap-8">
@@ -52,9 +49,6 @@ export function SetupStep({ facilityId, onCountReady }: SetupStepProps) {
           <h2 className="text-[17px] font-semibold text-text-primary">What are you counting?</h2>
           <p className="mt-1 text-[13.5px] text-text-secondary">
             Smaller counts are faster and easier to get right. Count one shelf area at a time if you can.
-          </p>
-          <p className="mt-1 text-[13px] text-text-secondary">
-            {lastCounted ? `Last count posted on ${formatDate(lastCounted)}.` : "No count has been posted here yet."}
           </p>
         </div>
 

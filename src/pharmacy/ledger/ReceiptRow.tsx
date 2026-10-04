@@ -50,11 +50,11 @@ export function ReceiptRow({ receipt, onPrint, onReverse }: ReceiptRowProps) {
             {lines.map((line) => (
               <tr key={line.id}>
                 <td className="py-2 pr-4 font-medium text-text-primary">{line.productName}</td>
-                <td className="py-2 pr-4">{line.lotNumber ?? "—"}</td>
+                <td className="py-2 pr-4">{line.lotNumber}</td>
                 <td className="py-2 pr-4">{line.expiryDate ? <ExpiryText date={line.expiryDate} /> : "—"}</td>
                 <td className="py-2 pr-4 text-right tabular-nums">{line.quantity.toLocaleString("en-ZA")}</td>
                 <td className="py-2">
-                  <ReceiptStatusPill status={line.state} />
+                  <ReceiptStatusPill state={line.state} />
                 </td>
               </tr>
             ))}

@@ -1,10 +1,10 @@
-import { useRef } from "react";
 import { describeError } from "@/pharmacy/lib/problem";
 import { formatDate } from "@/pharmacy/lib/format";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 import type { LedgerMovement, ReversePayload } from "@/shared/api/pharmacyLedger";
 import { useCurrentBalance } from "./hooks/useCurrentBalance";
 import { useReverseTransaction } from "./hooks/useReversals";
+import { EVENT_LABELS, eventKindOf, signedChange } from "./lib/movementEvents";
 import { ReverseDialog } from "./ReverseDialog";
 
 interface ReverseMovementDialogProps {
@@ -14,20 +14,20 @@ interface ReverseMovementDialogProps {
   onReversed: (movement: LedgerMovement) => void;
 }
 
-// Mounted only while a row's Reverse is open (see MovementsTab), which is what
-// gives each opening its own idempotency key.
+// Mounted only while a row's Reverse is open (see MovementsTab), so every
+// opening starts with a blank form.
 export function ReverseMovementDialog({ facilityId, movement, onClose, onReversed }: ReverseMovementDialogProps) {
   const { showToast } = useToast();
-  const idempotencyKey = useRef(crypto.randomUUID());
   const balance = useCurrentBalance(facilityId, movement.productId, true);
   const mutation = useReverseTransaction();
 
   function reverse(payload: ReversePayload) {
+    // The server reverses the whole transaction this entry belongs to.
     mutation.mutate(
-      { id: movement.id, payload, idempotencyKey: idempotencyKey.current },
+      { transactionId: movement.transactionId, payload },
       {
         onSuccess: () => {
-          showToast(`Reversed the receipt of ${movement.productName}.`, "success");
+          showToast(`Reversed the entry for ${movement.productName}.`, "success");
           onReversed(movement);
         },
       },
@@ -42,16 +42,15 @@ export function ReverseMovementDialog({ facilityId, movement, onClose, onReverse
 
   return (
     <ReverseDialog
-      title="Reverse this receipt line"
+      title="Reverse this entry"
       summary={
         <>
-          <strong>{movement.quantityDelta.toLocaleString("en-ZA")}</strong> × {movement.productName}
-          {movement.lotNumber && <>, lot {movement.lotNumber}</>}
-          {movement.supplierName && <>, from {movement.supplierName}</>}, received {formatDate(movement.createdAt)}.
+          {EVENT_LABELS[eventKindOf(movement.type)]} <strong>{signedChange(movement.quantityDelta)}</strong> ×{" "}
+          {movement.productName}, lot {movement.lotNumber}, on {formatDate(movement.createdAt)}.
         </>
       }
       preview={preview}
-      confirmLabel="Reverse line"
+      confirmLabel="Reverse entry"
       pending={mutation.isPending}
       errorMessage={mutation.isError ? describeError(mutation.error) : null}
       onConfirm={reverse}

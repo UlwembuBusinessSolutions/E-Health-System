@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import { listSupplierOptions, type DrugSchedule } from "@/shared/api/pharmacyStock";
+import type { DrugSchedule } from "@/shared/api/pharmacyStock";
+import { listSupplierOptions } from "@/shared/api/pharmacyReceiving";
 import { Input } from "@/shared/components/Input";
 import { Select } from "@/shared/components/Select";
 import { Switch } from "@/shared/components/Switch";
+import { pharmacyKeys } from "../lib/queryKeys";
 import { SCHEDULE_OPTIONS } from "./productFormModel";
 import type { SectionProps } from "./sectionProps";
 
@@ -14,7 +16,7 @@ export function MoreDetailsSection({ values, update }: SectionProps) {
   const [open, setOpen] = useState(false);
   // Only fetched once the section is opened: most products never need a usual supplier.
   const suppliers = useQuery({
-    queryKey: ["pharmacy", "supplier-options"],
+    queryKey: pharmacyKeys.suppliers.options,
     queryFn: listSupplierOptions,
     enabled: open,
     staleTime: 5 * 60_000,

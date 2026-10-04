@@ -1,8 +1,6 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { History } from "lucide-react";
-import { getFacilities } from "@/shared/api/facilities";
 import type { PharmacyProduct } from "@/shared/api/pharmacyStock";
 import { postReceipt, type PostReceiptPayload } from "@/shared/api/pharmacyReceiving";
 import { Button } from "@/shared/components/Button";
@@ -15,7 +13,9 @@ import { EmptyState } from "@/pharmacy/components/EmptyState";
 import { ErrorState } from "@/pharmacy/components/ErrorState";
 import { formatDate, formatDateTime } from "@/pharmacy/lib/format";
 import { describeError } from "@/pharmacy/lib/problem";
-import { SUPPLIERS_KEY } from "@/pharmacy/suppliers/useSuppliers";
+import { invalidateAfterStockMovement, pharmacyKeys } from "@/pharmacy/lib/queryKeys";
+import { useAttemptKey } from "@/pharmacy/lib/useAttemptKey";
+import { useFacilitySelection } from "@/pharmacy/lib/useFacilitySelection";
 import type { SupplierRef } from "@/pharmacy/suppliers/supplierName";
 import { AddProductPanel } from "./AddProductPanel";
 import { ProductFinder } from "./ProductFinder";
@@ -27,20 +27,9 @@ import { summarisePostedReceipt, type PostedSummary } from "./postedSummary";
 import { toReceivableProduct, type ReceiptLineDraft } from "./receiptTypes";
 import { acceptedQuantity, isoToday, validateReceipt } from "./receiptValidation";
 import { SupplierPicker } from "./SupplierPicker";
-import { useAttemptKey } from "./useAttemptKey";
 import { useReceiptDraft } from "./useReceiptDraft";
 import { useReceiptLines } from "./useReceiptLines";
 import { useRecentProducts } from "./useRecentProducts";
-
-// Everything a successful post changes, invalidated by prefix (not a blanket refetch).
-const STOCK_RELATED_KEYS = [
-  ["pharmacy", "stock"],
-  ["pharmacy", "ledger"],
-  ["pharmacy", "receipts"],
-  ["pharmacy", "reorder"],
-  ["pharmacy", "dashboard"],
-  SUPPLIERS_KEY,
-] as const;
 
 // What the success screen needs, captured when posting starts: the form may
 // change while the request is in flight, and the summary must describe what was sent.
@@ -54,13 +43,15 @@ interface PostAttempt {
 export function ReceiveStockPage() {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
-  const keyForAttempt = useAttemptKey();
-
-  const facilities = useQuery({ queryKey: ["facilities"], queryFn: getFacilities, staleTime: 5 * 60_000 });
-  const [chosenFacilityId, setChosenFacilityId] = useState("");
-  // Derived instead of copied into state by an effect: explicit choice, then ?facilityId=, then the first facility.
-  const facilityId = chosenFacilityId || searchParams.get("facilityId") || facilities.data?.[0]?.id || "";
+  const { keyFor, settle } = useAttemptKey();
+  const {
+    facilities,
+    facilityId,
+    selectFacility,
+    error: facilitiesError,
+    refetch: refetchFacilities,
+    isFetching: facilitiesFetching,
+  } = useFacilitySelection();
 
   const [supplier, setSupplier] = useState<SupplierRef | null>(null);
   const [invoiceNumber, setInvoiceNumber] = useState("");
@@ -80,8 +71,10 @@ export function ReceiveStockPage() {
   const flaggedCount = lines.filter((line) => line.flag !== null).length;
 
   const post = useMutation({
-    mutationFn: (attempt: PostAttempt) => postReceipt(attempt.payload, keyForAttempt(attempt.payload)),
+    mutationFn: (attempt: PostAttempt) => postReceipt(attempt.payload, keyFor(attempt.payload)),
+    onError: settle,
     onSuccess: (receipt, attempt) => {
+      settle();
       setPosted(
         summarisePostedReceipt(
           receipt.receiptNumber,
@@ -91,7 +84,7 @@ export function ReceiveStockPage() {
       );
       remember(attempt.lines.map((line) => line.product));
       clearDraft();
-      STOCK_RELATED_KEYS.forEach((queryKey) => void queryClient.invalidateQueries({ queryKey }));
+      void invalidateAfterStockMovement(queryClient);
     },
   });
 
@@ -120,7 +113,7 @@ export function ReceiveStockPage() {
   function handleProductCreated(product: PharmacyProduct) {
     addProduct(toReceivableProduct(product));
     setNewProductName(null);
-    void queryClient.invalidateQueries({ queryKey: ["pharmacy", "products"] });
+    void queryClient.invalidateQueries({ queryKey: pharmacyKeys.products.all });
     showToast(`${product.displayName} added to the catalog and to this receipt.`, "success");
   }
 
@@ -148,12 +141,12 @@ export function ReceiveStockPage() {
         }
       />
 
-      {facilities.isError ? (
+      {facilitiesError ? (
         <Card>
           <ErrorState
-            message={describeError(facilities.error)}
-            retrying={facilities.isFetching}
-            onRetry={() => void facilities.refetch()}
+            message={describeError(facilitiesError)}
+            retrying={facilitiesFetching}
+            onRetry={() => void refetchFacilities()}
           />
         </Card>
       ) : (
@@ -165,9 +158,9 @@ export function ReceiveStockPage() {
                 <Select
                   label="Into facility"
                   required
-                  options={(facilities.data ?? []).map((facility) => ({ value: facility.id, label: facility.name }))}
+                  options={facilities.map((facility) => ({ value: facility.id, label: facility.name }))}
                   value={facilityId}
-                  onChange={(event) => setChosenFacilityId(event.target.value)}
+                  onChange={(event) => selectFacility(event.target.value)}
                 />
                 <Input label="Received on" readOnly value={formatDate(today)} />
                 <SupplierPicker value={supplier} onChange={setSupplier} />

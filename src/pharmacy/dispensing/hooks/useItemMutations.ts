@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import {
+  decideSubstitution,
   dispensePrescriptionItem,
   markPrescriptionItemOutOfStock,
   requestSubstitution,
@@ -7,58 +8,68 @@ import {
   setPrescriptionItemProduct,
   type DispenseItemPayload,
   type ReturnItemPayload,
+  type SubstitutionStatus,
 } from "@/shared/api/pharmacy";
 import { useToast } from "@/shared/components/toast/ToastProvider";
-import { describeError } from "../../lib/problem";
-import { useRefreshAfterChange } from "./dispensingKeys";
+import { describeError, isWitnessRequired } from "../../lib/problem";
+import { useRefreshAfterChange } from "./useRefreshAfterChange";
 
 // Every per-item action shares the same success/failure handling: refresh what
 // the screen shows, and tell the pharmacist plainly why a rejection happened.
-function useItemMutationCallbacks(prescriptionId: string, failureMessage: string) {
+// A missing witness is not a failure to report: the screen asks for one instead.
+function useItemMutationCallbacks(failureMessage: string) {
   const refresh = useRefreshAfterChange();
   const { showToast } = useToast();
   return {
-    onSuccess: () => refresh(prescriptionId),
-    onError: (error: unknown) => showToast(describeError(error, failureMessage), "error"),
+    onSuccess: () => refresh(),
+    onError: (error: unknown) => {
+      if (!isWitnessRequired(error)) showToast(describeError(error, failureMessage), "error");
+    },
   };
 }
 
-// The caller mints the idempotency key per click: two deliberate clicks are two
-// attempts, but a network retry of ONE attempt reuses its key (the same
-// variables are replayed) and cannot deduct stock twice.
+// The caller disables the button while this is pending, which is what stops a
+// double click deducting stock twice.
 export function useDispenseItem(prescriptionId: string, itemId: string) {
   return useMutation({
-    mutationFn: ({ payload, key }: { payload: DispenseItemPayload; key: string }) =>
-      dispensePrescriptionItem(prescriptionId, itemId, payload, key),
-    ...useItemMutationCallbacks(prescriptionId, "Couldn't dispense that item. Try again."),
+    mutationFn: (payload: DispenseItemPayload) => dispensePrescriptionItem(prescriptionId, itemId, payload),
+    ...useItemMutationCallbacks("Couldn't dispense that item. Try again."),
   });
 }
 
 export function useMarkOutOfStock(prescriptionId: string, itemId: string) {
   return useMutation({
     mutationFn: (note: string) => markPrescriptionItemOutOfStock(prescriptionId, itemId, note || undefined),
-    ...useItemMutationCallbacks(prescriptionId, "Couldn't mark that item out of stock. Try again."),
+    ...useItemMutationCallbacks("Couldn't mark that item out of stock. Try again."),
   });
 }
 
 export function useMapProduct(prescriptionId: string, itemId: string) {
   return useMutation({
     mutationFn: (productId: string) => setPrescriptionItemProduct(prescriptionId, itemId, productId),
-    ...useItemMutationCallbacks(prescriptionId, "Couldn't link that product. Try again."),
+    ...useItemMutationCallbacks("Couldn't link that product. Try again."),
   });
 }
 
 export function useRecordReturn(prescriptionId: string, itemId: string) {
   return useMutation({
     mutationFn: (payload: ReturnItemPayload) => returnPrescriptionItem(prescriptionId, itemId, payload),
-    ...useItemMutationCallbacks(prescriptionId, "Couldn't record that return. Try again."),
+    ...useItemMutationCallbacks("Couldn't record that return. Try again."),
   });
 }
 
 export function useRequestSubstitution(prescriptionId: string) {
   return useMutation({
-    mutationFn: (request: { itemId: string; substituteProductId: string; message: string }) =>
-      requestSubstitution(prescriptionId, request.itemId, request.substituteProductId, request.message),
-    ...useItemMutationCallbacks(prescriptionId, "Couldn't send that request. Try again."),
+    mutationFn: (request: { itemId: string; substituteProductId: string; note: string }) =>
+      requestSubstitution(prescriptionId, request.itemId, request.substituteProductId, request.note),
+    ...useItemMutationCallbacks("Couldn't send that request. Try again."),
+  });
+}
+
+export function useDecideSubstitution(prescriptionId: string, itemId: string) {
+  return useMutation({
+    mutationFn: (status: Extract<SubstitutionStatus, "APPROVED" | "REJECTED">) =>
+      decideSubstitution(prescriptionId, itemId, status),
+    ...useItemMutationCallbacks("Couldn't record the prescriber's answer. Try again."),
   });
 }

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { listProducts, type PharmacyProduct } from "@/shared/api/pharmacyStock";
+import type { PharmacyProduct } from "@/shared/api/pharmacyStock";
 import { describeError } from "../lib/problem";
+import { useProductSearch } from "../lib/productSearch";
 import { SearchInput } from "./SearchInput";
 import { SkeletonRows } from "./SkeletonRows";
 
@@ -17,18 +17,11 @@ interface ProductSearchPickerProps {
   describe?: (product: PharmacyProduct) => string;
 }
 
-const RESULT_LIMIT = 8;
-
 // SearchInput already debounces typing by 250 ms, so a request is only sent
 // once the person pauses. Nothing is requested until something is typed.
 export function ProductSearchPicker({ label, onPick, excludeIds, notFoundExtra, describe }: ProductSearchPickerProps) {
   const [text, setText] = useState("");
-  const results = useQuery({
-    queryKey: ["pharmacy", "products", "picker", text],
-    queryFn: () => listProducts({ q: text, activeOnly: true, size: RESULT_LIMIT }),
-    enabled: text.trim().length > 0,
-    staleTime: 30_000,
-  });
+  const results = useProductSearch(text);
   const products = (results.data?.items ?? []).filter((product) => !excludeIds?.has(product.id));
 
   return (

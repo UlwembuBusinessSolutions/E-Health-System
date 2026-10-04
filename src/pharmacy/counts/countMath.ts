@@ -101,6 +101,15 @@ export const REASON_LABELS: Record<CountReason, string> = {
   RETURNED_TO_STOCK: "Returned to stock",
 };
 
+function isCountReason(reason: string): reason is CountReason {
+  return reason in REASON_LABELS;
+}
+
+/** The server stores a reason as free text, so anything unfamiliar is shown as written. */
+export function reasonLabel(reason: string): string {
+  return isCountReason(reason) ? REASON_LABELS[reason] : reason;
+}
+
 const SHORT_REASONS: CountReason[] = ["MISCOUNT", "DAMAGED", "EXPIRED_REMOVED", "LOST_OR_MISSING"];
 const OVER_REASONS: CountReason[] = ["MISCOUNT", "UNRECORDED_RECEIPT", "RETURNED_TO_STOCK"];
 

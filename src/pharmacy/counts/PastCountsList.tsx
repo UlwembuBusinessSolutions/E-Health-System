@@ -3,7 +3,7 @@ import { listCounts, type CountSummary } from "@/shared/api/pharmacyCounts";
 import { ResponsiveTable, type TableColumn } from "../components/ResponsiveTable";
 import { formatDate, pluralise } from "../lib/format";
 import { describeError } from "../lib/problem";
-import { countKeys } from "./countKeys";
+import { pharmacyKeys } from "../lib/queryKeys";
 
 function resultOf(count: CountSummary): string {
   return (count.differences ?? 0) === 0
@@ -21,7 +21,7 @@ const COLUMNS: TableColumn<CountSummary>[] = [
 
 export function PastCountsList({ facilityId }: { facilityId: string }) {
   const past = useQuery({
-    queryKey: countKeys.list(facilityId, "POSTED"),
+    queryKey: pharmacyKeys.counts.list(facilityId, "POSTED"),
     queryFn: () => listCounts(facilityId, "POSTED"),
     enabled: facilityId !== "",
     staleTime: 30_000,
@@ -35,7 +35,7 @@ export function PastCountsList({ facilityId }: { facilityId: string }) {
       <ResponsiveTable
         label="Past counts"
         columns={COLUMNS}
-        rows={past.data?.items ?? []}
+        rows={past.data ?? []}
         getRowKey={(count) => count.id}
         loading={past.isLoading}
         errorMessage={past.error ? describeError(past.error) : null}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Printer } from "lucide-react";
-import { getRegisterPage, listScheduledProducts } from "@/shared/api/pharmacyCounts";
+import { getRegisterPage, listScheduledProducts } from "@/shared/api/pharmacyRegister";
 import { Button } from "@/shared/components/Button";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { useToast } from "@/shared/components/toast/ToastProvider";
@@ -12,12 +12,12 @@ import { PrintArea } from "../components/PrintArea";
 import { SkeletonRows } from "../components/SkeletonRows";
 import { downloadTextFile } from "../lib/csv";
 import { describeError } from "../lib/problem";
-import { usePharmacyFacility } from "../lib/usePharmacyFacility";
+import { useFacilitySelection } from "../lib/useFacilitySelection";
 import { DayCloseCard } from "./DayCloseCard";
 import { RecordRemovalDialog } from "./RecordRemovalDialog";
 import { RegisterBook } from "./RegisterBook";
 import { registerFilename, registerToCsv } from "./registerCsv";
-import { registerKeys } from "./registerKeys";
+import { pharmacyKeys } from "../lib/queryKeys";
 import { businessDateOf } from "./registerMath";
 import { ScheduledProductPicker } from "./ScheduledProductPicker";
 
@@ -28,13 +28,13 @@ const EXPORT_SIZE = 1000;
 // `/app/pharmacy/register`
 export function ScheduleRegisterPage() {
   const { showToast } = useToast();
-  const { facilityId, facilities, setFacilityId } = usePharmacyFacility();
+  const { facilityId, facilities, selectFacility } = useFacilitySelection();
   const [productId, setProductId] = useState("");
   const [page, setPage] = useState(0);
   const [removing, setRemoving] = useState(false);
 
   const products = useQuery({
-    queryKey: registerKeys.products(facilityId),
+    queryKey: pharmacyKeys.register.products(facilityId),
     queryFn: () => listScheduledProducts(facilityId),
     enabled: facilityId !== "",
     staleTime: 30_000,
@@ -43,7 +43,7 @@ export function ScheduleRegisterPage() {
   const product = products.data?.find((candidate) => candidate.productId === productId) ?? products.data?.[0];
 
   const book = useQuery({
-    queryKey: [...registerKeys.book(facilityId, product?.productId ?? ""), page],
+    queryKey: [...pharmacyKeys.register.book(facilityId, product?.productId ?? ""), page],
     queryFn: () => getRegisterPage(facilityId, product?.productId ?? "", page, PAGE_SIZE),
     enabled: facilityId !== "" && product !== undefined,
     placeholderData: keepPreviousData,
@@ -75,7 +75,7 @@ export function ScheduleRegisterPage() {
           </Button>
         }
       />
-      <FacilityField facilities={facilities} value={facilityId} onChange={(id) => { setFacilityId(id); setProductId(""); setPage(0); }} />
+      <FacilityField facilities={facilities} value={facilityId} onChange={(id) => { selectFacility(id); setProductId(""); setPage(0); }} />
 
       {products.isLoading && <SkeletonRows rows={3} />}
       {products.error && <ErrorState message={describeError(products.error)} onRetry={() => void products.refetch()} />}
@@ -91,7 +91,7 @@ export function ScheduleRegisterPage() {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 id="book-heading" className="text-[17px] font-semibold text-text-primary">
-                  {product.name} {product.sub}
+                  {product.productName}
                 </h2>
                 <p className="text-[13px] text-text-secondary">
                   Schedule {product.schedule === "S6" ? "6" : "5"} &middot; {book.data?.totalItems ?? 0} entries &middot; current balance{" "}

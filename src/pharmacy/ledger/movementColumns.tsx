@@ -10,6 +10,7 @@ import {
   counterpartyOf,
   eventKindOf,
   isReversed,
+  isReversedFromReceipts,
   isStockUsed,
   referenceOf,
   signedChange,
@@ -28,14 +29,15 @@ function ActionCell({ row, onReverse }: { row: LedgerMovement; onReverse: (movem
       <Button
         variant="secondary"
         icon={<Undo2 className="size-4" aria-hidden />}
-        aria-label={`Reverse receipt of ${row.productName}`}
+        aria-label={`Reverse the ${eventKindOf(row.type).toLowerCase()} entry for ${row.productName}`}
         onClick={() => onReverse(row)}
       >
         Reverse
       </Button>
     );
   }
-  return isStockUsed(row) ? <span className="text-[12.5px] text-text-secondary">Stock already used</span> : null;
+  if (isStockUsed(row)) return <span className="text-[12.5px] text-text-secondary">Stock already used</span>;
+  return isReversedFromReceipts(row) ? <span className="text-[12.5px] text-text-secondary">Reverse on Receipts</span> : null;
 }
 
 export function movementColumns(onReverse: (movement: LedgerMovement) => void): TableColumn<LedgerMovement>[] {
@@ -76,7 +78,7 @@ export function movementColumns(onReverse: (movement: LedgerMovement) => void): 
         </Cell>
       ),
     },
-    { key: "lot", header: "Lot", cell: (row) => <Cell row={row}>{row.lotNumber ?? "—"}</Cell> },
+    { key: "lot", header: "Lot", cell: (row) => <Cell row={row}>{row.lotNumber}</Cell> },
     {
       key: "change",
       header: "Change",

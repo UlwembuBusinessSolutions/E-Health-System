@@ -5,10 +5,12 @@ import { getFacilities } from "@/shared/api/facilities";
 
 const FACILITY_PARAM = "facilityId";
 
-// The facility lives in the URL, not in component state: Receive links back
-// here with ?facilityId=, and a refresh or a shared link keeps the same
-// facility selected. Falling back to the first facility is derived while
-// rendering, so there is no effect that could overwrite a choice.
+// Every pharmacy screen is scoped to one facility. The choice lives in the
+// URL, not in component state: another screen can link here with ?facilityId=,
+// and a refresh or a shared link keeps the same facility selected. Until
+// someone picks another, the first facility the server returns is used, so
+// single-site tenants never see a facility control at all. That fallback is
+// derived while rendering, so there is no effect that could overwrite a choice.
 export function useFacilitySelection() {
   const [searchParams, setSearchParams] = useSearchParams();
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities, staleTime: 5 * 60_000 });
@@ -30,5 +32,13 @@ export function useFacilitySelection() {
     [setSearchParams],
   );
 
-  return { facilities, facilityId, selectFacility, isLoading: facilitiesQuery.isLoading };
+  return {
+    facilities,
+    facilityId,
+    selectFacility,
+    isLoading: facilitiesQuery.isLoading,
+    isFetching: facilitiesQuery.isFetching,
+    error: facilitiesQuery.error,
+    refetch: facilitiesQuery.refetch,
+  };
 }

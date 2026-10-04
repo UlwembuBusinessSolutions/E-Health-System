@@ -1,9 +1,7 @@
-import { useState } from "react";
 import { ArrowLeft, Copy, Printer } from "lucide-react";
-import type { PurchaseOrder } from "@/shared/api/pharmacyPlanning";
+import type { PurchaseOrder, ReorderSupplier } from "@/shared/api/pharmacyPlanning";
 import { Button } from "@/shared/components/Button";
 import { Card } from "@/shared/components/Card";
-import { Input } from "@/shared/components/Input";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 import { PrintArea } from "../components/PrintArea";
 import { formatDate } from "../lib/format";
@@ -11,18 +9,18 @@ import { purchaseOrderEmailText } from "./purchaseOrderText";
 
 interface PurchaseOrderViewProps {
   order: PurchaseOrder;
+  /** The server's order names only ids; the screen already knows these two. */
+  facilityName: string;
+  supplier: ReorderSupplier;
   onBack: () => void;
 }
 
-export function PurchaseOrderView({ order, onBack }: PurchaseOrderViewProps) {
+export function PurchaseOrderView({ order, facilityName, supplier, onBack }: PurchaseOrderViewProps) {
   const { showToast } = useToast();
-  // The expected date is typed after the order exists, so it only shapes what
-  // is printed or copied for the supplier; the order record itself is unchanged.
-  const [expected, setExpected] = useState(order.expectedDelivery ?? "");
 
   async function copyEmail() {
     try {
-      await navigator.clipboard.writeText(purchaseOrderEmailText(order, expected));
+      await navigator.clipboard.writeText(purchaseOrderEmailText(order, facilityName));
       showToast("Email text copied.", "success");
     } catch {
       showToast("Couldn't copy. Select the order and copy it by hand.", "error");
@@ -36,7 +34,6 @@ export function PurchaseOrderView({ order, onBack }: PurchaseOrderViewProps) {
           Back to the list
         </Button>
         <div className="flex flex-wrap items-end gap-3">
-          <Input label="Expected delivery" type="date" value={expected} onChange={(event) => setExpected(event.target.value)} />
           <Button variant="secondary" icon={<Copy className="size-4" aria-hidden />} onClick={() => void copyEmail()}>
             Copy as email text
           </Button>
@@ -54,23 +51,23 @@ export function PurchaseOrderView({ order, onBack }: PurchaseOrderViewProps) {
               <p className="text-[15px] font-semibold tabular-nums text-text-primary">{order.poNumber}</p>
             </div>
             <div className="text-[13.5px] text-text-secondary sm:text-right">
-              <p>{order.facilityName}</p>
+              <p>{facilityName}</p>
               <p>Date: {formatDate(order.createdAt)}</p>
-              <p>Raised by: {order.raisedByName}</p>
+              <p>Raised by: {order.createdByName}</p>
             </div>
           </header>
 
           <div className="grid gap-4 py-4 text-[13.5px] sm:grid-cols-2">
             <section aria-label="Supplier">
               <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-secondary">Supplier</h3>
-              <p className="font-medium text-text-primary">{order.supplier.name}</p>
-              <p className="text-text-secondary">{[order.supplier.phone, order.supplier.email].filter(Boolean).join(" · ")}</p>
+              <p className="font-medium text-text-primary">{order.supplierName}</p>
+              <p className="text-text-secondary">{[supplier.phone, supplier.email].filter(Boolean).join(" · ")}</p>
             </section>
             <section aria-label="Deliver to">
               <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-secondary">Deliver to</h3>
-              <p className="font-medium text-text-primary">{order.facilityName}</p>
+              <p className="font-medium text-text-primary">{facilityName}</p>
               <p className="text-text-secondary">
-                {expected ? `Expected ${formatDate(expected)}. ` : ""}Please quote {order.poNumber} on the invoice.
+                {order.expectedDelivery ? `Expected ${formatDate(order.expectedDelivery)}. ` : ""}Please quote {order.poNumber} on the invoice.
               </p>
             </section>
           </div>
@@ -87,8 +84,7 @@ export function PurchaseOrderView({ order, onBack }: PurchaseOrderViewProps) {
               {order.lines.map((line) => (
                 <tr key={line.productId}>
                   <td className="py-2.5 pr-3">
-                    <span className="font-medium text-text-primary">{line.name}</span>
-                    {line.sub && <span className="block text-[12.5px] text-text-secondary">{line.sub}</span>}
+                    <span className="font-medium text-text-primary">{line.productName}</span>
                   </td>
                   <td className="py-2.5 pr-3 tabular-nums">{line.packs} &times; {line.packSize}</td>
                   <td className="py-2.5 text-right tabular-nums">{line.quantity}</td>

@@ -4,7 +4,6 @@ import type { Supplier } from "@/shared/api/pharmacyReceiving";
 import { Button } from "@/shared/components/Button";
 import { ErrorState } from "@/pharmacy/components/ErrorState";
 import { SkeletonRows } from "@/pharmacy/components/SkeletonRows";
-import { formatDate } from "@/pharmacy/lib/format";
 import { describeError } from "@/pharmacy/lib/problem";
 import { SupplierDialog } from "@/pharmacy/suppliers/SupplierDialog";
 import type { SupplierRef } from "@/pharmacy/suppliers/supplierName";
@@ -23,11 +22,7 @@ function matches(supplier: Supplier, query: string): boolean {
 }
 
 function describeSupplier(supplier: Supplier): string {
-  const parts = [
-    supplier.lastReceivedAt ? `Last used ${formatDate(supplier.lastReceivedAt)}` : null,
-    supplier.phone,
-  ].filter((part): part is string => Boolean(part));
-  return parts.join(" · ");
+  return [supplier.phone, supplier.email].filter(Boolean).join(" · ");
 }
 
 export function SupplierPicker({ value, onChange }: SupplierPickerProps) {

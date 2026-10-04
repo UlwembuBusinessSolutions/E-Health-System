@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import type { CountScope, CountSetupInfo } from "@/shared/api/pharmacyCounts";
 import { Select } from "@/shared/components/Select";
 import { ProductSearchPicker } from "../components/ProductSearchPicker";
+import { formatDate } from "../lib/format";
 import type { ScopeChoice } from "./scopeChoice";
 
 interface ScopeCard {
@@ -28,7 +29,7 @@ interface ScopePickerProps {
 export function ScopePicker({ choice, setup, onChange }: ScopePickerProps) {
   const areaOptions = (setup?.areas ?? []).map((area) => ({
     value: area.label,
-    label: `${area.label} (${area.lotCount} lots)`,
+    label: `${area.label} (${area.lotCount} lots${area.lastCountedAt ? `, last counted ${formatDate(area.lastCountedAt)}` : ""})`,
   }));
 
   return (
@@ -56,7 +57,7 @@ export function ScopePicker({ choice, setup, onChange }: ScopePickerProps) {
               <span>
                 <span className="block text-[14.5px] font-semibold text-text-primary">{title}</span>
                 <span className="block text-[13px] text-text-secondary">
-                  {scope === "ALL" && setup ? `${setup.wholeFacilityLotCount} lots` : hint}
+                  {scope === "ALL" && setup ? `${setup.wholeFacilityLots} lots` : hint}
                 </span>
               </span>
             </label>

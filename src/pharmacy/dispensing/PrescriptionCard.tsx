@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
-import type { PrescriberMessage, Prescription, PrescriptionItem, SubstituteSuggestion } from "@/shared/api/pharmacy";
+import type { PrescriberMessage, Prescription, PrescriptionItem, ProductRef } from "@/shared/api/pharmacy";
 import { Card } from "@/shared/components/Card";
 import { formatDateTime } from "../lib/format";
 import { CardActions } from "./CardActions";
@@ -12,6 +12,9 @@ import { ItemRow } from "./ItemRow";
 import { MessagePrescriberForm } from "./MessagePrescriberForm";
 import { PrescriptionHeader } from "./PrescriptionHeader";
 
+// The server rejects a substitution note longer than this.
+const SUBSTITUTION_NOTE_MAX = 500;
+
 // What the prescriber-message box is for right now: a free question, or a
 // substitute request whose text is prefilled and whose send also records it.
 interface Composer {
@@ -19,10 +22,10 @@ interface Composer {
   substitution: { itemId: string; productId: string } | null;
 }
 
-function substituteRequestText(p: Prescription, item: PrescriptionItem, suggestion: SubstituteSuggestion): string {
+function substituteRequestText(p: Prescription, item: PrescriptionItem, substitute: ProductRef): string {
   return (
     `${item.drugName} (${item.dosage} × ${item.quantity}) for ${p.patientName}, ${p.serialNumber}, has no usable stock. ` +
-    `May I substitute ${suggestion.productName}? I won't dispense it unless you approve.`
+    `May I substitute ${substitute.name}? I won't dispense it unless you approve.`
   );
 }
 
@@ -34,10 +37,10 @@ export function PrescriptionCard({ prescription: p }: { prescription: Prescripti
   const sendMessage = useSendPrescriberMessage(p.id);
   const requestSubstitution = useRequestSubstitution(p.id);
 
-  function openSubstituteRequest(item: PrescriptionItem, suggestion: SubstituteSuggestion) {
+  function openSubstituteRequest(item: PrescriptionItem, substitute: ProductRef) {
     setComposer({
-      initialText: substituteRequestText(p, item, suggestion),
-      substitution: { itemId: item.id, productId: suggestion.productId },
+      initialText: substituteRequestText(p, item, substitute),
+      substitution: { itemId: item.id, productId: substitute.id },
     });
   }
 
@@ -45,7 +48,7 @@ export function PrescriptionCard({ prescription: p }: { prescription: Prescripti
     if (composer?.substitution) {
       const { itemId, productId } = composer.substitution;
       requestSubstitution.mutate(
-        { itemId, substituteProductId: productId, message: text },
+        { itemId, substituteProductId: productId, note: text },
         { onSuccess: () => setComposer(null) },
       );
       return;
@@ -61,7 +64,7 @@ export function PrescriptionCard({ prescription: p }: { prescription: Prescripti
   return (
     <Card className="flex flex-col gap-3 p-4 sm:p-5">
       <PrescriptionHeader prescription={p} />
-      {p.collection && <CollectionSummaryLine prescriptionId={p.id} collection={p.collection} />}
+      {p.items.some((item) => item.dispensedQuantity > 0) && <CollectionSummaryLine prescriptionId={p.id} />}
 
       <ul className="flex flex-col gap-2">
         {p.items.map((item) => (
@@ -81,6 +84,7 @@ export function PrescriptionCard({ prescription: p }: { prescription: Prescripti
           key={composer.substitution?.itemId ?? "free"}
           prescriberName={p.prescriberName}
           initialText={composer.initialText}
+          maxLength={composer.substitution ? SUBSTITUTION_NOTE_MAX : undefined}
           loading={sendMessage.isPending || requestSubstitution.isPending}
           onSend={send}
           onCancel={() => setComposer(null)}

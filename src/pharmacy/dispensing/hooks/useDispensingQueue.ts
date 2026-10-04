@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { listDispensingQueue } from "@/shared/api/pharmacy";
-import { dispensingKeys } from "./dispensingKeys";
+import { pharmacyKeys } from "../../lib/queryKeys";
 import { useDocumentVisible } from "./useDocumentVisible";
 
 const POLL_INTERVAL_MS = 10_000;
@@ -11,7 +11,7 @@ const POLL_INTERVAL_MS = 10_000;
 export function useDispensingQueue(facilityId: string) {
   const visible = useDocumentVisible();
   return useQuery({
-    queryKey: dispensingKeys.queue(facilityId),
+    queryKey: pharmacyKeys.dispensing.queue(facilityId),
     queryFn: () => listDispensingQueue(facilityId),
     enabled: facilityId !== "",
     refetchInterval: visible ? POLL_INTERVAL_MS : false,

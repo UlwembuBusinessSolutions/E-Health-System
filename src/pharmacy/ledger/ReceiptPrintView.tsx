@@ -1,21 +1,8 @@
 import { useEffect } from "react";
-import { createPortal } from "react-dom";
+import { PrintArea } from "@/pharmacy/components/PrintArea";
 import { formatDate, formatDateTime } from "@/pharmacy/lib/format";
 import type { ReceiptDetail } from "@/shared/api/pharmacyLedger";
-import { receiptStatusLabel } from "./ReceiptStatusPill";
-
-const PRINT_ROOT_ID = "goods-received-note";
-
-// Hides the whole app during printing and shows only the note. Done with a
-// scoped style rather than a separate window so it needs no new route and
-// works with popup blockers.
-const PRINT_ONLY_CSS = `
-  #${PRINT_ROOT_ID} { display: none; }
-  @media print {
-    body > *:not(#${PRINT_ROOT_ID}) { display: none !important; }
-    #${PRINT_ROOT_ID} { display: block; color: #000; background: #fff; padding: 24px; font-size: 12pt; }
-  }
-`;
+import { receiptStanding, receiptStateLabel } from "./ReceiptStatusPill";
 
 interface ReceiptPrintViewProps {
   receipt: ReceiptDetail;
@@ -23,6 +10,10 @@ interface ReceiptPrintViewProps {
   onDone: () => void;
 }
 
+const CELL = "py-1 pr-3";
+
+// Rendered on paper only (PrintArea hides everything else), so it needs no
+// route and, unlike a separate window, works with popup blockers.
 export function ReceiptPrintView({ receipt, onDone }: ReceiptPrintViewProps) {
   useEffect(() => {
     window.addEventListener("afterprint", onDone, { once: true });
@@ -30,12 +21,11 @@ export function ReceiptPrintView({ receipt, onDone }: ReceiptPrintViewProps) {
     return () => window.removeEventListener("afterprint", onDone);
   }, [onDone]);
 
-  return createPortal(
-    <section id={PRINT_ROOT_ID} aria-hidden>
-      <style>{PRINT_ONLY_CSS}</style>
-      <h1 style={{ fontSize: "18pt", fontWeight: 700 }}>Goods-received note</h1>
-      <p style={{ marginBottom: 16 }}>Receipt {receipt.receiptNumber}</p>
-      <dl style={{ display: "grid", gridTemplateColumns: "10rem 1fr", gap: "4px 16px", marginBottom: 16 }}>
+  return (
+    <PrintArea className="p-6 text-[12pt]">
+      <h1 className="text-[18pt] font-bold">Goods-received note</h1>
+      <p className="mb-4">Receipt {receipt.receiptNumber}</p>
+      <dl className="mb-4 grid grid-cols-[10rem_1fr] gap-x-4 gap-y-1">
         <dt>Supplier</dt>
         <dd>{receipt.supplierName ?? "—"}</dd>
         <dt>Invoice number</dt>
@@ -45,13 +35,13 @@ export function ReceiptPrintView({ receipt, onDone }: ReceiptPrintViewProps) {
         <dt>Received by</dt>
         <dd>{receipt.receivedByName}</dd>
         <dt>Status</dt>
-        <dd>{receiptStatusLabel(receipt.status)}</dd>
+        <dd>{receiptStateLabel(receiptStanding(receipt))}</dd>
       </dl>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <table className="w-full border-collapse">
         <thead>
-          <tr>
+          <tr className="text-left">
             {["Product", "Lot", "Expiry", "Quantity"].map((heading) => (
-              <th key={heading} style={{ textAlign: "left", borderBottom: "1px solid #000", padding: "4px 8px 4px 0" }}>
+              <th key={heading} className={`border-b border-black ${CELL}`}>
                 {heading}
               </th>
             ))}
@@ -60,17 +50,16 @@ export function ReceiptPrintView({ receipt, onDone }: ReceiptPrintViewProps) {
         <tbody>
           {receipt.lines.map((line) => (
             <tr key={line.id}>
-              <td style={{ padding: "4px 8px 4px 0" }}>{line.productName}</td>
-              <td style={{ padding: "4px 8px 4px 0" }}>{line.lotNumber ?? "—"}</td>
-              <td style={{ padding: "4px 8px 4px 0" }}>{line.expiryDate ? formatDate(line.expiryDate) : "—"}</td>
-              <td style={{ padding: "4px 0" }}>{line.quantity.toLocaleString("en-ZA")}</td>
+              <td className={CELL}>{line.productName}</td>
+              <td className={CELL}>{line.lotNumber}</td>
+              <td className={CELL}>{line.expiryDate ? formatDate(line.expiryDate) : "—"}</td>
+              <td className="py-1">{line.quantity.toLocaleString("en-ZA")}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p style={{ marginTop: 16 }}>Total units: {receipt.totalUnits.toLocaleString("en-ZA")}</p>
-      <p style={{ marginTop: 48 }}>Checked by (signature): ______________________________</p>
-    </section>,
-    document.body,
+      <p className="mt-4">Total units: {receipt.totalUnits.toLocaleString("en-ZA")}</p>
+      <p className="mt-12">Checked by (signature): ______________________________</p>
+    </PrintArea>
   );
 }

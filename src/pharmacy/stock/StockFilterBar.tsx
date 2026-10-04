@@ -19,7 +19,6 @@ function chipOptions(dashboard: StockDashboard | undefined): FilterChipOption<St
     { value: "LOW", label: "Low", count: dashboard?.lowCount },
     { value: "OUT", label: "Out of stock", count: dashboard?.outCount },
     { value: "EXPIRING", label: "Expiring in 90 days", count: dashboard?.expiringCount },
-    { value: "ARCHIVED", label: "Archived" },
   ];
 }
 

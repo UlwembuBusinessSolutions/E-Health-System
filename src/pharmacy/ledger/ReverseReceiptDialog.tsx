@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { formatDate, pluralise } from "@/pharmacy/lib/format";
 import { describeError } from "@/pharmacy/lib/problem";
 import { useToast } from "@/shared/components/toast/ToastProvider";
@@ -11,15 +10,14 @@ interface ReverseReceiptDialogProps {
   onClose: () => void;
 }
 
-// Mounted only while open, so each opening gets a fresh idempotency key.
+// Mounted only while open, so each opening starts with a blank form.
 export function ReverseReceiptDialog({ receipt, onClose }: ReverseReceiptDialogProps) {
   const { showToast } = useToast();
-  const idempotencyKey = useRef(crypto.randomUUID());
   const mutation = useReverseReceipt();
 
   function reverse(payload: ReversePayload) {
     mutation.mutate(
-      { id: receipt.id, payload, idempotencyKey: idempotencyKey.current },
+      { receiptId: receipt.id, payload },
       {
         onSuccess: () => {
           showToast(`Receipt ${receipt.receiptNumber} reversed.`, "success");

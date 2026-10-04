@@ -1,5 +1,5 @@
 import type { PharmacyProduct } from "@/shared/api/pharmacyStock";
-import type { ProductTrackingFlags, ReceiptFlagReason } from "@/shared/api/pharmacyReceiving";
+import type { ReceiptFlagReason } from "@/shared/api/pharmacyLedger";
 
 /**
  * The slice of a catalog product the receiving screen needs. It is also what a
@@ -19,7 +19,7 @@ export interface ReceivableProduct {
   coldChain: boolean;
 }
 
-export function toReceivableProduct(product: PharmacyProduct & ProductTrackingFlags): ReceivableProduct {
+export function toReceivableProduct(product: PharmacyProduct): ReceivableProduct {
   return {
     id: product.id,
     code: product.code,
@@ -30,8 +30,8 @@ export function toReceivableProduct(product: PharmacyProduct & ProductTrackingFl
     packSize: product.packSize,
     batchTracked: product.batchTracked,
     expiryTracked: product.expiryTracked,
-    serialTracked: product.serialTracked ?? false,
-    coldChain: product.coldChain ?? false,
+    serialTracked: product.serialTracked,
+    coldChain: product.coldChain,
   };
 }
 

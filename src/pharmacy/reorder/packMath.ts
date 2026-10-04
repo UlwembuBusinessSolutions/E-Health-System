@@ -1,4 +1,4 @@
-import type { ReorderLine } from "@/shared/api/pharmacyPlanning";
+import type { PurchaseOrderLinePayload, ReorderLine } from "@/shared/api/pharmacyPlanning";
 import { packsFor } from "../lib/units";
 
 // Order quantities are kept in units (tablets, vials...), but suppliers sell
@@ -6,6 +6,11 @@ import { packsFor } from "../lib/units";
 
 /** Units the person has chosen per product; a missing entry means "use the suggestion". */
 export type QuantityOverrides = Readonly<Record<string, number>>;
+
+/** A product that isn't sold in packs is ordered one unit at a time. */
+export function packSizeOf(line: ReorderLine): number {
+  return line.packSize ?? 1;
+}
 
 export function quantityFor(line: ReorderLine, overrides: QuantityOverrides): number {
   return overrides[line.productId] ?? line.suggestedQuantity;
@@ -30,18 +35,21 @@ export function totalsFor(lines: ReorderLine[], overrides: QuantityOverrides): O
       return {
         lineCount: totals.lineCount + 1,
         units: totals.units + quantity,
-        brokenPackLines: totals.brokenPackLines + (isWholePacks(quantity, line.packSize) ? 0 : 1),
+        brokenPackLines: totals.brokenPackLines + (isWholePacks(quantity, packSizeOf(line)) ? 0 : 1),
       };
     },
     { lineCount: 0, units: 0, brokenPackLines: 0 },
   );
 }
 
-/** The lines that will actually go on the order: anything set to 0 stays off. */
-export function orderedLines(lines: ReorderLine[], overrides: QuantityOverrides) {
-  return lines
-    .map((line) => ({ line, quantity: quantityFor(line, overrides) }))
-    .filter(({ quantity }) => quantity > 0);
+/** The lines that go on the order, as the server wants them: anything set to 0 stays off. */
+export function orderLinePayloads(lines: ReorderLine[], overrides: QuantityOverrides): PurchaseOrderLinePayload[] {
+  return lines.flatMap((line) => {
+    const quantity = quantityFor(line, overrides);
+    if (quantity <= 0) return [];
+    const packSize = packSizeOf(line);
+    return [{ productId: line.productId, packs: packsFor(quantity, packSize), packSize, quantity }];
+  });
 }
 
 export function packNote(quantity: number, packSize: number): string {

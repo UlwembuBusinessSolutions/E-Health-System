@@ -1,6 +1,6 @@
 import { useState } from "react";
 import clsx from "clsx";
-import type { ScheduledProduct } from "@/shared/api/pharmacyCounts";
+import type { ScheduledProduct } from "@/shared/api/pharmacyRegister";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { EmptyState } from "../components/EmptyState";
 import { SearchInput } from "../components/SearchInput";
@@ -12,7 +12,7 @@ interface ScheduledProductPickerProps {
 }
 
 function matches(product: ScheduledProduct, query: string): boolean {
-  const haystack = `${product.name} ${product.sub ?? ""}`.toLowerCase();
+  const haystack = product.productName.toLowerCase();
   return haystack.includes(query.trim().toLowerCase());
 }
 
@@ -44,10 +44,9 @@ export function ScheduledProductPicker({ products, selectedId, onSelect }: Sched
                 )}
               >
                 <span>
-                  <span className="block text-[14.5px] font-semibold text-text-primary">{product.name}</span>
+                  <span className="block text-[14.5px] font-semibold text-text-primary">{product.productName}</span>
                   <span className="block text-[13px] text-text-secondary">
-                    {product.sub ? `${product.sub} · ` : ""}
-                    {product.onHand} on hand
+                    {product.productCode} &middot; {product.onHand} on hand
                   </span>
                 </span>
                 <StatusPill tone={product.schedule === "S6" ? "danger" : "warning"}>

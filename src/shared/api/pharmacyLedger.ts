@@ -1,25 +1,13 @@
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
+import { queryString } from "./queryString";
+import type { PagedResult } from "./types";
+import type { ExpiryPrecision } from "./pharmacyStock";
 
-// Ledger movements and goods-received receipts (Docs/pharmacy-module-contract.md,
-// sections B1 and B2). Every request and response type for those screens lives
-// here so the integrator can reconcile them with the real backend in one place.
-//
-// Assumptions beyond the contract text, marked where used:
-//  - `type` on GET /ledger accepts a comma-separated list of transaction types.
-//  - GET /ledger may return `typeCounts` (entries per transaction type under
-//    the other active filters) so the type chips can show counts.
-//  - A ledger entry may carry `stockUsed` (true once part of the received lot
-//    has been dispensed or removed) so the UI can hide a Reverse button that
-//    would be refused anyway. When absent the server's 409 is the safety net.
+// The stock movement ledger and the goods-received receipts it was posted
+// from, backed by co.ehealth.platform.pharmacy.stock and .receiving.
 
-export interface PagedResult<T> {
-  items: T[];
-  page: number;
-  size: number;
-  totalItems: number;
-  hasMore: boolean;
-}
+const BASE = "/api/v1/pharmacy";
 
 export type LedgerTransactionType =
   | "OPENING_BALANCE"
@@ -35,34 +23,46 @@ export type LedgerTransactionType =
   | "TRANSFER_RECEIPT";
 
 export interface LedgerMovement {
+  /** The ledger entry; a transaction can post several entries. */
   id: string;
   seq: number;
+  /** The posted transaction this entry belongs to - what a reversal targets. */
+  transactionId: string;
   type: LedgerTransactionType;
   productId: string;
   productName: string;
   productCode: string;
-  lotNumber: string | null;
+  batchId: string;
+  lotNumber: string;
   expiryDate: string | null;
   quantityDelta: number;
+  /** The lot's balance after this entry. */
   balanceAfter: number;
+  /** The product's total across lots after this entry; only on a product's history. */
+  runningBalance: number | null;
   actorName: string;
+  /** Free-text note. */
   reason: string | null;
+  /** The picked reason (an `AdjustmentReason` or `ReversalReason` name). */
+  reasonCode: string | null;
   sourceReference: string | null;
   supplierId: string | null;
   supplierName: string | null;
   patientId: string | null;
   patientName: string | null;
   prescriptionSerial: string | null;
-  /** Set when a later REVERSAL entry cancelled this one. */
+  /** Set on a REVERSAL entry: the transaction it cancelled. */
+  reversalOfTransactionId: string | null;
+  /** Set when a later REVERSAL cancelled this entry's transaction. */
   reversedByTransactionId: string | null;
-  /** Set on a REVERSAL entry: the entry it cancelled. */
-  reversesTransactionId?: string | null;
-  stockUsed?: boolean;
+  /** True once part of the lot this entry added has been dispensed or removed. */
+  stockUsed: boolean;
   createdAt: string;
 }
 
 export interface MovementsPage extends PagedResult<LedgerMovement> {
-  typeCounts?: Partial<Record<LedgerTransactionType, number>>;
+  /** Entries per transaction type under the other active filters, for the type chips. */
+  typeCounts: Partial<Record<LedgerTransactionType, number>>;
 }
 
 export interface ListMovementsParams {
@@ -80,70 +80,60 @@ export interface ListMovementsParams {
   size?: number;
 }
 
-function appendIfSet(search: URLSearchParams, key: string, value: string | number | undefined): void {
-  if (value !== undefined && value !== "") search.set(key, String(value));
+export async function listMovements({ types, ...params }: ListMovementsParams): Promise<MovementsPage> {
+  const search = queryString({ ...params, type: types?.join(",") });
+  return apiClient.get<MovementsPage>(`${BASE}/ledger?${search}`, { headers: tenantAuthHeaders() });
 }
 
-export async function listMovements(params: ListMovementsParams): Promise<MovementsPage> {
-  const search = new URLSearchParams({ facilityId: params.facilityId });
-  appendIfSet(search, "productId", params.productId);
-  appendIfSet(search, "type", params.types?.join(","));
-  appendIfSet(search, "supplierId", params.supplierId);
-  appendIfSet(search, "patientId", params.patientId);
-  appendIfSet(search, "q", params.q);
-  appendIfSet(search, "from", params.from);
-  appendIfSet(search, "to", params.to);
-  appendIfSet(search, "page", params.page);
-  appendIfSet(search, "size", params.size);
-  return apiClient.get<MovementsPage>(`/api/v1/pharmacy/ledger?${search.toString()}`, {
-    headers: tenantAuthHeaders(),
-  });
+/** One product's ledger entries, newest first, each carrying the product's running balance. */
+export async function listProductHistory(
+  productId: string,
+  params: { facilityId: string; page?: number; size?: number },
+): Promise<PagedResult<LedgerMovement>> {
+  return apiClient.get<PagedResult<LedgerMovement>>(
+    `${BASE}/products/${productId}/history?${queryString(params)}`,
+    { headers: tenantAuthHeaders() },
+  );
 }
 
 /**
- * The product's current balance, read as the newest history entry's running
- * balance (GET /products/{id}/history is newest first). Used for the
- * "stock goes from A to B" preview.
+ * The product's current total, read as the newest history entry's running
+ * balance. Used for the "stock goes from A to B" preview.
  */
 export async function getCurrentBalance(facilityId: string, productId: string): Promise<number | null> {
-  const search = new URLSearchParams({ facilityId, page: "0", size: "1" });
-  const page = await apiClient.get<PagedResult<LedgerMovement>>(
-    `/api/v1/pharmacy/products/${productId}/history?${search.toString()}`,
-    { headers: tenantAuthHeaders() },
-  );
-  return page.items[0]?.balanceAfter ?? null;
+  const page = await listProductHistory(productId, { facilityId, page: 0, size: 1 });
+  return page.items[0]?.runningBalance ?? null;
 }
 
-export type ReversalReason =
-  | "WRONG_QUANTITY"
-  | "WRONG_PRODUCT"
-  | "DUPLICATE_ENTRY"
-  | "RECEIVED_BY_MISTAKE"
-  | "OTHER";
+export type ReversalReason = "WRONG_ENTRY" | "DUPLICATE_ENTRY" | "RETURNED_TO_SUPPLIER" | "OTHER";
 
 export interface ReversePayload {
   reason: ReversalReason;
+  /** Required (at least 3 characters) when the reason is OTHER. */
   note?: string;
 }
 
 export interface ReverseTransactionResult {
-  reversalTransactionId: string;
+  transactionId: string;
+  reversedTransactionId: string;
 }
 
+// No idempotency key: the server allows one reversal per transaction, so a
+// retried request answers 409 instead of reversing twice.
 export async function reverseTransaction(
   transactionId: string,
   payload: ReversePayload,
-  idempotencyKey: string,
 ): Promise<ReverseTransactionResult> {
-  return apiClient.post<ReverseTransactionResult>(
-    `/api/v1/pharmacy/transactions/${transactionId}/reverse`,
-    payload,
-    { headers: { ...tenantAuthHeaders(), "Idempotency-Key": idempotencyKey } },
-  );
+  return apiClient.post<ReverseTransactionResult>(`${BASE}/transactions/${transactionId}/reverse`, payload, {
+    headers: tenantAuthHeaders(),
+  });
 }
 
-export type ReceiptStatus = "ON_SHELF" | "PARTLY_USED" | "REVERSED";
-export type ReceiptLineState = ReceiptStatus;
+/** Where a receipt itself stands; only POSTED and REVERSED receipts are ever listed. */
+export type ReceiptStatus = "DRAFT" | "POSTED" | "CANCELLED" | "REVERSED";
+/** Where one line's stock stands now. */
+export type ReceiptLineState = "ON_SHELF" | "PARTLY_USED" | "REVERSED";
+export type ReceiptFlagReason = "DAMAGED" | "SHORT" | "WRONG_ITEM" | "NEAR_EXPIRY";
 
 export interface ReceiptSummary {
   id: string;
@@ -163,16 +153,25 @@ export interface ReceiptSummary {
 export interface ReceiptLine {
   id: string;
   productId: string;
+  productCode: string;
   productName: string;
-  lotNumber: string | null;
+  lotNumber: string;
   expiryDate: string | null;
+  expiryPrecision: ExpiryPrecision | null;
+  /** Units that went on the shelf. */
   quantity: number;
+  /** Units that arrived but were refused at the door. */
+  rejectedQuantity: number;
   state: ReceiptLineState;
-  /** Receiving flag (damaged, short, ...) recorded against the line, if any. */
-  flagReason: string | null;
+  /** Set when the line was queried at the door (damaged, short, ...). */
+  flag: { reason: ReceiptFlagReason; note: string | null; acceptedQuantity: number } | null;
+  temperatureC: number | null;
+  coldBoxIntact: boolean | null;
 }
 
 export interface ReceiptDetail extends ReceiptSummary {
+  reversedAt: string | null;
+  reversedByName: string | null;
   lines: ReceiptLine[];
 }
 
@@ -187,46 +186,22 @@ export interface ListReceiptsParams {
 }
 
 export async function listReceipts(params: ListReceiptsParams): Promise<PagedResult<ReceiptSummary>> {
-  const search = new URLSearchParams({ facilityId: params.facilityId });
-  appendIfSet(search, "supplierId", params.supplierId);
-  appendIfSet(search, "q", params.q);
-  appendIfSet(search, "from", params.from);
-  appendIfSet(search, "to", params.to);
-  appendIfSet(search, "page", params.page);
-  appendIfSet(search, "size", params.size);
-  return apiClient.get<PagedResult<ReceiptSummary>>(`/api/v1/pharmacy/receipts?${search.toString()}`, {
+  return apiClient.get<PagedResult<ReceiptSummary>>(`${BASE}/receipts?${queryString({ ...params })}`, {
     headers: tenantAuthHeaders(),
   });
 }
 
 export async function getReceipt(id: string): Promise<ReceiptDetail> {
-  return apiClient.get<ReceiptDetail>(`/api/v1/pharmacy/receipts/${id}`, { headers: tenantAuthHeaders() });
+  return apiClient.get<ReceiptDetail>(`${BASE}/receipts/${id}`, { headers: tenantAuthHeaders() });
 }
 
-export interface ReverseReceiptResult {
-  receiptId: string;
-  reversedLineCount: number;
-}
-
-export async function reverseReceipt(
-  receiptId: string,
-  payload: ReversePayload,
-  idempotencyKey: string,
-): Promise<ReverseReceiptResult> {
-  return apiClient.post<ReverseReceiptResult>(`/api/v1/pharmacy/receipts/${receiptId}/reverse`, payload, {
-    headers: { ...tenantAuthHeaders(), "Idempotency-Key": idempotencyKey },
-  });
-}
-
-/** Supplier names for the receipts filter chips (GET /suppliers, B2). */
-export interface SupplierOption {
-  id: string;
-  name: string;
-}
-
-export async function listSupplierOptions(): Promise<SupplierOption[]> {
-  const page = await apiClient.get<PagedResult<SupplierOption>>("/api/v1/pharmacy/suppliers?status=ACTIVE&size=50", {
+/**
+ * Takes every line of the receipt off the shelf in one go. The server wants a
+ * single free-text `reason` (no separate note) and answers with the updated
+ * receipt.
+ */
+export async function reverseReceipt(receiptId: string, reason: string): Promise<ReceiptDetail> {
+  return apiClient.post<ReceiptDetail>(`${BASE}/receipts/${receiptId}/reverse`, { reason }, {
     headers: tenantAuthHeaders(),
   });
-  return page.items;
 }

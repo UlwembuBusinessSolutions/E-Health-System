@@ -8,8 +8,8 @@ import { StatusPill } from "@/shared/components/StatusPill";
 import { ResponsiveTable, type TableColumn } from "../components/ResponsiveTable";
 import { pluralise } from "../lib/format";
 import { describeError } from "../lib/problem";
-import { countKeys } from "./countKeys";
-import { differenceOf, formatSigned, REASON_LABELS } from "./countMath";
+import { pharmacyKeys } from "../lib/queryKeys";
+import { differenceOf, formatSigned, reasonLabel } from "./countMath";
 
 const COLUMNS: TableColumn<CountLine>[] = [
   { key: "product", header: "Product", role: "primary", cell: (line) => <span className="font-medium">{line.productName}</span> },
@@ -20,7 +20,7 @@ const COLUMNS: TableColumn<CountLine>[] = [
     align: "right",
     cell: (line) => <span className="font-semibold tabular-nums">{formatSigned(differenceOf(line) ?? 0)}</span>,
   },
-  { key: "reason", header: "Reason", cell: (line) => (line.reason ? REASON_LABELS[line.reason] : "—") },
+  { key: "reason", header: "Reason", cell: (line) => (line.reason ? reasonLabel(line.reason) : "—") },
   { key: "entry", header: "Ledger entry", role: "secondary", cell: () => <StatusPill tone="success">Adjusted</StatusPill> },
 ];
 
@@ -34,7 +34,7 @@ interface DoneViewProps {
 // from the post response, so what is listed is what the server stored.
 export function DoneView({ posted, onStartNew }: DoneViewProps) {
   const detail = useQuery({
-    queryKey: countKeys.detail(posted.id, false),
+    queryKey: pharmacyKeys.counts.detail(posted.id, false),
     queryFn: () => getCount(posted.id),
   });
   const adjusted = (detail.data?.lines ?? []).filter((line) => (differenceOf(line) ?? 0) !== 0);

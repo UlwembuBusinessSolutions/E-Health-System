@@ -6,7 +6,7 @@ import { Card } from "@/shared/components/Card";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 import { ProductSearchPicker } from "../components/ProductSearchPicker";
 import { describeError } from "../lib/problem";
-import { reorderKeys } from "./reorderKeys";
+import { pharmacyKeys } from "../lib/queryKeys";
 
 interface AddProductToSupplierProps {
   facilityId: string;
@@ -27,7 +27,7 @@ export function AddProductToSupplier({ facilityId, supplierId, supplierName, lin
     onSuccess: () => {
       setPickerKey((key) => key + 1);
       showToast(`Added to ${supplierName}'s list.`, "success");
-      return queryClient.invalidateQueries({ queryKey: reorderKeys.sheet(facilityId, supplierId) });
+      return queryClient.invalidateQueries({ queryKey: pharmacyKeys.reorder.sheet(facilityId, supplierId) });
     },
     onError: (error) => showToast(describeError(error), "error"),
   });

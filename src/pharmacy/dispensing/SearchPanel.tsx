@@ -9,7 +9,7 @@ import { ErrorState } from "../components/ErrorState";
 import { FilterChips, type FilterChipOption } from "../components/FilterChips";
 import { SearchInput } from "../components/SearchInput";
 import { SkeletonRows } from "../components/SkeletonRows";
-import { formatDateTime } from "../lib/format";
+import { formatDateTime, pluralise } from "../lib/format";
 import { describeError } from "../lib/problem";
 import { usePrescriptionSearch } from "./hooks/usePrescriptionSearch";
 
@@ -24,24 +24,22 @@ type ResultFilter = "ALL" | "QUEUE" | "OUT_OF_STOCK" | "DISPENSED";
 
 const FILTERS: Record<ResultFilter, (result: PrescriptionSearchResult) => boolean> = {
   ALL: () => true,
-  QUEUE: (result) => result.state === "QUEUE",
-  OUT_OF_STOCK: (result) => result.hasOutOfStockItem,
-  DISPENSED: (result) => result.state === "DISPENSED",
+  QUEUE: (result) => result.queueState === "QUEUE",
+  OUT_OF_STOCK: (result) => result.queueState === "OUT_OF_STOCK",
+  DISPENSED: (result) => result.queueState === "DISPENSED",
 };
 
 const FILTER_LABELS: Record<ResultFilter, string> = {
   ALL: "All",
   QUEUE: "In queue",
-  OUT_OF_STOCK: "Has out-of-stock item",
+  OUT_OF_STOCK: "Waiting for stock",
   DISPENSED: "Dispensed",
 };
 
 function statePill(result: PrescriptionSearchResult): { tone: PillTone; label: string } {
-  if (result.state === "DISPENSED") return { tone: "neutral", label: "Dispensed" };
-  if (result.state === "OUT_OF_STOCK") return { tone: "danger", label: "Out of stock" };
-  return result.hasOutOfStockItem
-    ? { tone: "warning", label: "In queue · item out of stock" }
-    : { tone: "success", label: "In queue" };
+  if (result.queueState === "DISPENSED") return { tone: "neutral", label: "Dispensed" };
+  if (result.queueState === "OUT_OF_STOCK") return { tone: "danger", label: "Out of stock" };
+  return { tone: "success", label: "In queue" };
 }
 
 // One input finds a prescription by RX number, patient name or patient ID,
@@ -86,10 +84,10 @@ export function SearchPanel({ facilityId, openedId, onOpen }: SearchPanelProps) 
           <ul className="flex flex-col gap-2" aria-live="polite">
             {visible.map((result) => {
               const pill = statePill(result);
-              const shown = result.prescriptionId === openedId;
+              const shown = result.id === openedId;
               return (
                 <li
-                  key={result.prescriptionId}
+                  key={result.id}
                   className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-border-subtle px-3.5 py-3"
                 >
                   <div className="min-w-0">
@@ -97,9 +95,9 @@ export function SearchPanel({ facilityId, openedId, onOpen }: SearchPanelProps) 
                       {result.patientName} <span className="font-mono text-[12.5px] text-text-secondary">{result.patientMpi}</span>
                     </p>
                     <p className="font-mono text-[12.5px] text-text-secondary">
-                      {result.serialNumber} · {formatDateTime(result.issuedAt)}
+                      {result.serialNumber} · {formatDateTime(result.createdAt)}
                     </p>
-                    <p className="text-[13px] text-text-secondary">{result.itemsSummary}</p>
+                    <p className="text-[13px] text-text-secondary">{result.dispensedItemCount} of {pluralise(result.itemCount, "item")} dispensed</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
@@ -107,7 +105,7 @@ export function SearchPanel({ facilityId, openedId, onOpen }: SearchPanelProps) 
                       variant="secondary"
                       disabled={shown}
                       aria-label={`${shown ? "Shown below" : "Open"} ${result.serialNumber} for ${result.patientName}`}
-                      onClick={() => onOpen(result.prescriptionId)}
+                      onClick={() => onOpen(result.id)}
                     >
                       {shown ? "Shown below" : "Open"}
                     </Button>

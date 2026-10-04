@@ -7,7 +7,7 @@ import { useToast } from "@/shared/components/toast/ToastProvider";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { formatDateTime, pluralise } from "../lib/format";
 import { describeError } from "../lib/problem";
-import { countKeys } from "./countKeys";
+import { pharmacyKeys } from "../lib/queryKeys";
 
 interface DraftCountsListProps {
   facilityId: string;
@@ -22,7 +22,7 @@ export function DraftCountsList({ facilityId, onResume }: DraftCountsListProps) 
   const [discarding, setDiscarding] = useState<CountSummary | null>(null);
 
   const drafts = useQuery({
-    queryKey: countKeys.list(facilityId, "DRAFT"),
+    queryKey: pharmacyKeys.counts.list(facilityId, "DRAFT"),
     queryFn: () => listCounts(facilityId, "DRAFT"),
     enabled: facilityId !== "",
     staleTime: 15_000,
@@ -33,12 +33,12 @@ export function DraftCountsList({ facilityId, onResume }: DraftCountsListProps) 
     onSuccess: () => {
       setDiscarding(null);
       showToast("Count discarded. Stock was not changed.", "success");
-      return queryClient.invalidateQueries({ queryKey: countKeys.list(facilityId, "DRAFT") });
+      return queryClient.invalidateQueries({ queryKey: pharmacyKeys.counts.list(facilityId, "DRAFT") });
     },
     onError: (error) => showToast(describeError(error), "error"),
   });
 
-  const items = drafts.data?.items ?? [];
+  const items = drafts.data ?? [];
   if (items.length === 0) return null;
 
   return (

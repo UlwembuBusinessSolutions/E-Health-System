@@ -6,7 +6,7 @@ interface ReasonChipsProps {
   /** Names the group for screen readers, e.g. "Reason for Metformin lot MF1120". */
   label: string;
   options: CountReason[];
-  value: CountReason | null;
+  value: string | null;
   onChange: (reason: CountReason) => void;
 }
 

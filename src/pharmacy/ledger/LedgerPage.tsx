@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { exportBatchExpiry } from "@/shared/api/pharmacyStock";
-import { getFacilities } from "@/shared/api/facilities";
 import { Button } from "@/shared/components/Button";
 import { Select } from "@/shared/components/Select";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 import { describeError } from "@/pharmacy/lib/problem";
+import { useFacilitySelection } from "@/pharmacy/lib/useFacilitySelection";
 import { useLedgerMovements } from "./hooks/useLedgerMovements";
 import { useReceipts } from "./hooks/useReceipts";
 import { LedgerTabs, type LedgerTabKey } from "./LedgerTabs";
@@ -18,19 +18,11 @@ import { ReceiptsTab } from "./ReceiptsTab";
 // fixed by a linked reversal, so there is deliberately no edit or delete here.
 export function LedgerPage() {
   const { showToast } = useToast();
-  const [facilityId, setFacilityId] = useState("");
+  const { facilities, facilityId, selectFacility } = useFacilitySelection();
   const [tab, setTab] = useState<LedgerTabKey>("movements");
 
-  const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
-
-  useEffect(() => {
-    if (!facilityId && facilitiesQuery.data && facilitiesQuery.data.length > 0) {
-      setFacilityId(facilitiesQuery.data[0].id);
-    }
-  }, [facilityId, facilitiesQuery.data]);
-
-  // One-row queries just for the totals in the tab labels; they share cache
-  // keys with nothing else, and the invalidation prefixes keep them current.
+  // One-row queries just for the totals in the tab labels; the shared
+  // invalidation prefixes keep them current.
   const movementTotal = useLedgerMovements({ facilityId }, 0, 1).data?.totalItems;
   const receiptTotal = useReceipts({ facilityId }, 0, 1).data?.totalItems;
 
@@ -59,9 +51,9 @@ export function LedgerPage() {
       />
       <Select
         label="Facility"
-        options={(facilitiesQuery.data ?? []).map((facility) => ({ value: facility.id, label: facility.name }))}
+        options={facilities.map((facility) => ({ value: facility.id, label: facility.name }))}
         value={facilityId}
-        onChange={(event) => setFacilityId(event.target.value)}
+        onChange={(event) => selectFacility(event.target.value)}
         className="mb-4 sm:w-64"
       />
       <LedgerTabs active={tab} onChange={setTab} counts={{ movements: movementTotal, receipts: receiptTotal }}>

@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addFoundLot,
@@ -14,7 +13,7 @@ import {
 } from "@/shared/api/pharmacyCounts";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 import { describeError } from "../lib/problem";
-import { countKeys } from "./countKeys";
+import { invalidateAfterStockMovement, pharmacyKeys } from "../lib/queryKeys";
 
 // The count lives on the server from the first number typed, so nothing here
 // keeps its own copy of the lines: every action patches the cached detail with
@@ -22,10 +21,9 @@ import { countKeys } from "./countKeys";
 export function useStockCount(countId: string, revealSystem: boolean) {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
-  const detailKey = countKeys.detail(countId, revealSystem);
+  const detailKey = pharmacyKeys.counts.detail(countId, revealSystem);
   // One key per posting ATTEMPT so a retry after a dropped connection can
   // never post the adjustments twice.
-  const postKey = useRef(crypto.randomUUID());
 
   const detail = useQuery({ queryKey: detailKey, queryFn: () => getCount(countId, revealSystem) });
 
@@ -43,7 +41,7 @@ export function useStockCount(countId: string, revealSystem: boolean) {
     // The baseline moved when the line was re-stamped, so the review figures
     // have to come from the server again rather than from the local patch.
     onSuccess: (line) => {
-      if (revealSystem) void queryClient.invalidateQueries({ queryKey: countKeys.detailOf(countId) });
+      if (revealSystem) void queryClient.invalidateQueries({ queryKey: pharmacyKeys.counts.detailOf(countId) });
       else replaceLine(line);
     },
     onError: failed,
@@ -57,19 +55,21 @@ export function useStockCount(countId: string, revealSystem: boolean) {
 
   const addFound = useMutation({
     mutationFn: (payload: FoundLotPayload) => addFoundLot(countId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: countKeys.detailOf(countId) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: pharmacyKeys.counts.detailOf(countId) }),
     onError: failed,
   });
 
   const post = useMutation({
-    mutationFn: () => postCount(countId, postKey.current),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: countKeys.all }),
+    // Posting writes ledger entries, so everything a stock movement touches goes stale.
+    // Re-posting an already posted count changes nothing, so a retry needs no idempotency key.
+    mutationFn: () => postCount(countId),
+    onSuccess: () => invalidateAfterStockMovement(queryClient),
     onError: failed,
   });
 
   const cancel = useMutation({
     mutationFn: () => cancelCount(countId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: countKeys.all }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: pharmacyKeys.counts.all }),
     onError: failed,
   });
 

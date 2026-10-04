@@ -1,4 +1,4 @@
-import type { RegisterEntry, ScheduledProduct } from "@/shared/api/pharmacyCounts";
+import type { RegisterEntry, ScheduledProduct } from "@/shared/api/pharmacyRegister";
 import { formatCsv } from "../lib/csv";
 import { formatDateTime } from "../lib/format";
 
@@ -37,6 +37,6 @@ export function registerToCsv(entries: RegisterEntry[]): string {
 }
 
 export function registerFilename(product: ScheduledProduct): string {
-  const slug = `${product.name} ${product.sub ?? ""}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const slug = product.productName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return `register-${slug}.csv`;
 }

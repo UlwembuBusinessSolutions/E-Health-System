@@ -36,6 +36,7 @@ export const STATUS_LABELS: Record<OpeningRowStatus, string> = {
   BAD_EXPIRY: "Bad expiry",
   DUPLICATE_LOT: "Duplicate lot",
   BAD_QUANTITY: "Bad quantity",
+  SERIAL_PRODUCT: "Serial-tracked product",
 };
 
 // Used only when the server sends no hint of its own.
@@ -45,6 +46,7 @@ export const FALLBACK_HINTS: Record<OpeningRowStatus, string> = {
   BAD_EXPIRY: "Write the expiry as year-month-day, for example 2027-06-30, and make sure it is in the future.",
   DUPLICATE_LOT: "This lot is listed twice for the same product. Keep one row, or change the lot number.",
   BAD_QUANTITY: "Use a whole number above zero, for example 240.",
+  SERIAL_PRODUCT: "Each unit of this product needs its own serial number. Load it through Receive stock instead.",
 };
 
 export interface ReviewSummary {

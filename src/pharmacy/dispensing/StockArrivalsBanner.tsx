@@ -26,7 +26,10 @@ export function StockArrivalsBanner({ facilityId, onReview }: StockArrivalsBanne
               <span className="font-medium">{arrival.drugName}</span> for {arrival.patientName}
               <span className="text-text-secondary">
                 {" "}
-                · {arrival.available} now in stock, lot {arrival.lot} · {arrival.serialNumber}
+                · {arrival.canFulfilInFull
+                  ? `${arrival.availableQuantity} now in stock`
+                  : `${arrival.availableQuantity} of ${arrival.remainingQuantity} now in stock`}{" "}
+                · {arrival.prescriptionSerial}
               </span>
             </p>
             <Button

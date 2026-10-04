@@ -3,12 +3,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  listSupplierOptions,
-  updateProduct,
-  type PharmacyProduct,
-  type StockRow,
-} from "@/shared/api/pharmacyStock";
+import { updateProduct, type PharmacyProduct, type StockRow } from "@/shared/api/pharmacyStock";
+import { listSupplierOptions } from "@/shared/api/pharmacyReceiving";
 import { Button } from "@/shared/components/Button";
 import { FormRow } from "@/shared/components/FormRow";
 import { Input } from "@/shared/components/Input";
@@ -18,8 +14,9 @@ import { ErrorState } from "../components/ErrorState";
 import { Modal } from "../components/Modal";
 import { SkeletonRows } from "../components/SkeletonRows";
 import { describeError } from "../lib/problem";
+import { pharmacyKeys } from "../lib/queryKeys";
 import { unitLabel } from "../lib/units";
-import { stockKeys, useProductDetails } from "./stockQueries";
+import { useProductDetails } from "./stockQueries";
 
 const NO_SUPPLIER = "NONE";
 
@@ -72,7 +69,7 @@ function EditProductForm({ row, product, facilityId, onClose }: EditProductFormP
   const formId = useId();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const suppliersQuery = useQuery({ queryKey: ["pharmacy", "supplier-options"], queryFn: listSupplierOptions, staleTime: 5 * 60_000 });
+  const suppliersQuery = useQuery({ queryKey: pharmacyKeys.suppliers.options, queryFn: listSupplierOptions, staleTime: 5 * 60_000 });
 
   const {
     register,
@@ -93,12 +90,15 @@ function EditProductForm({ row, product, facilityId, onClose }: EditProductFormP
   const mutation = useMutation({
     mutationFn: (values: EditValues) =>
       updateProduct(product.id, {
-        // The endpoint replaces the product, so untouched fields travel along unchanged.
+        // The endpoint overwrites everything it receives, so fields this form doesn't edit
+        // (including schedule and cold chain) travel along unchanged.
         displayName: values.displayName,
         genericName: product.genericName ?? undefined,
         strength: product.strength ?? undefined,
         dosageForm: product.dosageForm ?? undefined,
         manufacturer: product.manufacturer ?? undefined,
+        schedule: product.schedule,
+        coldChain: product.coldChain,
         packSize: values.packSize ? Number(values.packSize) : undefined,
         barcode: values.barcode || undefined,
         storageInstructions: values.storageInstructions || undefined,
@@ -108,8 +108,10 @@ function EditProductForm({ row, product, facilityId, onClose }: EditProductFormP
       }),
     onSuccess: (updated) => {
       showToast(`Saved changes to ${updated.displayName}.`, "success");
-      void queryClient.invalidateQueries({ queryKey: stockKeys.list(facilityId) });
-      void queryClient.invalidateQueries({ queryKey: stockKeys.product(product.id) });
+      // A new reorder level changes the low-stock chips and the reorder suggestions too.
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.stock.all });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.reorder.all });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.products.detail(product.id) });
       onClose();
     },
   });

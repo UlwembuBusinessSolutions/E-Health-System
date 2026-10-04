@@ -4,12 +4,12 @@ import { ErrorState } from "@/pharmacy/components/ErrorState";
 import { SkeletonRows } from "@/pharmacy/components/SkeletonRows";
 import { formatDate, pluralise } from "@/pharmacy/lib/format";
 import { describeError } from "@/pharmacy/lib/problem";
-import { SUPPLIERS_KEY } from "./useSuppliers";
+import { pharmacyKeys } from "@/pharmacy/lib/queryKeys";
 
 // Mounted only while a supplier row is expanded, so receipts are fetched on demand.
 export function SupplierReceiptsList({ supplierId }: { supplierId: string }) {
   const receipts = useQuery({
-    queryKey: [...SUPPLIERS_KEY, supplierId, "receipts"],
+    queryKey: pharmacyKeys.suppliers.receipts(supplierId),
     queryFn: () => listSupplierReceipts(supplierId),
     staleTime: 30_000,
   });

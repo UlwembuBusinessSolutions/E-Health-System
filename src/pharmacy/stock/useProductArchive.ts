@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { archiveProduct, reactivateProduct } from "@/shared/api/pharmacyStock";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 import { describeError } from "../lib/problem";
-import { stockKeys } from "./stockQueries";
+import { pharmacyKeys } from "../lib/queryKeys";
 
 interface ArchiveTarget {
   productId: string;
@@ -18,9 +18,9 @@ export function useProductArchive(facilityId: string, product: ArchiveTarget, ar
     mutationFn: () => (archive ? archiveProduct(product.productId) : reactivateProduct(product.productId)),
     onSuccess: () => {
       showToast(`${product.displayName} ${archive ? "archived" : "is active again"}.`, "success");
-      void queryClient.invalidateQueries({ queryKey: stockKeys.list(facilityId) });
-      void queryClient.invalidateQueries({ queryKey: stockKeys.dashboard(facilityId) });
-      void queryClient.invalidateQueries({ queryKey: stockKeys.product(product.productId) });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.stock.list(facilityId) });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.stock.dashboard(facilityId) });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.products.detail(product.productId) });
       onDone?.();
     },
     onError: (error) => showToast(describeError(error), "error"),

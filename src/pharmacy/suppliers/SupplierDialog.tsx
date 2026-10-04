@@ -12,8 +12,9 @@ import { Input } from "@/shared/components/Input";
 import { FormRow } from "@/shared/components/FormRow";
 import { Modal } from "@/pharmacy/components/Modal";
 import { describeError } from "@/pharmacy/lib/problem";
+import { pharmacyKeys } from "@/pharmacy/lib/queryKeys";
 import { findDuplicateSupplier, type DuplicateMatch, type SupplierRef } from "./supplierName";
-import { SUPPLIERS_KEY, useSuppliers } from "./useSuppliers";
+import { useSuppliers } from "./useSuppliers";
 
 interface SupplierDialogProps {
   /** Present when editing; omit to add a new supplier. */
@@ -58,7 +59,7 @@ export function SupplierDialog({ supplier, initialName = "", onClose, onSaved, o
       return supplier ? updateSupplier(supplier.id, payload) : createSupplier(payload);
     },
     onSuccess: (saved) => {
-      void queryClient.invalidateQueries({ queryKey: SUPPLIERS_KEY });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.suppliers.all });
       onSaved(saved);
     },
     onError: (error) => {

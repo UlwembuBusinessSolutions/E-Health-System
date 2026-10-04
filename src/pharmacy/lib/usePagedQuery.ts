@@ -1,18 +1,10 @@
 import { keepPreviousData, useQuery, type QueryKey } from "@tanstack/react-query";
-
-/** The paged envelope every pharmacy list endpoint returns. */
-export interface PagedResponse<T> {
-  items: T[];
-  page: number;
-  size: number;
-  totalItems: number;
-  hasMore: boolean;
-}
+import type { PagedResult } from "@/shared/api/types";
 
 interface UsePagedQueryOptions<T> {
   /** Everything that changes the result except paging (facility, filters, search text). */
   queryKey: QueryKey;
-  fetchPage: (page: number, size: number) => Promise<PagedResponse<T>>;
+  fetchPage: (page: number, size: number) => Promise<PagedResult<T>>;
   page: number;
   size?: number;
   enabled?: boolean;

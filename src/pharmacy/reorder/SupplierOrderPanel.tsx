@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createPurchaseOrder,
@@ -9,15 +9,16 @@ import {
   type ReorderSupplier,
 } from "@/shared/api/pharmacyPlanning";
 import { Button } from "@/shared/components/Button";
+import { Input } from "@/shared/components/Input";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 import { ErrorState } from "../components/ErrorState";
 import { SkeletonRows } from "../components/SkeletonRows";
 import { pluralise } from "../lib/format";
 import { describeError } from "../lib/problem";
+import { pharmacyKeys } from "../lib/queryKeys";
 import { AddProductToSupplier } from "./AddProductToSupplier";
 import { OrderLinesTable } from "./OrderLinesTable";
-import { orderedLines, totalsFor, type QuantityOverrides } from "./packMath";
-import { reorderKeys } from "./reorderKeys";
+import { orderLinePayloads, totalsFor, type QuantityOverrides } from "./packMath";
 
 interface SupplierOrderPanelProps {
   facilityId: string;
@@ -31,8 +32,8 @@ export function SupplierOrderPanel({ facilityId, supplier, onOrderCreated }: Sup
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [overrides, setOverrides] = useState<QuantityOverrides>({});
-  const orderKey = useRef(crypto.randomUUID());
-  const sheetKey = reorderKeys.sheet(facilityId, supplier.id);
+  const [expectedDelivery, setExpectedDelivery] = useState("");
+  const sheetKey = pharmacyKeys.reorder.sheet(facilityId, supplier.id);
 
   const sheet = useQuery({
     queryKey: sheetKey,
@@ -51,17 +52,15 @@ export function SupplierOrderPanel({ facilityId, supplier, onOrderCreated }: Sup
 
   const create = useMutation({
     mutationFn: () =>
-      createPurchaseOrder(
-        {
-          facilityId,
-          supplierId: supplier.id,
-          lines: orderedLines(lines, overrides).map(({ line, quantity }) => ({ productId: line.productId, quantity })),
-        },
-        orderKey.current,
-      ),
+      createPurchaseOrder({
+        facilityId,
+        supplierId: supplier.id,
+        expectedDelivery: expectedDelivery || undefined,
+        lines: orderLinePayloads(lines, overrides),
+      }),
     onSuccess: async (order) => {
-      orderKey.current = crypto.randomUUID();
-      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "reorder"] });
+      // The supplier's "last ordered" date and "to order" count just changed.
+      await queryClient.invalidateQueries({ queryKey: pharmacyKeys.reorder.all });
       onOrderCreated(order);
     },
     onError: (error) => showToast(describeError(error), "error"),
@@ -78,8 +77,14 @@ export function SupplierOrderPanel({ facilityId, supplier, onOrderCreated }: Sup
             {[supplier.phone, supplier.email].filter(Boolean).join(" · ")}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <p aria-live="polite" className="text-[13.5px] text-text-secondary">
+        <div className="flex flex-wrap items-end gap-3">
+          <Input
+            label="Expected delivery"
+            type="date"
+            value={expectedDelivery}
+            onChange={(event) => setExpectedDelivery(event.target.value)}
+          />
+          <p aria-live="polite" className="pb-3 text-[13.5px] text-text-secondary">
             {totals.lineCount === 0 ? "Nothing on this order" : `${pluralise(totals.lineCount, "line")} · ${totals.units} units`}
           </p>
           <Button disabled={blocked} loading={create.isPending} onClick={() => create.mutate()}>

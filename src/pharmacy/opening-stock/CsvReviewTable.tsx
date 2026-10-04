@@ -82,7 +82,7 @@ export function CsvReviewTable({ rows, results, refreshing, onEdit, onRemove }: 
       cell: (item) => (
         <div className="flex flex-col gap-1">
           {cell("sku", "SKU", ["UNKNOWN_PRODUCT"])(item)}
-          {item.result?.product && <span className="text-[12.5px] text-text-secondary">{item.result.product.name} {item.result.product.sub}</span>}
+          {item.result?.product && <span className="text-[12.5px] text-text-secondary">{item.result.product.name}</span>}
           {item.result && item.result.status !== "OK" && (
             <span role="note" className="text-[12.5px] text-danger-600">{item.result.hint ?? FALLBACK_HINTS[item.result.status]}</span>
           )}

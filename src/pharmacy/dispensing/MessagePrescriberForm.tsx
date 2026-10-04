@@ -6,6 +6,7 @@ interface MessagePrescriberFormProps {
   prescriberName: string | null;
   /** Prefilled for a substitute request; empty for a free-form question. */
   initialText: string;
+  maxLength?: number;
   loading: boolean;
   onSend: (text: string) => void;
   onCancel: () => void;
@@ -14,6 +15,7 @@ interface MessagePrescriberFormProps {
 export function MessagePrescriberForm({
   prescriberName,
   initialText,
+  maxLength,
   loading,
   onSend,
   onCancel,
@@ -34,6 +36,7 @@ export function MessagePrescriberForm({
         label={`Message to ${prescriberName ?? "the prescriber"}`}
         placeholder="e.g. Dosage seems high for this patient's weight. Please confirm before I dispense."
         value={text}
+        maxLength={maxLength}
         onChange={(event) => setText(event.target.value)}
       />
     </InlinePanel>

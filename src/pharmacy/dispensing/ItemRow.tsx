@@ -1,22 +1,25 @@
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
-import type { Prescription, PrescriptionItem, SubstituteSuggestion } from "@/shared/api/pharmacy";
+import type { DispenseItemPayload, Prescription, PrescriptionItem, ProductRef, WitnessCredentials } from "@/shared/api/pharmacy";
+import { describeError, isWitnessRequired } from "../lib/problem";
 import { useDispenseItem, useMapProduct, useMarkOutOfStock, useRecordReturn } from "./hooks/useItemMutations";
 import { ChangeLotPicker } from "./ChangeLotPicker";
 import { ItemActions, type ItemPanel } from "./ItemActions";
 import { ItemBadges, itemStatusNote } from "./ItemBadges";
-import { activeLot, isMapped, lotAdvice, returnableQuantity } from "./itemState";
+import { activeLot, isMapped, lotAdvice, returnableQuantity, suggestedProductOf } from "./itemState";
 import { OutOfStockForm } from "./OutOfStockForm";
 import { PartialDispenseForm } from "./PartialDispenseForm";
 import { ProductPicker } from "./ProductPicker";
 import { RecordReturnForm } from "./RecordReturnForm";
 import { StockLine } from "./StockLine";
+import { SubstitutionAnswer } from "./SubstitutionAnswer";
 import { SubstitutionPanel } from "./SubstitutionPanel";
+import { WitnessDialog } from "./WitnessDialog";
 
 interface ItemRowProps {
   prescription: Prescription;
   item: PrescriptionItem;
-  onAskSubstitute: (item: PrescriptionItem, suggestion: SubstituteSuggestion) => void;
+  onAskSubstitute: (item: PrescriptionItem, substitute: ProductRef) => void;
 }
 
 // One medicine line. Owns which small form is open and which lot is picked;
@@ -24,6 +27,8 @@ interface ItemRowProps {
 export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
   const [panel, setPanel] = useState<ItemPanel | null>(null);
   const [chosenBatchId, setChosenBatchId] = useState<string | null>(null);
+  // The dispense the server refused for lack of a witness, kept so it can be sent again with one.
+  const [needsWitness, setNeedsWitness] = useState<DispenseItemPayload | null>(null);
 
   const dispense = useDispenseItem(prescription.id, item.id);
   const markOutOfStock = useMarkOutOfStock(prescription.id, item.id);
@@ -35,25 +40,35 @@ export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
   const statusNote = itemStatusNote(item);
   const closePanel = () => setPanel(null);
 
-  function dispenseWhole() {
-    dispense.mutate({
-      payload: { quantity: item.remainingQuantity, batchId: lot?.batchId },
-      key: crypto.randomUUID(),
+  function sendDispense(payload: DispenseItemPayload, onDone?: () => void) {
+    dispense.mutate(payload, {
+      onSuccess: () => {
+        setNeedsWitness(null);
+        onDone?.();
+      },
+      onError: (error) => {
+        if (isWitnessRequired(error)) setNeedsWitness(payload);
+      },
     });
   }
 
+  function dispenseWhole() {
+    sendDispense({ quantity: item.remainingQuantity, batchId: lot?.batchId });
+  }
+
   function dispensePart(quantity: number) {
-    dispense.mutate(
-      { payload: { quantity, batchId: lot?.batchId }, key: crypto.randomUUID() },
-      { onSuccess: closePanel },
-    );
+    sendDispense({ quantity, batchId: lot?.batchId }, closePanel);
+  }
+
+  function dispenseWitnessed(witness: WitnessCredentials) {
+    if (needsWitness) sendDispense({ ...needsWitness, ...witness }, closePanel);
   }
 
   return (
     <li className="rounded-lg border border-border-subtle bg-surface-sunken/40 p-3.5">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
         <p className="min-w-0 text-[14.5px] font-medium text-text-primary">
-          {item.mappedProductName ?? item.drugName}
+          {item.dispensingProductName ?? item.mappedProductName ?? item.drugName}
           <span className="text-text-secondary"> — {item.dosage} × {item.quantity}</span>
         </p>
         <ItemBadges item={item} />
@@ -70,7 +85,7 @@ export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
       {!isMapped(item) ? (
         <ProductPicker
           drugName={item.drugName}
-          suggestion={item.suggestedProduct}
+          suggestion={suggestedProductOf(item)}
           loading={mapProduct.isPending}
           onConfirm={(productId) => mapProduct.mutate(productId)}
         />
@@ -83,6 +98,10 @@ export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
           onDispense={dispenseWhole}
           onOpenPanel={(next) => setPanel(panel === next ? null : next)}
         />
+      )}
+
+      {item.substitutionStatus === "REQUESTED" && (
+        <SubstitutionAnswer prescriptionId={prescription.id} itemId={item.id} substituteName={item.substituteProductName} />
       )}
 
       {panel === "outOfStock" && (
@@ -110,12 +129,11 @@ export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
           onSelect={setChosenBatchId}
         />
       )}
-      {panel === "substitute" && item.substituteSuggestion && (
+      {panel === "substitute" && (
         <SubstitutionPanel
           drugName={item.drugName}
-          suggestion={item.substituteSuggestion}
-          onAskPrescriber={() => {
-            if (item.substituteSuggestion) onAskSubstitute(item, item.substituteSuggestion);
+          onAskPrescriber={(substitute) => {
+            onAskSubstitute(item, substitute);
             closePanel();
           }}
           onCancel={closePanel}
@@ -128,6 +146,15 @@ export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
           loading={recordReturn.isPending}
           onConfirm={(payload) => recordReturn.mutate(payload, { onSuccess: closePanel })}
           onCancel={closePanel}
+        />
+      )}
+      {needsWitness && (
+        <WitnessDialog
+          facilityId={prescription.facilityId}
+          pending={dispense.isPending}
+          errorMessage={dispense.isError && !isWitnessRequired(dispense.error) ? describeError(dispense.error) : null}
+          onConfirm={dispenseWitnessed}
+          onCancel={() => setNeedsWitness(null)}
         />
       )}
     </li>

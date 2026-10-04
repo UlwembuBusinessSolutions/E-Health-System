@@ -1,4 +1,5 @@
-import type { ManualRemovalKind, RecordRegisterEntryPayload, ScheduleLevel } from "@/shared/api/pharmacyCounts";
+import type { ManualRemovalKind, RecordRegisterEntryPayload } from "@/shared/api/pharmacyRegister";
+import type { DrugSchedule } from "@/shared/api/pharmacyStock";
 
 // Register rules as pure functions, so the day-close arithmetic can be read
 // (and tested) without any screen around it.
@@ -45,7 +46,7 @@ export const OTHER_REMOVAL_KINDS: { value: Exclude<ManualRemovalKind, "DISPENSED
 ];
 
 /** Schedule 6 always needs a witness; Schedule 5 may have one. */
-export function witnessRequired(schedule: ScheduleLevel): boolean {
+export function witnessRequired(schedule: DrugSchedule): boolean {
   return schedule === "S6";
 }
 
@@ -102,7 +103,7 @@ export function toEntryPayload(
 }
 
 /** The first thing still missing, in words the pharmacist can act on; null when ready. */
-export function removalProblem(draft: RemovalDraft, schedule: ScheduleLevel, onHand: number): string | null {
+export function removalProblem(draft: RemovalDraft, schedule: DrugSchedule, onHand: number): string | null {
   if (draft.quantity < 1) return "Enter how many are being removed.";
   if (draft.quantity > onHand) return `Only ${onHand} on hand, so ${draft.quantity} cannot be removed.`;
   if (draft.mode === "PATIENT") {

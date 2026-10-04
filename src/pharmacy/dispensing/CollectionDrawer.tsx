@@ -1,9 +1,11 @@
 import { useState } from "react";
-import type { CollectResult, Prescription } from "@/shared/api/pharmacy";
+import type { CollectResult, Prescription, WitnessCredentials } from "@/shared/api/pharmacy";
 import { Button } from "@/shared/components/Button";
 import { Switch } from "@/shared/components/Switch";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Drawer } from "../components/Drawer";
+import { blobToDataUrl } from "../lib/blobToDataUrl";
+import { describeError, isWitnessRequired } from "../lib/problem";
 import {
   EMPTY_COLLECTOR_FORM,
   hasCapturedData,
@@ -16,6 +18,7 @@ import { CollectionResultView } from "./CollectionResultView";
 import { useCollect } from "./hooks/useCollect";
 import { collectableItems } from "./itemState";
 import { ThirdPartyForm } from "./ThirdPartyForm";
+import { WitnessDialog } from "./WitnessDialog";
 
 interface CollectionDrawerProps {
   open: boolean;
@@ -36,6 +39,8 @@ function OpenCollectionDrawer({ prescription, startWithThirdParty, onClose }: Om
   const [form, setForm] = useState<CollectorFormState>(EMPTY_COLLECTOR_FORM);
   const [confirmingSwitch, setConfirmingSwitch] = useState(false);
   const [result, setResult] = useState<CollectResult | null>(null);
+  // Set when the server refuses a Schedule 6 hand-over for lack of a witness.
+  const [askingWitness, setAskingWitness] = useState(false);
   const collect = useCollect(prescription.id);
 
   const hasScheduledItem = collectableItems(prescription).some((item) => item.schedule !== null);
@@ -58,21 +63,32 @@ function OpenCollectionDrawer({ prescription, startWithThirdParty, onClose }: Om
     setConfirmingSwitch(false);
   }
 
-  function confirmCollection() {
+  // `witness` is only passed on the retry that follows a "needs a witness" refusal.
+  async function confirmCollection(witness?: WitnessCredentials) {
+    const signature = !byPatient && form.signature ? await blobToDataUrl(form.signature) : undefined;
     collect.mutate(
       {
-        key: crypto.randomUUID(),
-        files: byPatient ? {} : { signature: form.signature ?? undefined, proof: form.proof ?? undefined },
+        proof: byPatient ? undefined : (form.proof ?? undefined),
         payload: byPatient
-          ? { collectedByPatient: true, idVerified: false }
+          ? { collectedByPatient: true, idVerified: false, ...witness }
           : {
               collectedByPatient: false,
               collector: toCollectorDetails(form),
               idVerified: form.idVerified,
+              signature,
               notes: form.notes.trim() || undefined,
+              ...witness,
             },
       },
-      { onSuccess: setResult },
+      {
+        onSuccess: (collected) => {
+          setAskingWitness(false);
+          setResult(collected);
+        },
+        onError: (error) => {
+          if (isWitnessRequired(error)) setAskingWitness(true);
+        },
+      },
     );
   }
 
@@ -86,7 +102,7 @@ function OpenCollectionDrawer({ prescription, startWithThirdParty, onClose }: Om
       <Button variant="secondary" disabled={collect.isPending} onClick={onClose}>
         Cancel
       </Button>
-      <Button disabled={missing.length > 0} loading={collect.isPending} onClick={confirmCollection}>
+      <Button disabled={missing.length > 0} loading={collect.isPending} onClick={() => void confirmCollection()}>
         Confirm collection
       </Button>
     </>
@@ -103,7 +119,7 @@ function OpenCollectionDrawer({ prescription, startWithThirdParty, onClose }: Om
         footer={footer}
       >
         {result ? (
-          <CollectionResultView skippedItems={result.skippedItems} />
+          <CollectionResultView result={result} />
         ) : (
           <div className="flex flex-col gap-5">
             <CollectionMedicationList prescription={prescription} />
@@ -123,6 +139,15 @@ function OpenCollectionDrawer({ prescription, startWithThirdParty, onClose }: Om
           </div>
         )}
       </Drawer>
+      {askingWitness && (
+        <WitnessDialog
+          facilityId={prescription.facilityId}
+          pending={collect.isPending}
+          errorMessage={collect.isError && !isWitnessRequired(collect.error) ? describeError(collect.error) : null}
+          onConfirm={(witness) => void confirmCollection(witness)}
+          onCancel={() => setAskingWitness(false)}
+        />
+      )}
       <ConfirmDialog
         open={confirmingSwitch}
         title="Switch back to patient collection?"

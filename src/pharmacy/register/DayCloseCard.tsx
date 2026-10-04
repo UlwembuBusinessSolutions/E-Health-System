@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lock } from "lucide-react";
-import { closeDay, getDayClose, type DayClose, type ScheduledProduct } from "@/shared/api/pharmacyCounts";
+import { closeDay, getDayClose, type DayClose, type ScheduledProduct } from "@/shared/api/pharmacyRegister";
 import { Button } from "@/shared/components/Button";
 import { Card } from "@/shared/components/Card";
 import { Input } from "@/shared/components/Input";
@@ -11,7 +11,7 @@ import { SkeletonRows } from "../components/SkeletonRows";
 import { formatDate, formatDateTime } from "../lib/format";
 import { describeError } from "../lib/problem";
 import { canCloseDay, expectedBalance, MIN_VARIANCE_REASON_LENGTH, varianceOf } from "./registerMath";
-import { registerKeys } from "./registerKeys";
+import { pharmacyKeys } from "../lib/queryKeys";
 
 interface DayCloseCardProps {
   facilityId: string;
@@ -57,7 +57,7 @@ export function DayCloseCard({ facilityId, product, date }: DayCloseCardProps) {
   const queryClient = useQueryClient();
   const [counted, setCounted] = useState("");
   const [reason, setReason] = useState("");
-  const key = registerKeys.dayClose(facilityId, product.productId, date);
+  const key = pharmacyKeys.register.dayClose(facilityId, product.productId, date);
 
   const dayClose = useQuery({ queryKey: key, queryFn: () => getDayClose(facilityId, product.productId, date) });
   const sign = useMutation({
@@ -86,7 +86,7 @@ export function DayCloseCard({ facilityId, product, date }: DayCloseCardProps) {
       <div>
         <h2 className="text-[16px] font-semibold text-text-primary">Daily reconciliation</h2>
         <p className="text-[13px] text-text-secondary">
-          {formatDate(date)} &middot; {product.name} {product.sub}
+          {formatDate(date)} &middot; {product.productName}
         </p>
       </div>
 

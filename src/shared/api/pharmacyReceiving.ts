@@ -1,10 +1,12 @@
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
+import { queryString } from "./queryString";
+import type { PagedResult } from "./types";
+import type { ReceiptFlagReason, ReceiptSummary } from "./pharmacyLedger";
 
-// Suppliers and goods-received receipts (Docs/pharmacy-module-contract.md,
-// section 3 "B2"). Every request and response type for this slice lives here
-// so the integrator can reconcile it with the real backend in one place.
-// Receipt list/detail types belong to the ledger screens, not to this file.
+// Suppliers and goods-received receipts, backed by
+// co.ehealth.platform.pharmacy.supplier and .stock (POST /receipts). Reading
+// receipts back is in pharmacyLedger.ts.
 
 const BASE = "/api/v1/pharmacy";
 
@@ -20,13 +22,18 @@ export interface Supplier {
   phone: string | null;
   email: string | null;
   status: SupplierStatus;
-  /** Set on a supplier that was archived by a merge. */
+  /** Set on a supplier that was archived by a merge: the supplier it was merged into. */
   mergedIntoId: string | null;
-  mergedIntoName: string | null;
-  /** Roll-ups for the list screen; the backend may omit them on lean responses. */
-  productCount?: number;
-  receiptCount?: number;
-  lastReceivedAt?: string | null;
+  /** Products linked to this supplier for reordering. */
+  productCount: number;
+  createdAt: string;
+}
+
+/** What `GET /suppliers?facilityId=` adds: the reorder picture at that facility. */
+export interface SupplierOrderInfo {
+  /** Linked products that are low or out at the facility. */
+  toOrderCount: number;
+  lastOrderedAt: string | null;
 }
 
 export interface ListSuppliersParams {
@@ -34,18 +41,21 @@ export interface ListSuppliersParams {
   status?: SupplierStatus;
 }
 
-// Suppliers are a short list per facility group, so the screen loads them in
-// one request and filters further client-side where it can.
-const SUPPLIER_PAGE_SIZE = 200;
+// The server caps a page at 100 suppliers. That is plenty for one pharmacy
+// group, so the screens load them in one request and filter client-side.
+const SUPPLIER_PAGE_SIZE = 100;
 
 export async function listSuppliers(params: ListSuppliersParams = {}): Promise<Supplier[]> {
-  const search = new URLSearchParams({ size: String(SUPPLIER_PAGE_SIZE) });
-  if (params.q) search.set("q", params.q);
-  if (params.status) search.set("status", params.status);
-  const response = await apiClient.get<{ items: Supplier[] }>(`${BASE}/suppliers?${search.toString()}`, {
-    headers: tenantAuthHeaders(),
-  });
+  const response = await apiClient.get<PagedResult<Supplier>>(
+    `${BASE}/suppliers?${queryString({ ...params, size: SUPPLIER_PAGE_SIZE })}`,
+    { headers: tenantAuthHeaders() },
+  );
   return response.items;
+}
+
+/** Id and name of every active supplier, for the "usual supplier" and receipt-filter pickers. */
+export async function listSupplierOptions(): Promise<Pick<Supplier, "id" | "name">[]> {
+  return listSuppliers({ status: "ACTIVE" });
 }
 
 export interface SupplierPayload {
@@ -57,7 +67,7 @@ export interface SupplierPayload {
 }
 
 /**
- * A name collision comes back as 409 `{ code: "DUPLICATE_SUPPLIER", existing, similar }`
+ * A name collision comes back as 409 `{ code: "DUPLICATE_SUPPLIER", message, existing: {id, name}, similar }`
  * and surfaces on `ApiError.code / .existing / .similar` (see client.ts).
  */
 export const DUPLICATE_SUPPLIER_CODE = "DUPLICATE_SUPPLIER";
@@ -78,34 +88,24 @@ export function reactivateSupplier(id: string): Promise<Supplier> {
   return apiClient.post<Supplier>(`${BASE}/suppliers/${id}/reactivate`, undefined, { headers: tenantAuthHeaders() });
 }
 
-/** Re-points every receipt of `sourceId` to `intoSupplierId`, then archives the source. */
+/** Re-points every receipt of `sourceId` to `intoSupplierId`, archives the source, and returns the surviving supplier. */
 export function mergeSuppliers(sourceId: string, intoSupplierId: string): Promise<Supplier> {
   return apiClient.post<Supplier>(`${BASE}/suppliers/${sourceId}/merge`, { intoSupplierId }, {
     headers: tenantAuthHeaders(),
   });
 }
 
-export interface SupplierReceiptSummary {
-  id: string;
-  receiptNumber: string;
-  invoiceNumber: string | null;
-  receivedAt: string;
-  totalUnits: number;
-}
-
-export async function listSupplierReceipts(supplierId: string): Promise<SupplierReceiptSummary[]> {
-  const response = await apiClient.get<{ items: SupplierReceiptSummary[] }>(
-    `${BASE}/suppliers/${supplierId}/receipts`,
-    { headers: tenantAuthHeaders() },
-  );
+/** A supplier's latest receipts, newest first. */
+export async function listSupplierReceipts(supplierId: string): Promise<ReceiptSummary[]> {
+  const response = await apiClient.get<PagedResult<ReceiptSummary>>(`${BASE}/suppliers/${supplierId}/receipts`, {
+    headers: tenantAuthHeaders(),
+  });
   return response.items;
 }
 
 // ---------------------------------------------------------------------------
 // Receiving
 // ---------------------------------------------------------------------------
-
-export type ReceiptFlagReason = "DAMAGED" | "SHORT" | "WRONG_ITEM" | "NEAR_EXPIRY";
 
 export interface ReceiptLineFlag {
   reason: ReceiptFlagReason;
@@ -143,21 +143,12 @@ export interface PostedReceipt {
   receiptNumber: string;
 }
 
-// One idempotency key per submit ATTEMPT (same rule as the Phase 1 receiveStock):
-// the caller reuses it when retrying the same attempt so a double-click or a
-// network retry can never post the receipt twice.
+// One idempotency key per submit ATTEMPT: the caller reuses it when retrying
+// the same attempt so a double-click or a network retry can never post the
+// receipt twice (PharmacyStockLedgerService's own why-note on why the key has
+// to come from the caller, not be derived from body content).
 export function postReceipt(payload: PostReceiptPayload, idempotencyKey: string): Promise<PostedReceipt> {
   return apiClient.post<PostedReceipt>(`${BASE}/receipts`, payload, {
     headers: { ...tenantAuthHeaders(), "Idempotency-Key": idempotencyKey },
   });
-}
-
-/**
- * Tracking flags added by the Phase 2 contract. `PharmacyProduct` (pharmacyStock.ts,
- * owned by the products agent) gains them too; they are optional here so this
- * screen type-checks either way and treats a missing flag as "not tracked".
- */
-export interface ProductTrackingFlags {
-  serialTracked?: boolean;
-  coldChain?: boolean;
 }

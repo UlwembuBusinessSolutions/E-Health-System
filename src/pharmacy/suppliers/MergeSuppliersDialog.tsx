@@ -4,9 +4,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { mergeSuppliers, type Supplier } from "@/shared/api/pharmacyReceiving";
 import { Button } from "@/shared/components/Button";
 import { Modal } from "@/pharmacy/components/Modal";
-import { formatDate, pluralise } from "@/pharmacy/lib/format";
+import { pluralise } from "@/pharmacy/lib/format";
 import { describeError } from "@/pharmacy/lib/problem";
-import { SUPPLIERS_KEY } from "./useSuppliers";
+import { pharmacyKeys } from "@/pharmacy/lib/queryKeys";
 
 interface MergeSuppliersDialogProps {
   /** Active suppliers only: merging into or out of an archived one makes no sense. */
@@ -32,9 +32,9 @@ export function MergeSuppliersDialog({ suppliers, initialDuplicate, onClose, onM
       return mergeSuppliers(duplicate.id, keep.id);
     },
     onSuccess: (kept) => {
-      void queryClient.invalidateQueries({ queryKey: SUPPLIERS_KEY });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.suppliers.all });
       // Re-pointed receipts change the "recent receipts" of both suppliers and the receipt lists elsewhere.
-      void queryClient.invalidateQueries({ queryKey: ["pharmacy", "receipts"] });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.receipts.all });
       if (duplicate) onMerged(kept, duplicate);
     },
   });
@@ -107,13 +107,9 @@ export function MergeSuppliersDialog({ suppliers, initialDuplicate, onClose, onM
 }
 
 function MergeConsequence({ duplicate, keep }: { duplicate: Supplier; keep: Supplier }) {
-  const receipts =
-    duplicate.receiptCount === undefined ? "Its receipts" : pluralise(duplicate.receiptCount, "receipt");
   return (
     <p role="status" className="rounded-lg bg-brand-50 p-3.5 text-[13.5px] text-text-primary">
-      <strong>
-        {receipts} will be re-pointed to {keep.name}.
-      </strong>{" "}
+      <strong>All of {duplicate.name}'s receipts will be re-pointed to {keep.name}.</strong>{" "}
       {duplicate.name} will be archived and tagged "Merged into {keep.name}". Receipt history is not deleted.
     </p>
   );
@@ -164,7 +160,5 @@ function SupplierChoice({ legend, suppliers, selected, onSelect }: SupplierChoic
 }
 
 function describeUsage(supplier: Supplier): string {
-  if (supplier.receiptCount === undefined) return supplier.phone ?? "No phone";
-  const receipts = pluralise(supplier.receiptCount, "receipt");
-  return supplier.lastReceivedAt ? `${receipts} · last ${formatDate(supplier.lastReceivedAt)}` : receipts;
+  return [supplier.phone, pluralise(supplier.productCount, "linked product")].filter(Boolean).join(" · ");
 }

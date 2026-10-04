@@ -1,15 +1,13 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus, ScanLine, TriangleAlert } from "lucide-react";
-import { listProducts, type PharmacyProduct } from "@/shared/api/pharmacyStock";
+import type { PharmacyProduct } from "@/shared/api/pharmacyStock";
 import { ErrorState } from "@/pharmacy/components/ErrorState";
 import { SkeletonRows } from "@/pharmacy/components/SkeletonRows";
 import { describeError } from "@/pharmacy/lib/problem";
+import { productSearchQuery, useProductSearch } from "@/pharmacy/lib/productSearch";
 import { useDebouncedValue } from "@/pharmacy/lib/useDebouncedValue";
 import { toReceivableProduct, type ReceivableProduct } from "./receiptTypes";
-
-const MAX_RESULTS = 8;
-const SEARCH_STALE_MS = 30_000;
 
 interface ProductFinderProps {
   /** Products shown as "Often received" chips while the box is empty. */
@@ -17,14 +15,6 @@ interface ProductFinderProps {
   onSelect: (product: ReceivableProduct) => void;
   /** `typedName` pre-fills the new product's name. */
   onAddNew: (typedName: string) => void;
-}
-
-function searchQuery(text: string) {
-  return {
-    queryKey: ["pharmacy", "products", "receive-finder", text],
-    queryFn: () => listProducts({ q: text, activeOnly: true, size: MAX_RESULTS }),
-    staleTime: SEARCH_STALE_MS,
-  };
 }
 
 // A barcode scanner types the code and presses Enter within a few
@@ -44,7 +34,7 @@ export function ProductFinder({ recent, onSelect, onAddNew }: ProductFinderProps
   const debounced = useDebouncedValue(text.trim());
   const typed = text.trim();
 
-  const results = useQuery({ ...searchQuery(debounced), enabled: debounced !== "" });
+  const results = useProductSearch(debounced);
   const settled = debounced === typed && results.isSuccess;
   const items = settled ? results.data.items : [];
   const nothingFound = settled && items.length === 0;
@@ -59,7 +49,7 @@ export function ProductFinder({ recent, onSelect, onAddNew }: ProductFinderProps
   async function handleEnter() {
     if (typed === "") return;
     try {
-      const response = await queryClient.fetchQuery(searchQuery(typed));
+      const response = await queryClient.fetchQuery(productSearchQuery(typed));
       const match = pickOnEnter(response.items, typed);
       if (match) select(match);
     } catch {

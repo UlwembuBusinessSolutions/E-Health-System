@@ -16,12 +16,12 @@ import { FilterChips, type FilterChipOption } from "@/pharmacy/components/Filter
 import { PageToolbar } from "@/pharmacy/components/PageToolbar";
 import { ResponsiveTable, type TableColumn } from "@/pharmacy/components/ResponsiveTable";
 import { SearchInput } from "@/pharmacy/components/SearchInput";
-import { formatDate } from "@/pharmacy/lib/format";
 import { describeError } from "@/pharmacy/lib/problem";
+import { pharmacyKeys } from "@/pharmacy/lib/queryKeys";
 import { MergeSuppliersDialog } from "./MergeSuppliersDialog";
 import { SupplierDialog } from "./SupplierDialog";
 import { SupplierReceiptsList } from "./SupplierReceiptsList";
-import { SUPPLIERS_KEY, useSuppliers } from "./useSuppliers";
+import { useSuppliers } from "./useSuppliers";
 
 type StatusFilter = "all" | "active" | "archived";
 
@@ -71,7 +71,8 @@ export function SuppliersPage() {
     mutationFn: (supplier: Supplier) =>
       supplier.status === "ACTIVE" ? archiveSupplier(supplier.id) : reactivateSupplier(supplier.id),
     onSuccess: (updated) => {
-      void queryClient.invalidateQueries({ queryKey: SUPPLIERS_KEY });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.suppliers.all });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.reorder.all });
       showToast(
         updated.status === "ACTIVE"
           ? `${updated.name} is active again and appears when receiving stock.`
@@ -94,6 +95,9 @@ export function SuppliersPage() {
     showToast(`Using the existing supplier ${existing.name}.`, "info");
   }
 
+  // The server names only the id a merged supplier went into; the list already holds that supplier.
+  const nameOf = (supplierId: string | null) => all.find((supplier) => supplier.id === supplierId)?.name ?? null;
+
   const columns: TableColumn<Supplier>[] = [
     {
       key: "name",
@@ -108,14 +112,13 @@ export function SuppliersPage() {
       ),
     },
     { key: "contact", header: "Contact", cell: (supplier) => <Contact supplier={supplier} /> },
-    { key: "products", header: "Products", cell: (supplier) => supplier.productCount ?? "—" },
+    { key: "products", header: "Linked products", cell: (supplier) => supplier.productCount },
     {
-      key: "last",
-      header: "Last received",
-      cell: (supplier) => (supplier.lastReceivedAt ? formatDate(supplier.lastReceivedAt) : "None yet"),
+      key: "status",
+      header: "Status",
+      role: "secondary",
+      cell: (supplier) => <SupplierStatusCell supplier={supplier} mergedIntoName={nameOf(supplier.mergedIntoId)} />,
     },
-    { key: "receipts", header: "Receipts", cell: (supplier) => supplier.receiptCount ?? "—" },
-    { key: "status", header: "Status", role: "secondary", cell: (supplier) => <SupplierStatusCell supplier={supplier} /> },
     {
       key: "actions",
       header: "Actions",
@@ -243,14 +246,12 @@ function Contact({ supplier }: { supplier: Supplier }) {
   );
 }
 
-function SupplierStatusCell({ supplier }: { supplier: Supplier }) {
+function SupplierStatusCell({ supplier, mergedIntoName }: { supplier: Supplier; mergedIntoName: string | null }) {
   const active = supplier.status === "ACTIVE";
   return (
     <span className="flex flex-col items-start gap-1">
       <StatusPill tone={active ? "success" : "neutral"}>{active ? "Active" : "Archived"}</StatusPill>
-      {supplier.mergedIntoName && (
-        <span className="text-[12px] text-text-secondary">Merged into {supplier.mergedIntoName}</span>
-      )}
+      {mergedIntoName && <span className="text-[12px] text-text-secondary">Merged into {mergedIntoName}</span>}
     </span>
   );
 }

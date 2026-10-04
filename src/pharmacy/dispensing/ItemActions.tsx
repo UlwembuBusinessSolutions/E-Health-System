@@ -32,8 +32,8 @@ function moreOptionsFor(item: PrescriptionItem, lot: DispenseLot | null, partIsP
   const hasStock = lot !== null && lot.available > 0;
   if (hasStock && item.remainingQuantity > 1 && !partIsPrimary) options.push({ panel: "part", label: "Dispense part" });
   if (item.usableLots.length > 1 || item.skippedExpiredLots.length > 0) options.push({ panel: "lot", label: "Change lot" });
-  const canSuggest = !hasStock && item.substituteSuggestion !== null && item.substitutionStatus !== "REQUESTED";
-  if (canSuggest) options.push({ panel: "substitute", label: "Suggest a substitute" });
+  const canSuggest = !hasStock && item.substitutionStatus !== "REQUESTED";
+  if (canSuggest) options.push({ panel: "substitute", label: "Ask about a substitute" });
   return options;
 }
 

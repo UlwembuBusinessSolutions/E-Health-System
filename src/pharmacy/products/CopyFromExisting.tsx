@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Copy } from "lucide-react";
-import { listProducts, type PharmacyProduct } from "@/shared/api/pharmacyStock";
+import type { PharmacyProduct } from "@/shared/api/pharmacyStock";
 import { Button } from "@/shared/components/Button";
 import { SearchInput } from "../components/SearchInput";
 import { describeError } from "../lib/problem";
+import { useProductSearch } from "../lib/productSearch";
 
 interface CopyFromExistingProps {
   onPick: (product: PharmacyProduct) => void;
@@ -15,12 +15,7 @@ interface CopyFromExistingProps {
 export function CopyFromExisting({ onPick }: CopyFromExistingProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const matches = useQuery({
-    queryKey: ["pharmacy", "products", "copy-search", query],
-    queryFn: () => listProducts({ q: query, size: 8 }),
-    enabled: open && query !== "",
-    staleTime: 30_000,
-  });
+  const matches = useProductSearch(open ? query : "");
 
   function pick(product: PharmacyProduct) {
     setOpen(false);

@@ -1,18 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
-import { listProducts, type PharmacyProduct } from "@/shared/api/pharmacyStock";
+import type { PharmacyProduct } from "@/shared/api/pharmacyStock";
+import { useProductSearch } from "../lib/productSearch";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 
 const MIN_NAME_LENGTH = 4;
+// Archived products count as duplicates too: their SKU is still taken.
+const CATALOG_SEARCH = { activeOnly: false, size: 10 };
 
 function useCatalogSearch(term: string) {
   const debounced = useDebouncedValue(term.trim());
-  return useQuery({
-    queryKey: ["pharmacy", "products", "catalog-search", debounced],
-    queryFn: () => listProducts({ q: debounced, activeOnly: false, size: 10 }),
-    enabled: debounced.length > 0,
-    staleTime: 30_000,
-    select: (page) => page.items,
-  });
+  return useProductSearch(debounced, CATALOG_SEARCH).data?.items;
 }
 
 export interface ProductDuplicates {
@@ -33,9 +29,9 @@ interface DuplicateInput {
 // catalog: the catalog can be thousands of rows. The server has the final
 // say on SKU uniqueness; this only warns early.
 export function useProductDuplicates({ sku, displayName, checkName }: DuplicateInput): ProductDuplicates {
-  const skuMatches = useCatalogSearch(sku).data;
+  const skuMatches = useCatalogSearch(sku);
   const nameTerm = checkName && displayName.trim().length >= MIN_NAME_LENGTH ? displayName : "";
-  const nameMatches = useCatalogSearch(nameTerm).data;
+  const nameMatches = useCatalogSearch(nameTerm);
 
   const normalisedSku = sku.trim().toLowerCase();
   const normalisedName = nameTerm.trim().toLowerCase();

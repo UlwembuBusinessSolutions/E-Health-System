@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getPrescription, listStockArrivals, searchPrescriptions } from "@/shared/api/pharmacy";
-import { dispensingKeys } from "./dispensingKeys";
+import { pharmacyKeys } from "../../lib/queryKeys";
 
 // Two letters is the shortest query that is not just noise for a name search.
 const MIN_QUERY_LENGTH = 2;
@@ -8,7 +8,7 @@ const MIN_QUERY_LENGTH = 2;
 export function usePrescriptionSearch(facilityId: string, query: string) {
   const trimmed = query.trim();
   return useQuery({
-    queryKey: dispensingKeys.search(facilityId, trimmed),
+    queryKey: pharmacyKeys.dispensing.search(facilityId, trimmed),
     queryFn: () => searchPrescriptions(trimmed, facilityId),
     enabled: facilityId !== "" && trimmed.length >= MIN_QUERY_LENGTH,
     staleTime: 10_000,
@@ -19,7 +19,7 @@ export function usePrescriptionSearch(facilityId: string, query: string) {
 // banner. Kept fresh by the same invalidation as the queue.
 export function useOpenedPrescription(prescriptionId: string | null) {
   return useQuery({
-    queryKey: dispensingKeys.prescription(prescriptionId ?? ""),
+    queryKey: pharmacyKeys.dispensing.prescription(prescriptionId ?? ""),
     queryFn: () => getPrescription(prescriptionId ?? ""),
     enabled: prescriptionId !== null,
     staleTime: 5_000,
@@ -28,7 +28,7 @@ export function useOpenedPrescription(prescriptionId: string | null) {
 
 export function useStockArrivals(facilityId: string) {
   return useQuery({
-    queryKey: dispensingKeys.arrivals(facilityId),
+    queryKey: pharmacyKeys.dispensing.arrivals(facilityId),
     queryFn: () => listStockArrivals(facilityId),
     enabled: facilityId !== "",
     staleTime: 15_000,

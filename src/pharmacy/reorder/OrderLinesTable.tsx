@@ -1,10 +1,12 @@
 import { Trash2 } from "lucide-react";
-import type { ReorderLine } from "@/shared/api/pharmacyPlanning";
+import type { ReorderLine, ReorderStatus } from "@/shared/api/pharmacyPlanning";
 import { EmptyState } from "../components/EmptyState";
 import { QuantityInput } from "../components/QuantityInput";
 import { ResponsiveTable, type TableColumn } from "../components/ResponsiveTable";
-import { StockStatusPill } from "../components/StockStatusPill";
-import { isWholePacks, packNote, quantityFor, type QuantityOverrides } from "./packMath";
+import { StockStatusPill, type StockStatus } from "../components/StockStatusPill";
+import { isWholePacks, packNote, packSizeOf, quantityFor, type QuantityOverrides } from "./packMath";
+
+const PILL_STATUS: Record<ReorderStatus, StockStatus> = { OUT: "OUT", LOW: "LOW", OK: "IN_STOCK" };
 
 interface OrderLinesTableProps {
   supplierName: string;
@@ -24,29 +26,35 @@ export function OrderLinesTable({ supplierName, lines, overrides, onQuantityChan
         <div>
           <p className="font-medium text-text-primary">{line.name}</p>
           <p className="text-[12.5px] text-text-secondary">
-            {[line.sub, `pack of ${line.packSize}`].filter(Boolean).join(" · ")}
+            {[line.sub, line.packSize ? `pack of ${line.packSize}` : null].filter(Boolean).join(" · ")}
           </p>
         </div>
       ),
     },
     { key: "onHand", header: "On hand", align: "right", cell: (line) => <span className="tabular-nums">{line.onHand}</span> },
-    { key: "reorderAt", header: "Reorder at", align: "right", cell: (line) => <span className="tabular-nums">{line.reorderThreshold}</span> },
-    { key: "status", header: "Status", role: "secondary", cell: (line) => <StockStatusPill status={line.status} /> },
+    {
+      key: "reorderAt",
+      header: "Reorder at",
+      align: "right",
+      cell: (line) => <span className="tabular-nums">{line.reorderThreshold ?? "—"}</span>,
+    },
+    { key: "status", header: "Status", role: "secondary", cell: (line) => <StockStatusPill status={PILL_STATUS[line.status]} /> },
     {
       key: "quantity",
       header: "How many to order",
       cell: (line) => {
         const quantity = quantityFor(line, overrides);
+        const packSize = packSizeOf(line);
         return (
           <div className="flex flex-col items-end gap-1 md:items-start">
             <QuantityInput
-              label={`Quantity of ${line.name} ${line.sub ?? ""} to order`}
+              label={`Quantity of ${line.name} ${line.sub} to order`}
               value={quantity}
-              step={line.packSize}
+              step={packSize}
               onChange={(next) => onQuantityChange(line, next)}
             />
-            <span className={isWholePacks(quantity, line.packSize) ? "text-[12.5px] text-text-secondary" : "text-[12.5px] font-medium text-amber-600"}>
-              {packNote(quantity, line.packSize)}
+            <span className={isWholePacks(quantity, packSize) ? "text-[12.5px] text-text-secondary" : "text-[12.5px] font-medium text-amber-600"}>
+              {packNote(quantity, packSize)}
             </span>
           </div>
         );

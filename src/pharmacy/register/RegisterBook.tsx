@@ -1,5 +1,5 @@
 import { Lock } from "lucide-react";
-import type { RegisterEntry, RegisterEntryKind } from "@/shared/api/pharmacyCounts";
+import type { RegisterEntry, RegisterEntryKind } from "@/shared/api/pharmacyRegister";
 import type { PaginationState } from "../components/PaginationFooter";
 import { ResponsiveTable, type TableColumn } from "../components/ResponsiveTable";
 import { formatDateTime } from "../lib/format";

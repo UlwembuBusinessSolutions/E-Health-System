@@ -1,4 +1,4 @@
-import type { LedgerEntry } from "@/shared/api/pharmacyStock";
+import type { LedgerMovement } from "@/shared/api/pharmacyLedger";
 import { reasonLabel } from "./adjustStockModel";
 
 // Keyed by StockTransactionType. Several raw types read the same to a
@@ -31,12 +31,16 @@ export interface EntrySource {
   reference: string | null;
 }
 
-export function describeEntrySource(entry: LedgerEntry): EntrySource {
+export function describeEntrySource(entry: LedgerMovement): EntrySource {
   if (entry.supplierName) return { who: entry.supplierName, reference: entry.sourceReference };
   if (entry.patientName) {
     return { who: entry.patientName, reference: entry.prescriptionSerial ?? entry.sourceReference };
   }
-  if (entry.reason) return { who: reasonLabel(entry.reason) ?? humanise(entry.reason), reference: entry.sourceReference };
+  // The picked reason reads better than the free-text note, which still shows beneath it.
+  if (entry.reasonCode) {
+    return { who: reasonLabel(entry.reasonCode) ?? humanise(entry.reasonCode), reference: entry.reason ?? entry.sourceReference };
+  }
+  if (entry.reason) return { who: entry.reason, reference: entry.sourceReference };
   return { who: "—", reference: entry.sourceReference };
 }
 

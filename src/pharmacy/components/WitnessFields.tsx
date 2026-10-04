@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { listWitnessCandidates } from "@/shared/api/pharmacyCounts";
+import { listWitnessCandidates } from "@/shared/api/pharmacyRegister";
 import { PasswordInput } from "@/shared/components/PasswordInput";
 import { Select } from "@/shared/components/Select";
 import { useAuth } from "@/auth/AuthContext";
 import { describeError } from "../lib/problem";
-import { registerKeys } from "./registerKeys";
+import { pharmacyKeys } from "../lib/queryKeys";
 
 interface WitnessFieldsProps {
   facilityId: string;
@@ -16,21 +16,20 @@ interface WitnessFieldsProps {
 
 const NO_WITNESS = "none";
 
-// A witness has to confirm in person with their own PIN or password, so the
-// person recording the removal can never witness their own entry.
+// A witness has to confirm in person with their own password, so the person
+// recording the movement can never witness their own entry. Shared by the
+// register and by the dispensing screens (Schedule 6 hand-overs).
 export function WitnessFields({ facilityId, required, witnessStaffId, witnessPin, onChange }: WitnessFieldsProps) {
   const { user } = useAuth();
   const candidates = useQuery({
-    queryKey: registerKeys.witnesses(facilityId),
+    queryKey: pharmacyKeys.register.witnesses(facilityId),
     queryFn: () => listWitnessCandidates(facilityId),
+    enabled: facilityId !== "",
     staleTime: 5 * 60_000,
   });
   const colleagues = (candidates.data ?? [])
     .filter((candidate) => candidate.id !== user?.id)
-    .map((candidate) => ({
-      value: candidate.id,
-      label: candidate.roleLabel ? `${candidate.name} (${candidate.roleLabel})` : candidate.name,
-    }));
+    .map((candidate) => ({ value: candidate.id, label: candidate.name }));
   // Schedule 5 may go unwitnessed, so it needs an explicit way back to "none".
   const options = required ? colleagues : [{ value: NO_WITNESS, label: "No witness" }, ...colleagues];
 
@@ -52,7 +51,7 @@ export function WitnessFields({ facilityId, required, witnessStaffId, witnessPin
       />
       {witnessStaffId && (
         <PasswordInput
-          label="Witness PIN or password"
+          label="Witness password"
           required
           autoComplete="off"
           value={witnessPin}

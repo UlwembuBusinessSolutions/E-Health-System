@@ -2,7 +2,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import type { TableColumn } from "@/pharmacy/components/ResponsiveTable";
 import { formatDate, pluralise } from "@/pharmacy/lib/format";
 import type { ReceiptSummary } from "@/shared/api/pharmacyLedger";
-import { ReceiptStatusPill } from "./ReceiptStatusPill";
+import { ReceiptStatusPill, receiptStanding } from "./ReceiptStatusPill";
 
 interface ReceiptColumnOptions {
   isExpanded: (receiptId: string) => boolean;
@@ -32,7 +32,7 @@ export function receiptColumns({ isExpanded, onToggle }: ReceiptColumnOptions): 
         );
       },
     },
-    { key: "status", header: "Status", role: "secondary", cell: (row) => <ReceiptStatusPill status={row.status} /> },
+    { key: "status", header: "Status", role: "secondary", cell: (row) => <ReceiptStatusPill state={receiptStanding(row)} /> },
     { key: "supplier", header: "Supplier", cell: (row) => row.supplierName ?? "—" },
     { key: "invoice", header: "Invoice", cell: (row) => row.invoiceNumber ?? "—" },
     { key: "number", header: "Receipt no.", cell: (row) => row.receiptNumber },

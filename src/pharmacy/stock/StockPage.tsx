@@ -10,6 +10,7 @@ import { EmptyState } from "../components/EmptyState";
 import { PageToolbar } from "../components/PageToolbar";
 import { ResponsiveTable } from "../components/ResponsiveTable";
 import { describeError } from "../lib/problem";
+import { useFacilitySelection } from "../lib/useFacilitySelection";
 import { AdjustStockDialog } from "./AdjustStockDialog";
 import { EditProductDialog } from "./EditProductDialog";
 import { LinkButton } from "./LinkButton";
@@ -17,7 +18,6 @@ import { ProductDetailsPanel } from "./ProductDetailsPanel";
 import { StockFilterBar } from "./StockFilterBar";
 import { buildStockColumns } from "./stockColumns";
 import { STOCK_PAGE_SIZE, useStockDashboard, useStockList } from "./stockQueries";
-import { useFacilitySelection } from "./useFacilitySelection";
 import { useStockFilters } from "./useStockFilters";
 
 interface AdjustTarget {
@@ -36,7 +36,6 @@ export function StockPage() {
     facilityId,
     q: filters.query,
     status: filters.status,
-    archived: filters.archived,
     page: filters.page,
   });
   const dashboard = useStockDashboard(facilityId);

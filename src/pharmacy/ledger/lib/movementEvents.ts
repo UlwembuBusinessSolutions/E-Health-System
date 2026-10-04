@@ -1,4 +1,4 @@
-import type { LedgerMovement, LedgerTransactionType, ReversalReason } from "@/shared/api/pharmacyLedger";
+import type { LedgerMovement, LedgerTransactionType, ReversalReason, ReversePayload } from "@/shared/api/pharmacyLedger";
 
 // Pharmacists think in six plain events, not eleven transaction types.
 export type MovementEventKind = "RECEIVED" | "DISPENSED" | "REMOVED" | "REVERSAL" | "ADJUSTED" | "OPENING";
@@ -61,13 +61,28 @@ export function isReversed(movement: LedgerMovement): boolean {
   return movement.reversedByTransactionId !== null;
 }
 
-/** Only a plain receipt line can be undone here; everything else is corrected by a new entry. */
+// A receipt posts one transaction for all its lines, and reversing it must also
+// mark the receipt itself reversed, which only the Receipts tab does. So a
+// receipt entry is never reversed from this tab; stock corrections are.
+const REVERSIBLE_HERE: ReadonlySet<LedgerTransactionType> = new Set([
+  "ADJUSTMENT_POSITIVE",
+  "ADJUSTMENT_NEGATIVE",
+  "WRITE_OFF",
+]);
+
+/** Stock corrections can be undone from the ledger while nobody has used the stock they added. */
 export function canReverse(movement: LedgerMovement): boolean {
-  return movement.type === "RECEIPT" && !isReversed(movement) && !movement.stockUsed;
+  return REVERSIBLE_HERE.has(movement.type) && !isReversed(movement) && !movement.stockUsed;
 }
 
+/** A correction whose added stock has since been dispensed or removed can no longer be undone. */
 export function isStockUsed(movement: LedgerMovement): boolean {
-  return movement.type === "RECEIPT" && !isReversed(movement) && movement.stockUsed === true;
+  return REVERSIBLE_HERE.has(movement.type) && !isReversed(movement) && movement.stockUsed;
+}
+
+/** A live receipt entry is reversed from the Receipts tab instead. */
+export function isReversedFromReceipts(movement: LedgerMovement): boolean {
+  return movement.type === "RECEIPT" && !isReversed(movement);
 }
 
 /** Who or what the movement was with: supplier, patient, or the stated reason. */
@@ -81,9 +96,14 @@ export function referenceOf(movement: LedgerMovement): string | null {
 }
 
 export const REVERSAL_REASONS: { value: ReversalReason; label: string }[] = [
-  { value: "WRONG_QUANTITY", label: "Wrong quantity" },
-  { value: "WRONG_PRODUCT", label: "Wrong product" },
+  { value: "WRONG_ENTRY", label: "Entered by mistake" },
   { value: "DUPLICATE_ENTRY", label: "Duplicate entry" },
-  { value: "RECEIVED_BY_MISTAKE", label: "Received by mistake" },
+  { value: "RETURNED_TO_SUPPLIER", label: "Returned to the supplier" },
   { value: "OTHER", label: "Other" },
 ];
+
+/** The reason and note as one sentence, for the receipt endpoint's single free-text reason. */
+export function describeReversal({ reason, note }: ReversePayload): string {
+  const label = REVERSAL_REASONS.find((option) => option.value === reason)?.label ?? reason;
+  return note ? `${label}: ${note}` : label;
+}

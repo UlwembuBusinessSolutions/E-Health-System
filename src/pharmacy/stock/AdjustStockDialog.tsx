@@ -68,8 +68,6 @@ function AdjustStockForm({
   const formId = useId();
   const form = useAdjustStockForm({ product, facilityId, lots, initialMode, initialBatchId });
   const submission = useAdjustStockSubmit({
-    facilityId,
-    productId: product.productId,
     successMessage: successMessage(form.mode, form.payload?.quantity ?? 0, product, form.lot),
     onDone: onClose,
   });

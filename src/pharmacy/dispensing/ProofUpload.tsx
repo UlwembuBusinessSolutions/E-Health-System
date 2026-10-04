@@ -7,7 +7,7 @@ interface ProofUploadProps {
   onChange: (file: File | null) => void;
 }
 
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = 5 * 1024 * 1024;
 
 function describeSize(bytes: number): string {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -26,7 +26,7 @@ export function ProofUpload({ file, onChange }: ProofUploadProps) {
     event.target.value = "";
     if (!selected) return;
     if (selected.size > MAX_BYTES) {
-      setError("That file is over 10 MB. Choose a smaller file or a lower-resolution photo.");
+      setError("That file is over 5 MB. Choose a smaller file or a lower-resolution photo.");
       return;
     }
     setError(null);
@@ -71,7 +71,7 @@ export function ProofUpload({ file, onChange }: ProofUploadProps) {
           Upload or take a photo
         </Button>
       )}
-      <p className="text-[13px] text-text-secondary">PDF, JPG or PNG, up to 10 MB.</p>
+      <p className="text-[13px] text-text-secondary">PDF, JPG or PNG, up to 5 MB.</p>
       {error && (
         <p id={errorId} role="alert" className="text-[13px] text-danger-500">
           {error}

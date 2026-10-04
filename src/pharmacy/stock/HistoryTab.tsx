@@ -1,7 +1,7 @@
 import { useState } from "react";
 import clsx from "clsx";
 import { ScrollText } from "lucide-react";
-import type { LedgerEntry } from "@/shared/api/pharmacyStock";
+import type { LedgerMovement } from "@/shared/api/pharmacyLedger";
 import { EmptyState } from "../components/EmptyState";
 import { ResponsiveTable, type TableColumn } from "../components/ResponsiveTable";
 import { formatDateTime } from "../lib/format";
@@ -9,7 +9,7 @@ import { describeError } from "../lib/problem";
 import { describeEntrySource, formatDelta, ledgerTypeLabel } from "./ledgerLabels";
 import { useProductHistory } from "./stockQueries";
 
-const COLUMNS: TableColumn<LedgerEntry>[] = [
+const COLUMNS: TableColumn<LedgerMovement>[] = [
   {
     key: "event",
     header: "Event",
@@ -35,7 +35,7 @@ const COLUMNS: TableColumn<LedgerEntry>[] = [
       );
     },
   },
-  { key: "lot", header: "Lot", cell: (entry) => <span className="font-mono">{entry.lotNumber ?? "—"}</span> },
+  { key: "lot", header: "Lot", cell: (entry) => <span className="font-mono">{entry.lotNumber}</span> },
   {
     key: "change",
     header: "Change",
@@ -51,7 +51,8 @@ const COLUMNS: TableColumn<LedgerEntry>[] = [
     key: "balance",
     header: "Balance",
     align: "right",
-    cell: (entry) => <span className="tabular-nums">{entry.balanceAfter.toLocaleString("en-ZA")}</span>,
+    // The product's total, not the lot's: this tab is about the product as a whole.
+    cell: (entry) => <span className="tabular-nums">{(entry.runningBalance ?? entry.balanceAfter).toLocaleString("en-ZA")}</span>,
   },
   { key: "by", header: "By", cell: (entry) => entry.actorName },
 ];

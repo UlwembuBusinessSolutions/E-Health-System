@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { recordRegisterEntry, type ScheduledProduct } from "@/shared/api/pharmacyCounts";
+import { recordRegisterEntry, type ScheduledProduct } from "@/shared/api/pharmacyRegister";
 import { Button } from "@/shared/components/Button";
 import { Input } from "@/shared/components/Input";
 import { Select } from "@/shared/components/Select";
@@ -8,7 +8,8 @@ import { useToast } from "@/shared/components/toast/ToastProvider";
 import { Modal } from "../components/Modal";
 import { QuantityInput } from "../components/QuantityInput";
 import { describeError } from "../lib/problem";
-import { registerKeys } from "./registerKeys";
+import { WitnessFields } from "../components/WitnessFields";
+import { invalidateAfterStockMovement } from "../lib/queryKeys";
 import {
   EMPTY_REMOVAL,
   OTHER_REMOVAL_KINDS,
@@ -18,7 +19,6 @@ import {
   type RemovalDraft,
   type RemovalMode,
 } from "./registerMath";
-import { WitnessFields } from "./WitnessFields";
 
 interface RecordRemovalDialogProps {
   facilityId: string;
@@ -37,19 +37,14 @@ function RemovalForm({ facilityId, product, onClose }: Omit<RecordRemovalDialogP
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<RemovalDraft>(EMPTY_REMOVAL);
   const [lotNumber, setLotNumber] = useState(product.currentLot ?? "");
-  // The form mounts once per opening, so one key covers every retry of this entry.
-  const idempotencyKey = useRef(crypto.randomUUID());
   const set = (change: Partial<RemovalDraft>) => setDraft((current) => ({ ...current, ...change }));
 
   const problem = removalProblem(draft, product.schedule, product.onHand) ?? (lotNumber.trim() ? null : "Enter the lot number.");
   const record = useMutation({
-    mutationFn: () => recordRegisterEntry(toEntryPayload(draft, facilityId, product.productId, lotNumber.trim()), idempotencyKey.current),
+    mutationFn: () => recordRegisterEntry(toEntryPayload(draft, facilityId, product.productId, lotNumber.trim())),
+    // The entry also posts to the stock ledger, so the register, stock and ledger all go stale.
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: registerKeys.book(facilityId, product.productId) }),
-        queryClient.invalidateQueries({ queryKey: registerKeys.products(facilityId) }),
-        queryClient.invalidateQueries({ queryKey: ["pharmacy", "register", "day-close", facilityId, product.productId] }),
-      ]);
+      await invalidateAfterStockMovement(queryClient);
       showToast("Added to the register.", "success");
       onClose();
     },
@@ -61,7 +56,7 @@ function RemovalForm({ facilityId, product, onClose }: Omit<RecordRemovalDialogP
       open
       size="lg"
       title="Record removal"
-      description={`${product.name} ${product.sub ?? ""} · ${product.onHand} on hand`}
+      description={`${product.productName} · ${product.onHand} on hand`}
       onClose={onClose}
       dismissible={!record.isPending}
       footer={

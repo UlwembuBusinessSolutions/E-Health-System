@@ -4,7 +4,7 @@ import { createProduct, getProduct, type PharmacyProduct } from "@/shared/api/ph
 import { Button } from "@/shared/components/Button";
 import { SkeletonRows } from "../components/SkeletonRows";
 import { describeError } from "../lib/problem";
-import { stockKeys } from "../stock/stockQueries";
+import { pharmacyKeys } from "../lib/queryKeys";
 import { MoreDetailsSection } from "./MoreDetailsSection";
 import { ProductDetailsSection } from "./ProductDetailsSection";
 import { ProductPreview } from "./ProductPreview";
@@ -38,7 +38,7 @@ interface ProductFormProps {
 export function ProductForm(props: ProductFormProps) {
   const { copyFromProductId, initialName } = props;
   const source = useQuery({
-    queryKey: ["pharmacy", "products", copyFromProductId],
+    queryKey: pharmacyKeys.products.detail(copyFromProductId ?? ""),
     queryFn: () => getProduct(copyFromProductId ?? ""),
     enabled: !!copyFromProductId,
     staleTime: 30_000,
@@ -110,9 +110,9 @@ function ProductFormBody({
   const mutation = useMutation({
     mutationFn: () => createProduct(toCreatePayload(values, sku, facilityId)),
     onSuccess: (product) => {
-      void queryClient.invalidateQueries({ queryKey: stockKeys.list(facilityId) });
-      void queryClient.invalidateQueries({ queryKey: stockKeys.dashboard(facilityId) });
-      void queryClient.invalidateQueries({ queryKey: ["pharmacy", "products", "catalog-search"] });
+      // A new product joins the facility's stock list, its dashboard counts and every product search.
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.stock.all });
+      void queryClient.invalidateQueries({ queryKey: pharmacyKeys.products.all });
       onCreated(product);
     },
   });
