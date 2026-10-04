@@ -18,12 +18,15 @@ import { VitalsPrintPage } from "@/patient/VitalsPrintPage";
 import { PharmacyQueuePage } from "@/pharmacy/PharmacyQueuePage";
 import { PrescriptionPrintPage } from "@/pharmacy/PrescriptionPrintPage";
 import { PharmacyLayout } from "@/pharmacy/PharmacyLayout";
-import { ProductListPage } from "@/pharmacy/products/ProductListPage";
-import { AddProductScreen } from "@/pharmacy/products/AddProductScreen";
-import { ProductDetailPage } from "@/pharmacy/products/ProductDetailPage";
-import { StockListPage } from "@/pharmacy/stock/StockListPage";
-import { ReceiveStockScreen } from "@/pharmacy/stock/ReceiveStockScreen";
+import { StockPage } from "@/pharmacy/stock/StockPage";
+import { AddProductPage } from "@/pharmacy/products/AddProductPage";
+import { ReceiveStockPage } from "@/pharmacy/receiving/ReceiveStockPage";
+import { SuppliersPage } from "@/pharmacy/suppliers/SuppliersPage";
+import { ReorderPage } from "@/pharmacy/reorder/ReorderPage";
 import { LedgerPage } from "@/pharmacy/ledger/LedgerPage";
+import { StockCountPage } from "@/pharmacy/counts/StockCountPage";
+import { ScheduleRegisterPage } from "@/pharmacy/register/ScheduleRegisterPage";
+import { OpeningStockPage } from "@/pharmacy/opening-stock/OpeningStockPage";
 import { OrganizationSettingsPage } from "@/settings/OrganizationSettingsPage";
 import { AuditTrailPage } from "@/audit/AuditTrailPage";
 import { AppointmentsPage } from "@/appointments/AppointmentsPage";
@@ -172,12 +175,15 @@ export function AppRouter() {
         <Route path="vitals" element={<VitalsIntakePage />} />
         <Route path="pharmacy" element={<PharmacyLayout />}>
           <Route index element={<PharmacyQueuePage />} />
-          <Route path="stock" element={<StockListPage />} />
-          <Route path="stock/receive" element={<ReceiveStockScreen />} />
-          <Route path="products" element={<ProductListPage />} />
-          <Route path="products/new" element={<AddProductScreen />} />
-          <Route path="products/:productId" element={<ProductDetailPage />} />
+          <Route path="stock" element={<StockPage />} />
+          <Route path="products/new" element={<AddProductPage />} />
+          <Route path="receive" element={<ReceiveStockPage />} />
+          <Route path="suppliers" element={<SuppliersPage />} />
+          <Route path="reorder" element={<ReorderPage />} />
           <Route path="ledger" element={<LedgerPage />} />
+          <Route path="counts" element={<StockCountPage />} />
+          <Route path="register" element={<ScheduleRegisterPage />} />
+          <Route path="opening-stock" element={<OpeningStockPage />} />
         </Route>
         <Route
           path="settings"
