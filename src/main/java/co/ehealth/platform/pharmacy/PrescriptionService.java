@@ -3,7 +3,6 @@ package co.ehealth.platform.pharmacy;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.notification.EmailService;
 import co.ehealth.platform.core.tenant.ModuleCode;
-import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
 import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.identity.PermissionLevel;
@@ -11,6 +10,14 @@ import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.identity.StaffService;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
+import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService;
+import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService.DispenseOutcome;
+import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService.DispenseRequest;
+import co.ehealth.platform.pharmacy.dispensing.DispensingActor;
+import co.ehealth.platform.pharmacy.dispensing.DispensingGuard;
+import co.ehealth.platform.pharmacy.dispensing.DrugMappingService;
+import co.ehealth.platform.pharmacy.dispensing.ItemLock;
+import co.ehealth.platform.pharmacy.dispensing.PrescriptionRollup;
 import co.ehealth.platform.visit.Visit;
 import co.ehealth.platform.visit.VisitService;
 import org.springframework.stereotype.Service;
@@ -18,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,7 +34,6 @@ public class PrescriptionService {
 
     private final PrescriptionRepository prescriptionRepository;
     private final PrescriptionItemRepository prescriptionItemRepository;
-    private final DispensingRecordRepository dispensingRecordRepository;
     private final PrescriptionOutOfStockRecordRepository outOfStockRecordRepository;
     private final PrescriberMessageRepository prescriberMessageRepository;
     private final VisitService visitService;
@@ -39,18 +44,24 @@ public class PrescriptionService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
+    private final DispensingGuard dispensingGuard;
+    private final DispenseAllocationService dispenseAllocationService;
+    private final DrugMappingService drugMappingService;
+    private final PrescriptionRollup prescriptionRollup;
+    private final ItemLock itemLock;
 
     public PrescriptionService(PrescriptionRepository prescriptionRepository,
                                 PrescriptionItemRepository prescriptionItemRepository,
-                                DispensingRecordRepository dispensingRecordRepository,
                                 PrescriptionOutOfStockRecordRepository outOfStockRecordRepository,
                                 PrescriberMessageRepository prescriberMessageRepository, VisitService visitService,
                                 StaffService staffService, UserRepository userRepository,
                                 OrganizationRepository organizationRepository, EmailService emailService,
-                                AuditLogService auditLogService, Clock clock, PermissionService permissionService) {
+                                AuditLogService auditLogService, Clock clock, PermissionService permissionService,
+                                DispensingGuard dispensingGuard, DispenseAllocationService dispenseAllocationService,
+                                DrugMappingService drugMappingService, PrescriptionRollup prescriptionRollup,
+                                ItemLock itemLock) {
         this.prescriptionRepository = prescriptionRepository;
         this.prescriptionItemRepository = prescriptionItemRepository;
-        this.dispensingRecordRepository = dispensingRecordRepository;
         this.outOfStockRecordRepository = outOfStockRecordRepository;
         this.prescriberMessageRepository = prescriberMessageRepository;
         this.visitService = visitService;
@@ -61,6 +72,11 @@ public class PrescriptionService {
         this.auditLogService = auditLogService;
         this.clock = clock;
         this.permissionService = permissionService;
+        this.dispensingGuard = dispensingGuard;
+        this.dispenseAllocationService = dispenseAllocationService;
+        this.drugMappingService = drugMappingService;
+        this.prescriptionRollup = prescriptionRollup;
+        this.itemLock = itemLock;
     }
 
     // PHRM-US-018 + PHRM-US-009 — patientId/facilityId come from the visit,
@@ -135,61 +151,35 @@ public class PrescriptionService {
         return prescriptionRepository.findByPatientIdOrderByCreatedAtDesc(patientId);
     }
 
-    public Optional<DispensingRecord> getDispensingRecord(UUID prescriptionItemId) {
-        return dispensingRecordRepository.findByPrescriptionItemId(prescriptionItemId);
-    }
-
-    public Optional<PrescriptionOutOfStockRecord> getOutOfStockRecord(UUID prescriptionItemId) {
-        return outOfStockRecordRepository.findByPrescriptionItemId(prescriptionItemId);
-    }
-
     // PHRM-US-009's other half — dispensing requires a current SAPC
-    // registration. Reversible the other way: an item already OUT_OF_STOCK
-    // can still be dispensed here once stock is back (that's the whole
-    // point of getBySerialNumber() above) — only an already-DISPENSED item
-    // is refused.
+    // registration (DispensingGuard). Reversible the other way: an item
+    // already OUT_OF_STOCK can still be dispensed here once stock is back
+    // (that's the whole point of getBySerialNumber() above) — only an
+    // already-DISPENSED item is refused. The stock deduction, lot
+    // allocation and dispensing record are DispenseAllocationService's job;
+    // this only adds the prescription-level status rollup.
     @Transactional
-    public void dispenseItem(UUID prescriptionId, UUID itemId, UUID dispenserId) {
-        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.MANAGE);
-        if (!staffService.getLicenseStatus(dispenserId).canDispense()) {
-            throw new NotLicensedException("You need a current SAPC registration to dispense.");
-        }
-        Prescription prescription = get(prescriptionId);
-        PrescriptionItem item = requireOwnedItem(prescription, itemId);
-        dispenseItemInternal(prescription, item, dispenserId);
-        recomputeAndSave(prescription);
+    public DispenseOutcome dispenseItem(UUID prescriptionId, UUID itemId, DispenseRequest request,
+                                         UUID dispenserId) {
+        DispensingActor actor = dispensingGuard.requireDispenser(dispenserId);
+        Prescription prescription = dispensingGuard.loadPrescription(prescriptionId);
+        DispenseOutcome outcome = dispenseAllocationService.dispense(prescription, itemId, request, actor);
+        prescriptionRollup.refresh(prescription);
+        return outcome;
     }
 
-    // "Mark all as collected" — dispenses every item still PENDING on this
-    // prescription in one action; an item already OUT_OF_STOCK is left
-    // alone (there's nothing to hand over until stock is actually back —
-    // this must never silently fabricate a dispense for something the
-    // pharmacy doesn't have).
+    // A pharmacist confirms (or overrides) which stock product backs this
+    // line; the choice is remembered for the same drug name next time.
     @Transactional
-    public void dispenseAllPending(UUID prescriptionId, UUID dispenserId) {
-        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.MANAGE);
-        if (!staffService.getLicenseStatus(dispenserId).canDispense()) {
-            throw new NotLicensedException("You need a current SAPC registration to dispense.");
-        }
-        Prescription prescription = get(prescriptionId);
-        List<PrescriptionItem> items = getItems(prescriptionId);
-        for (PrescriptionItem item : items) {
-            if (item.getStatus() == PrescriptionStatus.PENDING) {
-                dispenseItemInternal(prescription, item, dispenserId);
-            }
-        }
-        recomputeAndSave(prescription);
-    }
-
-    private void dispenseItemInternal(Prescription prescription, PrescriptionItem item, UUID dispenserId) {
+    public Prescription confirmProduct(UUID prescriptionId, UUID itemId, UUID productId, UUID staffId) {
+        DispensingActor actor = dispensingGuard.requireManager(staffId);
+        Prescription prescription = dispensingGuard.loadPrescription(prescriptionId);
+        PrescriptionItem item = itemLock.lockOwnedItem(prescription, itemId);
         if (item.getStatus() == PrescriptionStatus.DISPENSED) {
             throw new PrescriptionAlreadyDispensedException();
         }
-        item.markDispensed();
-        prescriptionItemRepository.save(item);
-        dispensingRecordRepository.save(new DispensingRecord(item.getId(), dispenserId, clock.instant()));
-        auditLogService.append(dispenserId, prescription.getFacilityId(), "PRESCRIPTION_ITEM_DISPENSED",
-                "PrescriptionItem", item.getId().toString(), null, null);
+        drugMappingService.confirmProduct(prescription, item, productId, actor.userId());
+        return prescription;
     }
 
     // The other outcome for a PENDING item — the pharmacy doesn't have the
@@ -220,7 +210,7 @@ public class PrescriptionService {
         } else {
             outOfStockRecordRepository.save(new PrescriptionOutOfStockRecord(itemId, staffId, clock.instant(), note));
         }
-        recomputeAndSave(prescription);
+        prescriptionRollup.refresh(prescription);
 
         auditLogService.append(staffId, prescription.getFacilityId(), "PRESCRIPTION_ITEM_MARKED_OUT_OF_STOCK",
                 "PrescriptionItem", itemId.toString(), null, null);
@@ -232,11 +222,6 @@ public class PrescriptionService {
             throw new PrescriptionItemNotFoundException();
         }
         return item;
-    }
-
-    private void recomputeAndSave(Prescription prescription) {
-        prescription.recomputeStatus(getItems(prescription.getId()));
-        prescriptionRepository.save(prescription);
     }
 
     // "Something else" — a pharmacy query about this prescription that

@@ -3,8 +3,13 @@ package co.ehealth.platform.pharmacy;
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
-import co.ehealth.platform.patient.Patient;
-import co.ehealth.platform.patient.PatientService;
+import co.ehealth.platform.pharmacy.dispensing.CollectCommand;
+import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService.DispenseRequest;
+import co.ehealth.platform.pharmacy.dispensing.DispensingResponses.CollectResponse;
+import co.ehealth.platform.pharmacy.dispensing.DispensingResponses.DispenseItemResponse;
+import co.ehealth.platform.pharmacy.dispensing.PrescriptionCollectionService;
+import co.ehealth.platform.pharmacy.dispensing.PrescriptionResponse;
+import co.ehealth.platform.pharmacy.dispensing.PrescriptionViewAssembler;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -26,19 +31,24 @@ import java.util.Map;
 import java.util.UUID;
 
 // No @RequestMapping("/api/v1/admin/...") — the real gate here is
-// StaffService.getLicenseStatus() inside PrescriptionService, not a role
-// check. Same .anyRequest().authenticated() fallthrough as Patient/Visit/Queue.
+// DispensingGuard (PHRM permission plus StaffService.getLicenseStatus()),
+// not a role check. Same .anyRequest().authenticated() fallthrough as
+// Patient/Visit/Queue. Collection, returns, substitution, search and the
+// other stock-backed endpoints live in DispensingController.
 @RestController
 public class PrescriptionController {
 
     private final PrescriptionService prescriptionService;
-    private final PatientService patientService;
+    private final PrescriptionCollectionService collectionService;
+    private final PrescriptionViewAssembler viewAssembler;
     private final UserRepository userRepository;
 
-    public PrescriptionController(PrescriptionService prescriptionService, PatientService patientService,
-                                   UserRepository userRepository) {
+    public PrescriptionController(PrescriptionService prescriptionService,
+                                   PrescriptionCollectionService collectionService,
+                                   PrescriptionViewAssembler viewAssembler, UserRepository userRepository) {
         this.prescriptionService = prescriptionService;
-        this.patientService = patientService;
+        this.collectionService = collectionService;
+        this.viewAssembler = viewAssembler;
         this.userRepository = userRepository;
     }
 
@@ -51,19 +61,21 @@ public class PrescriptionController {
         var command =
                 new PrescriptionService.CreatePrescriptionCommand(request.visitId(), items, request.consultationId());
         Prescription prescription = prescriptionService.create(command, staff.userId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(prescription));
+        return ResponseEntity.status(HttpStatus.CREATED).body(viewAssembler.assemble(prescription));
     }
 
+    // Each item carries its mapped product, remaining quantity, suggested
+    // lot and stock status (PrescriptionViewAssembler), built for the whole
+    // queue in a handful of queries.
     @GetMapping("/api/v1/prescriptions/queue")
     public ResponseEntity<Map<String, Object>> queue(@RequestParam UUID facilityId) {
-        List<PrescriptionResponse> items = prescriptionService.listQueue(facilityId).stream()
-                .map(this::toResponse).toList();
+        List<PrescriptionResponse> items = viewAssembler.assemble(prescriptionService.listQueue(facilityId));
         return ResponseEntity.ok(Map.of("items", items));
     }
 
     @GetMapping("/api/v1/prescriptions/{id}")
     public ResponseEntity<PrescriptionResponse> get(@PathVariable UUID id) {
-        return ResponseEntity.ok(toResponse(prescriptionService.get(id)));
+        return ResponseEntity.ok(viewAssembler.assemble(prescriptionService.get(id)));
     }
 
     // The pharmacy "look up a prescription" utility — by the human-facing
@@ -72,7 +84,7 @@ public class PrescriptionController {
     // pending) can still be found and finished once stock is back.
     @GetMapping("/api/v1/prescriptions/by-serial/{serialNumber}")
     public ResponseEntity<PrescriptionResponse> getBySerial(@PathVariable String serialNumber) {
-        return ResponseEntity.ok(toResponse(prescriptionService.getBySerialNumber(serialNumber)));
+        return ResponseEntity.ok(viewAssembler.assemble(prescriptionService.getBySerialNumber(serialNumber)));
     }
 
     // The patient-level Medication tab (PatientDetailPage) — every
@@ -83,25 +95,32 @@ public class PrescriptionController {
     // (listQueue() only ever returns PENDING/PARTIALLY_DISPENSED).
     @GetMapping("/api/v1/patients/{patientId}/prescriptions")
     public ResponseEntity<Map<String, Object>> patientPrescriptions(@PathVariable UUID patientId) {
-        List<PrescriptionResponse> items = prescriptionService.getPatientPrescriptions(patientId).stream()
-                .map(this::toResponse).toList();
+        List<PrescriptionResponse> items = viewAssembler.assemble(prescriptionService.getPatientPrescriptions(patientId));
         return ResponseEntity.ok(Map.of("items", items));
     }
 
-    // "Mark all as collected" — dispenses every item still PENDING on this
-    // prescription; an item already OUT_OF_STOCK is left untouched.
+    // The original "Mark all as collected" button — kept working by handing
+    // over every in-stock pending item to the patient themselves, exactly as
+    // POST .../collect would. Items without stock come back as skipped
+    // instead of being faked as dispensed.
     @PostMapping("/api/v1/prescriptions/{id}/dispense")
-    public ResponseEntity<Void> dispenseAllPending(@PathVariable UUID id,
-                                                    @AuthenticationPrincipal AuthenticatedPrincipal staff) {
-        prescriptionService.dispenseAllPending(id, staff.userId());
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<CollectResponse> dispenseAllPending(@PathVariable UUID id,
+                                                               @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        var outcome = collectionService.collect(id, CollectCommand.patientTakesAllPending(), staff.userId());
+        return ResponseEntity.ok(CollectResponse.of(outcome));
     }
 
+    // The body is optional: no body (or {}) dispenses everything remaining,
+    // first-expiring lot first, as the original button did.
     @PostMapping("/api/v1/prescriptions/{id}/items/{itemId}/dispense")
-    public ResponseEntity<Void> dispenseItem(@PathVariable UUID id, @PathVariable UUID itemId,
-                                              @AuthenticationPrincipal AuthenticatedPrincipal staff) {
-        prescriptionService.dispenseItem(id, itemId, staff.userId());
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<DispenseItemResponse> dispenseItem(@PathVariable UUID id, @PathVariable UUID itemId,
+                                                              @Valid @RequestBody(required = false)
+                                                              DispenseItemRequest request,
+                                                              @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        DispenseRequest dispenseRequest = request == null ? DispenseRequest.remaining()
+                : new DispenseRequest(request.quantity(), request.batchId());
+        var outcome = prescriptionService.dispenseItem(id, itemId, dispenseRequest, staff.userId());
+        return ResponseEntity.ok(DispenseItemResponse.of(outcome));
     }
 
     // Never removes the item — just records that it went unfilled and why
@@ -141,54 +160,6 @@ public class PrescriptionController {
         return new PrescriberMessageResponse(m.getId(), senderName, m.getMessage(), m.getSentAt());
     }
 
-    // Enriched with the patient's name/MPI, the prescriber's name/
-    // registration number/phone/email (the queue's own Call/Message
-    // affordances), and each item's own dispensed/out-of-stock detail —
-    // same reasoning as QueueService.QueueEntryView: this is a
-    // staff-facing (and, via the print page, patient-facing) view where
-    // knowing WHO did what at a glance matters, not just raw ids.
-    // Registration number prefers HPCSA, falling back to SANC —
-    // PrescriptionService.create()'s own canPrescribe() gate already
-    // accepts either, so a prescriber may hold only one.
-    private PrescriptionResponse toResponse(Prescription p) {
-        List<PrescriptionItemResponse> items =
-                prescriptionService.getItems(p.getId()).stream().map(this::toItemResponse).toList();
-        Patient patient = patientService.get(p.getPatientId());
-        User prescriber = userRepository.findById(p.getPrescriberId()).orElse(null);
-        String prescriberName = prescriber == null ? null
-                : prescriber.getFirstName() + " " + prescriber.getLastName();
-        String prescriberRegistrationNumber = prescriber == null ? null
-                : prescriber.getHpcsaNumber() != null ? prescriber.getHpcsaNumber() : prescriber.getSancNumber();
-        String prescriberPhone = prescriber == null ? null : prescriber.getContactNumber();
-        String prescriberEmail = prescriber == null ? null : prescriber.getEmail();
-
-        return new PrescriptionResponse(p.getId(), p.getSerialNumber(), p.getVisitId(), p.getPatientId(),
-                patient.getFirstName() + " " + patient.getLastName(), patient.getMpiNumber(), p.getFacilityId(),
-                p.getPrescriberId(), prescriberName, prescriberRegistrationNumber, prescriberPhone, prescriberEmail,
-                p.getConsultationId(), p.getStatus(), items, p.getCreatedAt());
-    }
-
-    private PrescriptionItemResponse toItemResponse(PrescriptionItem i) {
-        var dispensingRecord = prescriptionService.getDispensingRecord(i.getId());
-        String dispensedByName = dispensingRecord
-                .flatMap(d -> userRepository.findById(d.getDispensedByUserId()))
-                .map(u -> u.getFirstName() + " " + u.getLastName())
-                .orElse(null);
-        Instant dispensedAt = dispensingRecord.map(DispensingRecord::getDispensedAt).orElse(null);
-
-        var outOfStockRecord = prescriptionService.getOutOfStockRecord(i.getId());
-        String markedOutOfStockByName = outOfStockRecord
-                .flatMap(r -> userRepository.findById(r.getMarkedByUserId()))
-                .map(u -> u.getFirstName() + " " + u.getLastName())
-                .orElse(null);
-        Instant markedOutOfStockAt = outOfStockRecord.map(PrescriptionOutOfStockRecord::getMarkedAt).orElse(null);
-        String outOfStockNote = outOfStockRecord.map(PrescriptionOutOfStockRecord::getNote).orElse(null);
-
-        return new PrescriptionItemResponse(i.getId(), i.getDrugName(), i.getDosage(), i.getQuantity(),
-                i.getStatus(), dispensedByName, dispensedAt, markedOutOfStockByName, markedOutOfStockAt,
-                outOfStockNote);
-    }
-
     // consultationId is optional — omitted (or null) keeps this request
     // behaving exactly as it did before that field existed.
     public record CreatePrescriptionRequest(@NotNull UUID visitId, @NotEmpty List<@Valid ItemRequest> items,
@@ -196,6 +167,12 @@ public class PrescriptionController {
     }
 
     public record ItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity) {
+    }
+
+    // Both fields optional: quantity defaults to everything remaining
+    // (partial dispensing means a smaller number), batchId to
+    // first-expiring-first.
+    public record DispenseItemRequest(@Positive Integer quantity, UUID batchId) {
     }
 
     // note is deliberately not @NotBlank — an empty body ({}) is a valid
@@ -207,19 +184,5 @@ public class PrescriptionController {
     }
 
     public record PrescriberMessageResponse(UUID id, String senderName, String message, Instant sentAt) {
-    }
-
-    public record PrescriptionItemResponse(UUID id, String drugName, String dosage, int quantity,
-                                            PrescriptionStatus status, String dispensedByName, Instant dispensedAt,
-                                            String markedOutOfStockByName, Instant markedOutOfStockAt,
-                                            String outOfStockNote) {
-    }
-
-    public record PrescriptionResponse(UUID id, String serialNumber, UUID visitId, UUID patientId,
-                                        String patientName, String patientMpi, UUID facilityId, UUID prescriberId,
-                                        String prescriberName, String prescriberRegistrationNumber,
-                                        String prescriberPhone, String prescriberEmail, UUID consultationId,
-                                        PrescriptionStatus status, List<PrescriptionItemResponse> items,
-                                        Instant createdAt) {
     }
 }
