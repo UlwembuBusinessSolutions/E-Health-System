@@ -94,12 +94,8 @@ CREATE TABLE prescription_substitutions (
 );
 CREATE INDEX idx_prescription_substitutions_item ON prescription_substitutions(prescription_item_id);
 
--- Patient-linked ledger history: the dispense transaction itself carries
--- who it was for and which prescription (the human-facing serial lives in
--- the existing source_reference column). Nullable — every non-dispensing
--- movement leaves both empty.
+-- Patient-linked ledger history: V41 already added patient_id and the
+-- prescription serial to the ledger transaction; dispensing only adds the
+-- prescription id so a dispense can be traced back to the exact prescription.
 ALTER TABLE pharmacy_stock_transactions
-    ADD COLUMN patient_id UUID,
     ADD COLUMN prescription_id UUID;
-CREATE INDEX idx_pharmacy_stock_transactions_patient ON pharmacy_stock_transactions(patient_id)
-    WHERE patient_id IS NOT NULL;
