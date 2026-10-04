@@ -49,6 +49,7 @@ public interface PharmacyStockWorklistRepository extends Repository<PharmacyStoc
             + "p.base_unit AS \"baseUnit\", CAST(COALESCE(bal.available, 0) AS BIGINT) AS \"available\", "
             + "fp.reorder_threshold AS \"reorderThreshold\", CAST(bal.next_expiry AS VARCHAR) AS \"nextExpiry\", "
             + "COALESCE(bal.lot_count, 0) AS \"lotCount\", NOT p.active AS \"archived\", "
+            + "p.serial_tracked AS \"serialTracked\", p.schedule AS \"schedule\", "
             + "COUNT(*) OVER () AS \"totalItems\" "
             + "FROM pharmacy_products p "
             + "LEFT JOIN pharmacy_facility_products fp ON fp.product_id = p.id AND fp.facility_id = :facilityId "
@@ -88,6 +89,10 @@ public interface PharmacyStockWorklistRepository extends Repository<PharmacyStoc
         long getLotCount();
 
         boolean getArchived();
+
+        boolean getSerialTracked();
+
+        String getSchedule();
 
         long getTotalItems();
     }

@@ -71,6 +71,16 @@ public class SerialUnitService {
         serialUnitRepository.saveAll(unitsStillInStock);
     }
 
+    // Used when a removal is reversed: every unit that left stock through one
+    // of the given ledger entries is back on the shelf.
+    @Transactional
+    public void restoreSerialsRemovedWith(Collection<UUID> removedEntryIds) {
+        List<PharmacySerialUnit> removedUnits = serialUnitRepository.findByRemovedEntryIdInAndStatus(
+                removedEntryIds, SerialUnitStatus.REMOVED);
+        removedUnits.forEach(PharmacySerialUnit::restoreToStock);
+        serialUnitRepository.saveAll(removedUnits);
+    }
+
     private static List<String> cleanAndRejectRepeats(Collection<String> serialNumbers) {
         Set<String> seen = new HashSet<>();
         return serialNumbers.stream().map(serial -> {

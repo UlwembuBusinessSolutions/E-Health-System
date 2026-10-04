@@ -57,6 +57,11 @@ public class PharmacySerialUnit {
         this.removedEntryId = removedEntryId;
     }
 
+    public void restoreToStock() {
+        this.status = SerialUnitStatus.IN_STOCK;
+        this.removedEntryId = null;
+    }
+
     public UUID getId() {
         return id;
     }

@@ -31,7 +31,7 @@ public class PharmacyStockWorklistService {
 
     public record StockListRow(UUID productId, String code, String displayName, StockBaseUnit baseUnit,
                                long available, Integer reorderThreshold, StockStatus status, LocalDate nextExpiry,
-                               long lotCount, boolean archived) {
+                               long lotCount, boolean archived, boolean serialTracked, String schedule) {
     }
 
     public record ExpiryLotRow(UUID productId, String productName, String productCode, UUID batchId,
@@ -80,7 +80,7 @@ public class PharmacyStockWorklistService {
                 StockBaseUnit.valueOf(row.getBaseUnit()), row.getAvailable(), row.getReorderThreshold(),
                 StockStatus.classify(row.getAvailable(), row.getReorderThreshold()),
                 row.getNextExpiry() == null ? null : LocalDate.parse(row.getNextExpiry()), row.getLotCount(),
-                row.getArchived());
+                row.getArchived(), row.getSerialTracked(), row.getSchedule());
     }
 
     private static ExpiryLotRow toExpiryLotRow(PharmacyStockWorklistRepository.ExpiryLotView row, LocalDate today) {

@@ -52,18 +52,14 @@ public class PharmacyStockWorklistController {
     }
 
     // status keeps the display label the Stock page already shows.
-    // serialTracked and schedule are fixed placeholders until the product
-    // columns arrive with the suppliers/tracking migration (V42): the
-    // integrator replaces them with the product's real values in the stock
-    // list query.
     public record StockRow(UUID productId, String code, String displayName, StockBaseUnit baseUnit, long available,
                            Integer reorderThreshold, String status, String nextExpiry, boolean serialTracked,
                            String schedule, long lotCount, boolean archived) {
         static StockRow from(PharmacyStockWorklistService.StockListRow row) {
             return new StockRow(row.productId(), row.code(), row.displayName(), row.baseUnit(), row.available(),
                     row.reorderThreshold(), row.status().label(),
-                    row.nextExpiry() == null ? null : row.nextExpiry().toString(), false, null, row.lotCount(),
-                    row.archived());
+                    row.nextExpiry() == null ? null : row.nextExpiry().toString(), row.serialTracked(),
+                    row.schedule(), row.lotCount(), row.archived());
         }
     }
 }
