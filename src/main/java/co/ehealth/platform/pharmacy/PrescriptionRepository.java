@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -35,4 +36,24 @@ public interface PrescriptionRepository extends JpaRepository<Prescription, UUID
     // (fully out of stock, nothing pending) can still be located once
     // stock is back. Serial numbers are unique (V10__pharmacy.sql).
     Optional<Prescription> findBySerialNumber(String serialNumber);
+
+    // The pharmacy search box — matches an RX serial, the patient's name or
+    // their MPI number. pattern is already lower-cased and wrapped in %...%
+    // by PrescriptionSearchService (which also escapes LIKE wildcards).
+    // Two variants rather than an "optional facility" predicate: a null
+    // UUID bind parameter has no portable type in Postgres.
+    @Query("SELECT p FROM Prescription p, co.ehealth.platform.patient.Patient pt WHERE pt.id = p.patientId "
+            + "AND p.status IN :statuses AND (LOWER(p.serialNumber) LIKE :pattern ESCAPE '\\' "
+            + "OR LOWER(CONCAT(pt.firstName, ' ', pt.lastName)) LIKE :pattern ESCAPE '\\' "
+            + "OR LOWER(pt.mpiNumber) LIKE :pattern ESCAPE '\\') ORDER BY p.createdAt DESC")
+    List<Prescription> search(@Param("pattern") String pattern, @Param("statuses") List<PrescriptionStatus> statuses,
+                              Pageable pageable);
+
+    @Query("SELECT p FROM Prescription p, co.ehealth.platform.patient.Patient pt WHERE pt.id = p.patientId "
+            + "AND p.facilityId = :facilityId AND p.status IN :statuses "
+            + "AND (LOWER(p.serialNumber) LIKE :pattern ESCAPE '\\' "
+            + "OR LOWER(CONCAT(pt.firstName, ' ', pt.lastName)) LIKE :pattern ESCAPE '\\' "
+            + "OR LOWER(pt.mpiNumber) LIKE :pattern ESCAPE '\\') ORDER BY p.createdAt DESC")
+    List<Prescription> searchAtFacility(@Param("pattern") String pattern, @Param("facilityId") UUID facilityId,
+                                        @Param("statuses") List<PrescriptionStatus> statuses, Pageable pageable);
 }

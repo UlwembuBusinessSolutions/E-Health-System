@@ -43,6 +43,8 @@ import co.ehealth.platform.visit.QueueTokenNotFoundException;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import co.ehealth.platform.triage.InvalidTriageCaptureException;
 import co.ehealth.platform.triage.TriageAssessmentNotFoundException;
+import co.ehealth.platform.pharmacy.dispensing.DispensingConflictException;
+import co.ehealth.platform.pharmacy.dispensing.DispensingValidationException;
 import co.ehealth.platform.pharmacy.stock.BatchExpiryConflictException;
 import co.ehealth.platform.pharmacy.stock.DuplicateProductCodeException;
 import co.ehealth.platform.pharmacy.stock.IdempotencyConflictException;
@@ -492,6 +494,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(InsufficientStockException.class)
     public ResponseEntity<ApiErrorResponse> handleInsufficientStock(InsufficientStockException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // Stock-backed dispensing (co.ehealth.platform.pharmacy.dispensing): an
+    // expired lot / not enough usable stock clashes with the shelf (409); a
+    // missing product mapping or an unacceptable collector is a request the
+    // pharmacist must correct (422).
+    @ExceptionHandler(DispensingConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleDispensingConflict(DispensingConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(DispensingValidationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDispensingValidation(DispensingValidationException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(IdempotencyConflictException.class)

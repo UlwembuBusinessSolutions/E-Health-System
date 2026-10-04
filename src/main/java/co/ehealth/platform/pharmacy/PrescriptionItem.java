@@ -10,12 +10,14 @@ import jakarta.persistence.Table;
 
 import java.util.UUID;
 
-// A plain drugName/dosage/quantity line, not a StockItem/formulary_code
-// reference — "Restrict to approved formulary" is PHRM-US-010, explicitly
-// Blocked/Not Ready in the backlog (BRD Open Item OI-012, no formulary
-// source of truth exists yet), so an item here is free text a prescriber
-// writes, same as a paper script would carry, not a lookup against
-// inventory this codebase doesn't have.
+// A plain drugName/dosage/quantity line a prescriber writes, same as a
+// paper script would carry — "Restrict to approved formulary" is
+// PHRM-US-010, still Blocked in the backlog (BRD Open Item OI-012).
+//
+// productId links the line to the stock product it is dispensed from. It
+// stays null until a pharmacist confirms the mapping; a null productId is
+// the explicit "not inventory-backed" state (legacy rows included), and
+// nothing ever guesses a product from the free-text name.
 @Entity
 @Table(name = "prescription_items")
 public class PrescriptionItem {
@@ -42,6 +44,14 @@ public class PrescriptionItem {
     @Column(nullable = false, length = 20)
     private PrescriptionStatus status;
 
+    @Column(name = "product_id")
+    private UUID productId;
+
+    // Supports partial dispensing: remaining = quantity - dispensedQuantity.
+    // The item stays PENDING until this reaches quantity.
+    @Column(name = "dispensed_quantity", nullable = false)
+    private int dispensedQuantity;
+
     protected PrescriptionItem() {
     }
 
@@ -58,6 +68,19 @@ public class PrescriptionItem {
     // is physically with the patient and stays terminal.
     public void markDispensed() {
         this.status = PrescriptionStatus.DISPENSED;
+    }
+
+    // Records one dispense event; the item only becomes DISPENSED once the
+    // whole prescribed quantity has been handed over.
+    public void recordDispensed(int dispensedNow) {
+        this.dispensedQuantity += dispensedNow;
+        if (dispensedQuantity == quantity) {
+            markDispensed();
+        }
+    }
+
+    public void mapToProduct(UUID productId) {
+        this.productId = productId;
     }
 
     // PrescriptionService.markItemOutOfStock() — deliberately not terminal:
@@ -91,5 +114,17 @@ public class PrescriptionItem {
 
     public PrescriptionStatus getStatus() {
         return status;
+    }
+
+    public UUID getProductId() {
+        return productId;
+    }
+
+    public int getDispensedQuantity() {
+        return dispensedQuantity;
+    }
+
+    public int getRemainingQuantity() {
+        return quantity - dispensedQuantity;
     }
 }
