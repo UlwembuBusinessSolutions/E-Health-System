@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.purchasing;
 
+import co.ehealth.platform.core.audit.AuditDetails;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.facility.FacilityNotFoundException;
 import co.ehealth.platform.facility.FacilityRepository;
@@ -100,7 +101,7 @@ public class PurchaseOrderService {
         long totalUnits = lines.stream().mapToLong(LineCommand::quantity).sum();
         auditLogService.append(order.getCreatedBy(), order.getFacilityId(), "PURCHASE_ORDER_CREATED",
                 "PurchaseOrder", order.getId().toString(), null,
-                "poNumber=" + order.getPoNumber() + ";supplierId=" + order.getSupplierId()
-                        + ";lines=" + lines.size() + ";units=" + totalUnits);
+                AuditDetails.of("poNumber", order.getPoNumber(), "supplierId", order.getSupplierId(),
+                        "lines", lines.size(), "units", totalUnits));
     }
 }

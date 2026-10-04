@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.count;
 
+import co.ehealth.platform.core.audit.AuditDetails;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.pharmacy.stock.PharmacyProduct;
 import co.ehealth.platform.pharmacy.stock.PharmacyProductRepository;
@@ -75,7 +76,8 @@ public class StockCountPostingService {
         postAdjustments(count, varianceLines, reference, actorUserId, actorName);
         count.markPosted(reference, actorUserId, actorName, clock.instant());
         auditLogService.append(actorUserId, count.getFacilityId(), "STOCK_COUNT_POSTED", "PharmacyStockCount",
-                count.getId().toString(), null, reference + ": " + varianceLines.size() + " adjustments");
+                count.getId().toString(), null,
+                AuditDetails.of("reference", reference, "adjustments", varianceLines.size()));
         return count;
     }
 

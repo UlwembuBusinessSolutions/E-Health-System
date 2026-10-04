@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.stock;
 
+import co.ehealth.platform.core.audit.AuditDetails;
 import co.ehealth.platform.core.audit.AuditLogService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,7 +74,8 @@ public class StockReversalService {
 
         serialUnitGateway.reverseUnits(transactionId, reversal.getId());
         auditLogService.append(actor.userId(), original.getFacilityId(), "STOCK_REVERSED",
-                "PharmacyStockTransaction", reversal.getId().toString(), transactionId.toString(),
+                "PharmacyStockTransaction", reversal.getId().toString(),
+                AuditDetails.of("reversedTransactionId", transactionId),
                 stockJson.toJson(new ReversalBody(reason, note)));
         return reversal;
     }

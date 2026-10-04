@@ -47,14 +47,14 @@ class FefoLotSelectorTest {
     }
 
     @Test
-    void prefersOneLotThatCoversTheWholeQuantityOverSpreadingAcrossLots() {
+    void drawsFromTheSoonestExpiringLotFirstEvenWhenALaterLotCouldCoverEverything() {
         LotAvailability smallEarly = lot("SMALL", "2026-11-30", 4);
         LotAvailability bigLater = lot("BIG", "2027-03-31", 30);
 
         List<LotDraw> draws = selector.allocate(shelf(smallEarly, bigLater), 10, null);
 
-        assertEquals(1, draws.size());
-        assertEquals("BIG", draws.get(0).lot().lotNumber());
+        assertEquals(List.of("SMALL", "BIG"), draws.stream().map(draw -> draw.lot().lotNumber()).toList());
+        assertEquals(List.of(4, 6), draws.stream().map(LotDraw::quantity).toList());
     }
 
     @Test

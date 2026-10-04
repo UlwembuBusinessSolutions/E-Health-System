@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.core.audit.AuditDetails;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.pharmacy.Prescription;
 import co.ehealth.platform.pharmacy.PrescriptionItem;
@@ -74,7 +75,8 @@ public class DrugMappingService {
         itemRepository.save(item);
         rememberMapping(item.getDrugName(), productId, staffId);
         auditLogService.append(staffId, prescription.getFacilityId(), "PRESCRIPTION_ITEM_PRODUCT_MAPPED",
-                "PrescriptionItem", item.getId().toString(), null, product.getCode());
+                "PrescriptionItem", item.getId().toString(), null,
+                AuditDetails.of("productCode", product.getCode()));
         return item;
     }
 

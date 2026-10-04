@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.core.audit.AuditDetails;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.pharmacy.DispensingRecord;
@@ -136,7 +137,7 @@ public class DispenseAllocationService {
         }
         auditLogService.append(actor.userId(), prescription.getFacilityId(), "PRESCRIPTION_ITEM_DISPENSED",
                 "PrescriptionItem", item.getId().toString(), null,
-                "quantity=" + quantity + ";remaining=" + item.getRemainingQuantity());
+                AuditDetails.of("quantity", quantity, "remaining", item.getRemainingQuantity()));
         return new DispenseOutcome(item, draws);
     }
 

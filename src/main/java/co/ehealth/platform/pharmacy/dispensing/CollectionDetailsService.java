@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.core.audit.AuditDetails;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.pharmacy.Prescription;
@@ -42,7 +43,7 @@ public class CollectionDetailsService {
                 .orElseThrow(CollectionNotFoundException::new);
         auditLogService.append(viewerUserId, prescription.getFacilityId(), "COLLECTION_DETAILS_VIEWED",
                 "PrescriptionCollection", collection.getId().toString(), null,
-                "prescriptionId=" + prescriptionId);
+                AuditDetails.of("prescriptionId", prescriptionId));
         return responseFor(collection);
     }
 

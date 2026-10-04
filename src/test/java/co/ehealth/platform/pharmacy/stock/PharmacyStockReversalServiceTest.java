@@ -128,7 +128,7 @@ class PharmacyStockReversalServiceTest {
         assertEquals("DUPLICATE_ENTRY", context.getValue().reasonCode());
         verify(serialGateway).reverseUnits(originalId, reversalId);
         verify(auditLogService).append(eq(actor.userId()), eq(facilityId), eq("STOCK_REVERSED"), anyString(),
-                eq(reversalId.toString()), eq(originalId.toString()), anyString());
+                eq(reversalId.toString()), eq("{\"reversedTransactionId\":\"" + originalId + "\"}"), anyString());
     }
 
     @Test

@@ -94,8 +94,3 @@ CREATE TABLE prescription_substitutions (
 );
 CREATE INDEX idx_prescription_substitutions_item ON prescription_substitutions(prescription_item_id);
 
--- Patient-linked ledger history: V41 already added patient_id and the
--- prescription serial to the ledger transaction; dispensing only adds the
--- prescription id so a dispense can be traced back to the exact prescription.
-ALTER TABLE pharmacy_stock_transactions
-    ADD COLUMN prescription_id UUID;

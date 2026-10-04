@@ -32,12 +32,10 @@ public record StockPicture(List<LotAvailability> usableLots, List<LotAvailabilit
         return usableLots.stream().mapToLong(LotAvailability::available).sum();
     }
 
-    // The lot to point the pharmacist at: the first-expiring lot that covers
-    // the whole quantity on its own, otherwise simply the first-expiring
-    // usable lot (the dispense will then draw across lots in the same order).
-    public Optional<LotAvailability> suggestedLot(int quantity) {
-        return usableLots.stream().filter(lot -> lot.available() >= quantity).findFirst()
-                .or(() -> usableLots.stream().findFirst());
+    // The lot to point the pharmacist at: the first-expiring usable lot. The
+    // dispense draws from it first and moves on in expiry order if it runs out.
+    public Optional<LotAvailability> suggestedLot() {
+        return usableLots.stream().findFirst();
     }
 
     public Optional<LotAvailability> findLot(UUID batchId) {

@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.core.audit.AuditDetails;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.pharmacy.Prescription;
 import co.ehealth.platform.pharmacy.PrescriptionItem;
@@ -97,8 +98,8 @@ public class PrescriptionCollectionService {
         rollup.refresh(prescription);
         auditLogService.append(actor.userId(), prescription.getFacilityId(), "PRESCRIPTION_COLLECTED",
                 "Prescription", prescriptionId.toString(), null,
-                "handedOver=" + handedOver.size() + ";skipped=" + skipped.size()
-                        + ";byPatient=" + command.collectedByPatient());
+                AuditDetails.of("handedOver", handedOver.size(), "skipped", skipped.size(),
+                        "byPatient", command.collectedByPatient()));
         return new CollectOutcome(collectionId, handedOver, skipped);
     }
 

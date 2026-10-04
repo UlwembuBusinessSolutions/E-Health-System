@@ -1,6 +1,7 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
 import co.ehealth.platform.pharmacy.Prescription;
+import co.ehealth.platform.pharmacy.stock.LedgerContext;
 import co.ehealth.platform.pharmacy.stock.PharmacyStockLedgerService;
 import co.ehealth.platform.pharmacy.stock.PharmacyStockLedgerService.EntryRequest;
 import co.ehealth.platform.pharmacy.stock.PharmacyStockTransaction;
@@ -15,20 +16,17 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 // Posts a ledger movement that belongs to a patient's prescription: the
-// prescription serial is the transaction's source reference and the patient
-// is linked on the row, which is what the patient-linked ledger history
-// reads. Runs inside the caller's transaction, so the stock movement and the
+// prescription serial is the transaction's source reference and, together
+// with the patient, travels in the posting's LedgerContext so the
+// patient-linked ledger history can read them straight off the row. Runs inside the caller's transaction, so the stock movement and the
 // dispensing record commit or roll back together (STK-11).
 @Component
 public class PatientLedgerPoster {
 
     private final PharmacyStockLedgerService ledgerService;
-    private final LedgerPatientLinkRepository patientLinkRepository;
 
-    public PatientLedgerPoster(PharmacyStockLedgerService ledgerService,
-                                LedgerPatientLinkRepository patientLinkRepository) {
+    public PatientLedgerPoster(PharmacyStockLedgerService ledgerService) {
         this.ledgerService = ledgerService;
-        this.patientLinkRepository = patientLinkRepository;
     }
 
     // idempotencyKey is derived from the prescription item and the attempt
@@ -37,11 +35,11 @@ public class PatientLedgerPoster {
     public PharmacyStockTransaction post(StockTransactionType type, Prescription prescription,
                                           DispensingActor actor, String reason, String idempotencyKey,
                                           List<EntryRequest> entries) {
-        PharmacyStockTransaction transaction = ledgerService.postEntries(type, prescription.getFacilityId(),
-                actor.userId(), actor.name(), reason, prescription.getSerialNumber(), idempotencyKey,
-                hashOf(type, prescription, entries), entries);
-        patientLinkRepository.link(transaction.getId(), prescription.getPatientId(), prescription.getId());
-        return transaction;
+        LedgerContext patientContext = new LedgerContext(null, null, prescription.getPatientId(),
+                prescription.getSerialNumber(), null);
+        return ledgerService.postEntries(type, prescription.getFacilityId(), actor.userId(), actor.name(), reason,
+                prescription.getSerialNumber(), idempotencyKey, hashOf(type, prescription, entries), patientContext,
+                entries);
     }
 
     private String hashOf(StockTransactionType type, Prescription prescription, List<EntryRequest> entries) {

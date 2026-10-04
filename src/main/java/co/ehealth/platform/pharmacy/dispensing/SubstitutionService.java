@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.core.audit.AuditDetails;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.pharmacy.Prescription;
 import co.ehealth.platform.pharmacy.PrescriptionItem;
@@ -65,7 +66,8 @@ public class SubstitutionService {
         prescriptionService.sendPrescriberMessage(prescriptionId, staffId,
                 requestMessage(prescription, item, substitute, note));
         auditLogService.append(actor.userId(), prescription.getFacilityId(), "PRESCRIPTION_SUBSTITUTION_REQUESTED",
-                "PrescriptionItem", itemId.toString(), null, substitute.getCode());
+                "PrescriptionItem", itemId.toString(), null,
+                AuditDetails.of("substituteProductCode", substitute.getCode()));
         return view(saved, substitute);
     }
 

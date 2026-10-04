@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.core.audit.AuditDetails;
 import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.patient.Patient;
@@ -107,7 +108,7 @@ public class DispenseReturnService {
         recordScheduledReturn(prescription, lotReturns, batches, command, transaction, actor);
         auditLogService.append(actor.userId(), prescription.getFacilityId(), "PRESCRIPTION_ITEM_RETURNED",
                 "PrescriptionItem", itemId.toString(), null,
-                "quantity=" + command.quantity() + ";condition=" + command.condition());
+                AuditDetails.of("quantity", command.quantity(), "condition", command.condition()));
 
         return new ReturnOutcome(itemId, command.quantity(), command.condition(), command.condition().isRestockable(),
                 returnedBefore + command.quantity(), returnableBefore - command.quantity());

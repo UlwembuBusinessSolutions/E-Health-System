@@ -37,16 +37,15 @@ public class FefoLotSelector {
         return new LotDraw(lot, quantity);
     }
 
-    // Prefers one lot that covers everything (simpler to trace and to
-    // recall); only when none can does it spread the quantity across lots in
-    // expiry order.
+    // Always starts with the soonest-expiring lot and moves to the next only
+    // when that one runs out. Taking a whole quantity from a later lot just
+    // because it is big enough would leave short-dated units on the shelf to
+    // expire, which is exactly what first-expiring-first exists to prevent.
     private List<LotDraw> drawFirstExpiringFirst(StockPicture stock, int quantity) {
         if (stock.usableTotal() < quantity) {
             throw new InsufficientUsableStockException(stock.usableTotal(), quantity, stock.expiredLots());
         }
-        return stock.usableLots().stream().filter(lot -> lot.available() >= quantity).findFirst()
-                .map(lot -> List.of(new LotDraw(lot, quantity)))
-                .orElseGet(() -> spreadAcrossLots(stock.usableLots(), quantity));
+        return spreadAcrossLots(stock.usableLots(), quantity);
     }
 
     private List<LotDraw> spreadAcrossLots(List<LotAvailability> usableLots, int quantity) {

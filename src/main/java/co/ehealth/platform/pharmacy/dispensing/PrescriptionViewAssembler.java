@@ -134,7 +134,7 @@ public class PrescriptionViewAssembler {
         StockStatus status = usable == 0 ? StockStatus.NONE
                 : usable < item.getRemainingQuantity() ? StockStatus.LOW : StockStatus.IN_STOCK;
         return new StockFigures(usable, status,
-                shelf.suggestedLot(item.getRemainingQuantity()).map(LotView::of).orElse(null),
+                shelf.suggestedLot().map(LotView::of).orElse(null),
                 shelf.usableLots().stream().map(LotView::of).toList(),
                 shelf.expiredLots().stream().map(LotView::of).toList());
     }
