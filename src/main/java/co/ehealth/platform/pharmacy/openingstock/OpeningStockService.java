@@ -17,9 +17,11 @@ import co.ehealth.platform.pharmacy.stock.PharmacyStockLocationService;
 import co.ehealth.platform.pharmacy.stock.PharmacyStockTransaction;
 import co.ehealth.platform.pharmacy.stock.PharmacyValidationException;
 import co.ehealth.platform.pharmacy.stock.StockBucket;
+import co.ehealth.platform.pharmacy.stock.StockIntakeEvent;
 import co.ehealth.platform.pharmacy.stock.StockTransactionType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,13 +52,15 @@ public class OpeningStockService {
     private final PharmacyStockLedgerService stockLedgerService;
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     public OpeningStockService(FacilityRepository facilityRepository, PharmacyProductRepository productRepository,
                                PharmacyProductService productService,
                                OpeningStockRowValidator rowValidator, OpeningStockLedgerRepository ledgerRepository,
                                PharmacyBatchResolver batchResolver, PharmacyStockLocationService stockLocationService,
                                PharmacyStockLedgerService stockLedgerService, AuditLogService auditLogService,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper, ApplicationEventPublisher eventPublisher) {
+        this.eventPublisher = eventPublisher;
         this.facilityRepository = facilityRepository;
         this.productRepository = productRepository;
         this.productService = productService;
@@ -97,6 +101,10 @@ public class OpeningStockService {
         PharmacyStockTransaction transaction = stockLedgerService.postEntries(StockTransactionType.OPENING_BALANCE,
                 facility.getId(), actorUserId, actorName, "Opening stock", null, idempotencyKey, idempotencyKey,
                 entryRequests);
+
+        eventPublisher.publishEvent(new StockIntakeEvent(facility.getId(), actorUserId, transaction.getId(), true,
+                checks.stream().map(check -> new StockIntakeEvent.IntakeLot(check.product().getId(), check.lot(),
+                        check.quantity())).toList()));
 
         long totalUnits = checks.stream().mapToLong(RowCheck::quantity).sum();
         auditLogService.append(actorUserId, facility.getId(), "OPENING_STOCK_LOADED", "PharmacyStockTransaction",

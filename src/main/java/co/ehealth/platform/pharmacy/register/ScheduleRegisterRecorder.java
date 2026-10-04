@@ -43,6 +43,25 @@ public class ScheduleRegisterRecorder {
                 staffMember(dispensedBy), witness, ledgerTransactionId, null));
     }
 
+    // Stock arriving through a receipt or the opening balance. An opening
+    // balance is a register OPENING entry only while the register is still
+    // empty for the product; afterwards it is simply stock received.
+    @Transactional
+    public void recordIntake(UUID facilityId, UUID productId, String lotNumber, long quantity, UUID recordedBy,
+                             boolean openingBalance, UUID ledgerTransactionId) {
+        if (scheduledProducts.scheduleOf(productId).isEmpty()) {
+            return;
+        }
+        User receiver = userRepository.findById(recordedBy).orElseThrow();
+        RegisterStaff actor = new RegisterStaff(receiver.getId(),
+                receiver.getFirstName() + " " + receiver.getLastName());
+        RegisterEntryKind kind = openingBalance && !appender.hasEntries(facilityId, productId)
+                ? RegisterEntryKind.OPENING : RegisterEntryKind.RECEIVED;
+
+        appender.append(new RegisterEntryDetails(facilityId, productId, kind, quantity, null, null, null, null, null,
+                lotNumber, actor, null, ledgerTransactionId, null));
+    }
+
     // A returned unit comes back into the register; if it cannot go back on
     // the shelf (damaged) it is destroyed straight away, mirroring the two
     // ledger entries dispensing posts for the same return.

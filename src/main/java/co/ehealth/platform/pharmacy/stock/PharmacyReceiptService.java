@@ -12,6 +12,7 @@ import co.ehealth.platform.pharmacy.supplier.PharmacySupplier;
 import co.ehealth.platform.pharmacy.supplier.PharmacySupplierRepository;
 import co.ehealth.platform.pharmacy.supplier.SupplierNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +52,7 @@ public class PharmacyReceiptService {
     private final SerialUnitService serialUnitService;
     private final ReceivedEntryLocator receivedEntryLocator;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PharmacyReceiptService(PharmacyProductRepository productRepository,
                                    PharmacyFacilityProductRepository facilityProductRepository,
@@ -62,8 +64,9 @@ public class PharmacyReceiptService {
                                    FacilityRepository facilityRepository, AuditLogService auditLogService,
                                    ReceiptLineValidator lineValidator, PharmacyBatchResolver batchResolver,
                                    SerialUnitService serialUnitService, ReceivedEntryLocator receivedEntryLocator,
-                                   ObjectMapper objectMapper) {
+                                   ObjectMapper objectMapper, ApplicationEventPublisher eventPublisher) {
         this.productRepository = productRepository;
+        this.eventPublisher = eventPublisher;
         this.facilityProductRepository = facilityProductRepository;
         this.receiptRepository = receiptRepository;
         this.receiptLineRepository = receiptLineRepository;
@@ -147,11 +150,24 @@ public class PharmacyReceiptService {
                 transaction.getCreatedAt(), transaction.getId()));
         receiptLineRepository.saveAll(resolvedLines.stream().map(line -> toReceiptLine(receipt, line)).toList());
         registerSerials(transaction, resolvedLines);
+        publishIntake(facility.getId(), actorUserId, transaction.getId(), resolvedLines);
 
         auditLogService.append(actorUserId, facility.getId(), "STOCK_RECEIVED", "PharmacyReceipt",
                 receipt.getId().toString(), null, serializeReceiptSummary(command));
 
         return receipt;
+    }
+
+    // Lets listeners (the scheduled-medicines register) react to what was
+    // actually stocked, not what was delivered.
+    private void publishIntake(UUID facilityId, UUID actorUserId, UUID transactionId,
+                               List<ResolvedLine> resolvedLines) {
+        List<StockIntakeEvent.IntakeLot> lots = resolvedLines.stream()
+                .filter(resolved -> resolved.line().stockedQuantity() > 0)
+                .map(resolved -> new StockIntakeEvent.IntakeLot(resolved.product().getId(),
+                        resolved.line().lotNumber(), resolved.line().stockedQuantity()))
+                .toList();
+        eventPublisher.publishEvent(new StockIntakeEvent(facilityId, actorUserId, transactionId, false, lots));
     }
 
     private record ResolvedLine(ReceiveLineCommand line, PharmacyProduct product, UUID batchId) {

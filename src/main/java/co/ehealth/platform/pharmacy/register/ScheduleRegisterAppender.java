@@ -66,6 +66,10 @@ class ScheduleRegisterAppender {
         }
     }
 
+    boolean hasEntries(UUID facilityId, UUID productId) {
+        return entryRepository.existsByFacilityIdAndProductId(facilityId, productId);
+    }
+
     private void requireOpeningOnlyOnEmptyRegister(RegisterEntryDetails details) {
         if (details.kind() == RegisterEntryKind.OPENING
                 && entryRepository.existsByFacilityIdAndProductId(details.facilityId(), details.productId())) {
