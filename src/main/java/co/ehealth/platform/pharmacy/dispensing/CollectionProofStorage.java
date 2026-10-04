@@ -23,7 +23,7 @@ import java.util.UUID;
 @Component
 public class CollectionProofStorage {
 
-    static final long MAX_BYTES = 10L * 1024 * 1024;
+    static final long MAX_BYTES = 5L * 1024 * 1024;
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of("application/pdf", "image/jpeg", "image/png");
 
     public record StoredProof(byte[] content, String contentType) {
@@ -72,7 +72,7 @@ public class CollectionProofStorage {
             throw new DispensingValidationException("The file is empty. Choose the document again.");
         }
         if (sizeInBytes > MAX_BYTES) {
-            throw new DispensingValidationException("The file is too large. The maximum size is 10 MB.");
+            throw new DispensingValidationException("The file is too large. The maximum size is 5 MB.");
         }
     }
 

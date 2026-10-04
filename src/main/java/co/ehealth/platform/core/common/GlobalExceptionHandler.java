@@ -677,7 +677,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     protected ResponseEntity<Object> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex,
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         return ResponseEntity.status(413).headers(headers)
-                .body(new ApiErrorResponse("File is too large. Maximum size is 10MB.", null));
+                .body(new ApiErrorResponse("File is too large. Maximum size is 5MB.", null));
     }
 
     // The safety net described in the class-level comment. Every other
