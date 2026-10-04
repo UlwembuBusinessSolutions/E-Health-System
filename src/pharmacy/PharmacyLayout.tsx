@@ -12,6 +12,7 @@ import {
   Truck,
   type LucideIcon,
 } from "lucide-react";
+import { WithPageLoading } from "@/app/pharmacyPages";
 import { PharmacyMoreMenu, type MoreMenuLink } from "./PharmacyMoreMenu";
 
 interface PharmacyTab {
@@ -68,7 +69,10 @@ export function PharmacyLayout() {
         </div>
         <PharmacyMoreMenu links={MORE_LINKS} />
       </nav>
-      <Outlet />
+      {/* The tab strip stays put while a page's chunk loads. */}
+      <WithPageLoading>
+        <Outlet />
+      </WithPageLoading>
     </div>
   );
 }

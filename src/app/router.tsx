@@ -15,18 +15,6 @@ import { QueuePage } from "@/queue/QueuePage";
 import { VitalsIntakePage } from "@/queue/VitalsIntakePage";
 import { TicketPrintPage } from "@/queue/TicketPrintPage";
 import { VitalsPrintPage } from "@/patient/VitalsPrintPage";
-import { PharmacyQueuePage } from "@/pharmacy/PharmacyQueuePage";
-import { PrescriptionPrintPage } from "@/pharmacy/PrescriptionPrintPage";
-import { PharmacyLayout } from "@/pharmacy/PharmacyLayout";
-import { StockPage } from "@/pharmacy/stock/StockPage";
-import { AddProductPage } from "@/pharmacy/products/AddProductPage";
-import { ReceiveStockPage } from "@/pharmacy/receiving/ReceiveStockPage";
-import { SuppliersPage } from "@/pharmacy/suppliers/SuppliersPage";
-import { ReorderPage } from "@/pharmacy/reorder/ReorderPage";
-import { LedgerPage } from "@/pharmacy/ledger/LedgerPage";
-import { StockCountPage } from "@/pharmacy/counts/StockCountPage";
-import { ScheduleRegisterPage } from "@/pharmacy/register/ScheduleRegisterPage";
-import { OpeningStockPage } from "@/pharmacy/opening-stock/OpeningStockPage";
 import { OrganizationSettingsPage } from "@/settings/OrganizationSettingsPage";
 import { AuditTrailPage } from "@/audit/AuditTrailPage";
 import { AppointmentsPage } from "@/appointments/AppointmentsPage";
@@ -36,6 +24,21 @@ import { PatientPortalPage } from "@/patient-portal/PatientPortalPage";
 import { RequirePatientPortalAuth } from "@/patient-portal/RequirePatientPortalAuth";
 import { TenantHomePage } from "@/tenant-site/TenantHomePage";
 import { AppShell } from "./AppShell";
+import {
+  AddProductPage,
+  DispensingQueuePage,
+  LedgerPage,
+  OpeningStockPage,
+  PharmacyLayout,
+  PrescriptionPrintPage,
+  ReceiveStockPage,
+  ReorderPage,
+  ScheduleRegisterPage,
+  StockCountPage,
+  StockPage,
+  SuppliersPage,
+  WithPageLoading,
+} from "./pharmacyPages";
 import { DashboardPage } from "./DashboardPage";
 import { PlatformRoot } from "@/platform/PlatformRoot";
 import { PlatformLoginScreen } from "@/platform/PlatformLoginScreen";
@@ -120,7 +123,9 @@ export function AppRouter() {
         path="/print/prescription/:prescriptionId"
         element={
           <RequireAuth>
-            <PrescriptionPrintPage />
+            <WithPageLoading>
+              <PrescriptionPrintPage />
+            </WithPageLoading>
           </RequireAuth>
         }
       />
@@ -173,8 +178,15 @@ export function AppRouter() {
         <Route path="queue" element={<QueuePage />} />
         <Route path="appointments" element={<AppointmentsPage />} />
         <Route path="vitals" element={<VitalsIntakePage />} />
-        <Route path="pharmacy" element={<PharmacyLayout />}>
-          <Route index element={<PharmacyQueuePage />} />
+        <Route
+          path="pharmacy"
+          element={
+            <WithPageLoading>
+              <PharmacyLayout />
+            </WithPageLoading>
+          }
+        >
+          <Route index element={<DispensingQueuePage />} />
           <Route path="stock" element={<StockPage />} />
           <Route path="products/new" element={<AddProductPage />} />
           <Route path="receive" element={<ReceiveStockPage />} />
