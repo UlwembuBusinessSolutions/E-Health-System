@@ -582,6 +582,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(PharmacyValidationException.class)
     public ResponseEntity<ApiErrorResponse> handlePharmacyValidation(PharmacyValidationException ex) {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     // Pharmacy stock counts and the scheduled medicines register
     // (co.ehealth.platform.pharmacy.count / .register). 422 is used where the
     // request is well-formed but breaks a business rule the user can fix.
