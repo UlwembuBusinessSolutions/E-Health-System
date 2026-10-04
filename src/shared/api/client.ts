@@ -17,15 +17,30 @@ export function apiOrigin(): string {
   return API_BASE_URL;
 }
 
+// Some conflicts carry a machine-readable `code` (and, for duplicates, the record
+// that already exists) so a screen can offer a precise next step instead of a
+// generic error banner - e.g. "Use MedSupply Wholesalers instead".
+export interface ApiErrorExtras {
+  code?: string;
+  existing?: { id: string; name: string };
+  similar?: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
   fieldErrors?: Record<string, string>;
+  code?: string;
+  existing?: { id: string; name: string };
+  similar?: boolean;
 
-  constructor(message: string, status: number, fieldErrors?: Record<string, string>) {
+  constructor(message: string, status: number, fieldErrors?: Record<string, string>, extras?: ApiErrorExtras) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.fieldErrors = fieldErrors;
+    this.code = extras?.code;
+    this.existing = extras?.existing;
+    this.similar = extras?.similar;
   }
 }
 
@@ -50,7 +65,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       window.dispatchEvent(new CustomEvent("ulwembu:session-ended", { detail: { status: res.status } }));
     }
     const body = await res.json().catch(() => null);
-    throw new ApiError(body?.message ?? res.statusText, res.status, body?.fieldErrors);
+    throw new ApiError(body?.message ?? res.statusText, res.status, body?.fieldErrors, {
+      code: body?.code,
+      existing: body?.existing,
+      similar: body?.similar,
+    });
   }
 
   // Not just `res.status === 204` — a 200 with an empty body (the password-
