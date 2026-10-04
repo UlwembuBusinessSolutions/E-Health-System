@@ -29,8 +29,8 @@ class RegisterWitnessDirectoryTest {
     @Test
     void offersOnlyAnIdAndADisplayNameForEachWitness() {
         UUID lerato = UUID.randomUUID();
-        when(witnessRepository.findPharmacyStaff(facilityId, actorId))
-                .thenReturn(List.of(row(lerato, "Lerato", "Molefe")));
+        var colleague = row(lerato, "Lerato", "Molefe");
+        when(witnessRepository.findPharmacyStaff(facilityId, actorId)).thenReturn(List.of(colleague));
 
         List<RegisterWitnessDirectory.WitnessOption> options = directory.witnessesFor(facilityId, actorId);
 

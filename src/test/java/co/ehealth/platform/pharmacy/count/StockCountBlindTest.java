@@ -53,6 +53,32 @@ class StockCountBlindTest {
     }
 
     @Test
+    void revealingASystemOnABlindDraftShowsOnlyTheLinesAlreadyCounted() {
+        PharmacyStockCount count = draftCount(true);
+        PharmacyStockCountLine counted = countedLine(count, productId, UUID.randomUUID(), 100, 60);
+        PharmacyStockCountLine uncounted = CountTestFixtures.ledgerLine(count, productId, UUID.randomUUID(), "LOT-X");
+        when(lookup.requireCount(count.getId())).thenReturn(count);
+        when(lineRepository.findByCountId(count.getId())).thenReturn(List.of(counted, uncounted));
+        when(productRepository.findAllById(List.of(productId))).thenReturn(List.of(product(productId, "Amoxicillin")));
+
+        StockCountResponse response = service.detail(count.getId(), true);
+
+        StockCountLineResponse countedResponse = response.lines().stream()
+                .filter(line -> line.countedQuantity() != null).findFirst().orElseThrow();
+        StockCountLineResponse uncountedResponse = response.lines().stream()
+                .filter(line -> line.countedQuantity() == null).findFirst().orElseThrow();
+        assertEquals(100L, countedResponse.baselineQuantity());
+        assertEquals(100L, countedResponse.expectedQuantity());
+        assertEquals(-40L, countedResponse.variance());
+        assertTrue(countedResponse.large());
+        assertNull(uncountedResponse.baselineQuantity());
+        assertNull(uncountedResponse.expectedQuantity());
+        assertNull(uncountedResponse.variance());
+        assertEquals(0, response.matches());
+        assertEquals(1, response.differences());
+    }
+
+    @Test
     void visibleDraftShowsBaselineVarianceAndLargeFlag() {
         StockCountResponse response = detailOf(draftCount(false));
 

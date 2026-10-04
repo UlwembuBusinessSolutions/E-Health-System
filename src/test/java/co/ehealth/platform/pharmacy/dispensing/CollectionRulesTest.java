@@ -18,6 +18,34 @@ class CollectionRulesTest {
         return new CollectCommand(null, false, collector, idVerified, null, proof, null, WitnessCredentials.NONE);
     }
 
+    private CollectCommand patientSigning(String signature, String proofRef) {
+        return new CollectCommand(null, true, null, false, signature, proofRef, null, WitnessCredentials.NONE);
+    }
+
+    @Test
+    void pngSignatureWithinTheSizeCapIsAccepted() {
+        assertDoesNotThrow(() -> rules.validate(patientSigning("data:image/png;base64,iVBORw0KGgo=", null), false));
+    }
+
+    @Test
+    void nonPngSignatureIsRejected() {
+        assertThrows(DispensingValidationException.class,
+                () -> rules.validate(patientSigning("data:image/jpeg;base64,AAAA", null), false));
+    }
+
+    @Test
+    void oversizedSignatureIsRejected() {
+        String tooLarge = CollectionRules.PNG_DATA_URL_PREFIX + "A".repeat(CollectionRules.MAX_SIGNATURE_CHARACTERS);
+
+        assertThrows(DispensingValidationException.class, () -> rules.validate(patientSigning(tooLarge, null), false));
+    }
+
+    @Test
+    void malformedProofReferenceIsRejected() {
+        assertThrows(DispensingValidationException.class,
+                () -> rules.validate(patientSigning(null, "../../etc/passwd"), false));
+    }
+
     @Test
     void patientCollectingNeedsNoCollectorDetails() {
         assertDoesNotThrow(() -> rules.validate(CollectCommand.patientTakesAllPending(), true));
