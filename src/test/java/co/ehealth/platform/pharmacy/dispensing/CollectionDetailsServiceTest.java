@@ -125,8 +125,8 @@ class CollectionDetailsServiceTest {
     }
 
     @Test
-    void proofUploadAcceptsPdfJpegAndPngUpToTenMegabytes() {
-        CollectionProofStorage.requireAcceptable("application/pdf", 10L * 1024 * 1024);
+    void proofUploadAcceptsPdfJpegAndPngUpToFiveMegabytes() {
+        CollectionProofStorage.requireAcceptable("application/pdf", 5L * 1024 * 1024);
         CollectionProofStorage.requireAcceptable("image/jpeg", 1);
         CollectionProofStorage.requireAcceptable("image/png", 2048);
     }
@@ -139,6 +139,6 @@ class CollectionDetailsServiceTest {
         assertThrows(DispensingValidationException.class,
                 () -> CollectionProofStorage.requireAcceptable("application/pdf", 0));
         assertThrows(DispensingValidationException.class,
-                () -> CollectionProofStorage.requireAcceptable("application/pdf", 10L * 1024 * 1024 + 1));
+                () -> CollectionProofStorage.requireAcceptable("application/pdf", 5L * 1024 * 1024 + 1));
     }
 }
