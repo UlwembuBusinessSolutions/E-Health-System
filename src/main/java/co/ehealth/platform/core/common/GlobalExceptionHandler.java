@@ -43,7 +43,18 @@ import co.ehealth.platform.visit.QueueTokenNotFoundException;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import co.ehealth.platform.triage.InvalidTriageCaptureException;
 import co.ehealth.platform.triage.TriageAssessmentNotFoundException;
+import co.ehealth.platform.pharmacy.openingstock.OpeningStockAlreadyLoadedException;
+import co.ehealth.platform.pharmacy.receiving.ReceiptAlreadyReversedException;
+import co.ehealth.platform.pharmacy.receiving.ReceiptNotFoundException;
+import co.ehealth.platform.pharmacy.receiving.ReceiptStockUsedException;
+import co.ehealth.platform.pharmacy.serial.DuplicateSerialException;
+import co.ehealth.platform.pharmacy.serial.SerialNotInStockException;
 import co.ehealth.platform.pharmacy.stock.BatchExpiryConflictException;
+import co.ehealth.platform.pharmacy.stock.PharmacyValidationException;
+import co.ehealth.platform.pharmacy.supplier.DuplicateSupplierException;
+import co.ehealth.platform.pharmacy.supplier.DuplicateSupplierResponse;
+import co.ehealth.platform.pharmacy.supplier.InvalidSupplierStateException;
+import co.ehealth.platform.pharmacy.supplier.SupplierNotFoundException;
 import co.ehealth.platform.pharmacy.stock.DuplicateProductCodeException;
 import co.ehealth.platform.pharmacy.stock.IdempotencyConflictException;
 import co.ehealth.platform.pharmacy.stock.InsufficientStockException;
@@ -497,6 +508,31 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(IdempotencyConflictException.class)
     public ResponseEntity<ApiErrorResponse> handleIdempotencyConflict(IdempotencyConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // Pharmacy suppliers, receiving, serials and opening stock (B2 slice —
+    // Docs/pharmacy-module-contract.md section 3). 409 = conflicts with
+    // current state, 422 = a business rule the user can fix.
+    @ExceptionHandler(DuplicateSupplierException.class)
+    public ResponseEntity<DuplicateSupplierResponse> handleDuplicateSupplier(DuplicateSupplierException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(DuplicateSupplierResponse.from(ex));
+    }
+
+    @ExceptionHandler({SupplierNotFoundException.class, ReceiptNotFoundException.class})
+    public ResponseEntity<ApiErrorResponse> handlePharmacyRecordNotFound(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler({InvalidSupplierStateException.class, DuplicateSerialException.class,
+            SerialNotInStockException.class, ReceiptAlreadyReversedException.class,
+            ReceiptStockUsedException.class, OpeningStockAlreadyLoadedException.class})
+    public ResponseEntity<ApiErrorResponse> handlePharmacyConflict(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PharmacyValidationException.class)
+    public ResponseEntity<ApiErrorResponse> handlePharmacyValidation(PharmacyValidationException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     // StaffPhotoService.uploadPhoto() wraps a checked IOException from

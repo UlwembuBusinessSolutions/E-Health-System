@@ -54,6 +54,17 @@ public class PharmacyStockLedgerService {
                                                  String actorName, String reason, String sourceReference,
                                                  String idempotencyKey, String bodyHash,
                                                  List<EntryRequest> entryRequests) {
+        return postEntries(type, facilityId, actorUserId, actorName, reason, sourceReference, idempotencyKey,
+                bodyHash, null, entryRequests);
+    }
+
+    // The same posting, for a movement that undoes an earlier transaction —
+    // reversalOfTransactionId is what links the two on the ledger.
+    @Transactional
+    public PharmacyStockTransaction postEntries(StockTransactionType type, UUID facilityId, UUID actorUserId,
+                                                 String actorName, String reason, String sourceReference,
+                                                 String idempotencyKey, String bodyHash,
+                                                 UUID reversalOfTransactionId, List<EntryRequest> entryRequests) {
         Optional<PharmacyStockTransaction> existing = stockTransactionRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
             if (!existing.get().getBodyHash().equals(bodyHash)) {
@@ -63,8 +74,8 @@ public class PharmacyStockLedgerService {
         }
 
         PharmacyStockTransaction transaction = stockTransactionRepository.save(new PharmacyStockTransaction(
-                type, facilityId, actorUserId, actorName, reason, sourceReference, idempotencyKey, bodyHash, null,
-                clock.instant()));
+                type, facilityId, actorUserId, actorName, reason, sourceReference, idempotencyKey, bodyHash,
+                reversalOfTransactionId, clock.instant()));
 
         // Deterministic lock order — every caller posting against an
         // overlapping set of accounts acquires locks in the same

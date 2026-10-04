@@ -6,5 +6,5 @@ package co.ehealth.platform.pharmacy.stock;
 // unit change makes a new product, never a silent reinterpretation of
 // quantities already posted under the old one.
 public enum StockBaseUnit {
-    TABLET, CAPSULE, BOTTLE, VIAL, SEALED_PACK, EACH
+    TABLET, CAPSULE, BOTTLE, VIAL, SEALED_PACK, EACH, BOX, KIT
 }
