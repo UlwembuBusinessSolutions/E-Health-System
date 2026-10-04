@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.stock;
 
+import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,14 +25,17 @@ public class PharmacyStockLedgerService {
     private final PharmacyStockAccountRepository stockAccountRepository;
     private final PharmacyStockTransactionRepository stockTransactionRepository;
     private final PharmacyStockEntryRepository stockEntryRepository;
+    private final EntityManager entityManager;
     private final Clock clock;
 
     public PharmacyStockLedgerService(PharmacyStockAccountRepository stockAccountRepository,
                                        PharmacyStockTransactionRepository stockTransactionRepository,
-                                       PharmacyStockEntryRepository stockEntryRepository, Clock clock) {
+                                       PharmacyStockEntryRepository stockEntryRepository, EntityManager entityManager,
+                                       Clock clock) {
         this.stockAccountRepository = stockAccountRepository;
         this.stockTransactionRepository = stockTransactionRepository;
         this.stockEntryRepository = stockEntryRepository;
+        this.entityManager = entityManager;
         this.clock = clock;
     }
 
@@ -102,6 +106,12 @@ public class PharmacyStockLedgerService {
             PharmacyStockAccount account = stockAccountRepository.findForUpdate(entryRequest.productId(),
                             entryRequest.batchId(), entryRequest.locationId(), entryRequest.bucket())
                     .orElseThrow(() -> new IllegalStateException("Stock account missing immediately after creation"));
+            // The row lock makes the DATABASE row current, but a caller that read
+            // this account earlier in the same transaction (a balance pre-check, say)
+            // leaves a stale copy in the persistence context, and Hibernate returns
+            // that copy instead of the locked row. Without this refresh, concurrent
+            // postings each "see" the old quantity and silently overwrite each other.
+            entityManager.refresh(account);
 
             long before = account.getQuantity();
             long after = before + entryRequest.quantityDelta();
