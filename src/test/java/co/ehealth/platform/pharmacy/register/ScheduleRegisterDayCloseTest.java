@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.register;
 
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -38,7 +39,7 @@ class ScheduleRegisterDayCloseTest {
         when(businessDay.today(FACILITY_ID)).thenReturn(TODAY);
         when(businessDay.windowOf(FACILITY_ID, TODAY)).thenReturn(new FacilityBusinessDay.Window(
                 Instant.parse("2026-10-03T22:00:00Z"), Instant.parse("2026-10-04T22:00:00Z")));
-        when(scheduledProducts.scheduleOf(PRODUCT_ID)).thenReturn(Optional.of(MedicineSchedule.S5));
+        when(scheduledProducts.scheduleOf(PRODUCT_ID)).thenReturn(Optional.of(DrugSchedule.S5));
         when(dayCloseRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 

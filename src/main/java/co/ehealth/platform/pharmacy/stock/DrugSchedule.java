@@ -4,5 +4,10 @@ package co.ehealth.platform.pharmacy.stock;
 // Only 5 and 6 are modelled — they are the ones the scheduled-medicine
 // register (contract section 1) tracks; lower schedules need no extra rule.
 public enum DrugSchedule {
-    S5, S6
+    S5, S6;
+
+    // Schedule 6 movements need a second person to confirm them.
+    public boolean requiresWitness() {
+        return this == S6;
+    }
 }

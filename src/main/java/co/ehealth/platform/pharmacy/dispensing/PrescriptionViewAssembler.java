@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.patient.Patient;
 import co.ehealth.platform.pharmacy.DispensingRecord;
@@ -91,7 +92,7 @@ public class PrescriptionViewAssembler {
                 : facts.suggestedProductIds().get(item.getId());
         UUID dispensingProductId = facts.dispensingProductId(item);
         StockFigures stock = stockFigures(prescription, item, facts);
-        MedicineSchedule schedule = dispensingProductId == null ? null : facts.schedules().get(dispensingProductId);
+        DrugSchedule schedule = dispensingProductId == null ? null : facts.schedules().get(dispensingProductId);
 
         return new PrescriptionItemResponse(item.getId(), item.getDrugName(), item.getDosage(), item.getQuantity(),
                 item.getStatus(), dispensing == null ? null : nameOf(users, dispensing.getDispensedByUserId()),

@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import static co.ehealth.platform.pharmacy.dispensing.DispensingTestData.item;
 import static co.ehealth.platform.pharmacy.dispensing.DispensingTestData.prescription;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -137,7 +138,7 @@ class PrescriptionCollectionServiceTest {
 
     @Test
     void refusesVerbalConsentForScheduledMedicineBeforeAnyStockMoves() {
-        when(scheduleLookup.schedulesFor(any())).thenReturn(Map.of(productId, MedicineSchedule.S5));
+        when(scheduleLookup.schedulesFor(any())).thenReturn(Map.of(productId, DrugSchedule.S5));
         var collector = new CollectCommand.Collector("Sipho", "SA_ID", "8001015009087", "Brother", null,
                 AuthorisationType.VERBAL);
         CollectCommand command = new CollectCommand(null, false, collector, true, null, "proof", null);

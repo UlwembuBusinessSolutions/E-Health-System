@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.register;
 
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -9,5 +10,5 @@ import java.util.UUID;
 // (empty for an unscheduled product).
 public interface ScheduledProductLookup {
 
-    Optional<MedicineSchedule> scheduleOf(UUID productId);
+    Optional<DrugSchedule> scheduleOf(UUID productId);
 }

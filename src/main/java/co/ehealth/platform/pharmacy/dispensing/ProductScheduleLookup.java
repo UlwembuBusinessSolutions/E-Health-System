@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
@@ -12,5 +13,5 @@ public interface ProductScheduleLookup {
 
     // Only scheduled products appear in the result; absent means unscheduled.
     // Takes many ids so the queue view needs one lookup, not one per item.
-    Map<UUID, MedicineSchedule> schedulesFor(Collection<UUID> productIds);
+    Map<UUID, DrugSchedule> schedulesFor(Collection<UUID> productIds);
 }

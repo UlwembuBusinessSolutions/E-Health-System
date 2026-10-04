@@ -40,4 +40,32 @@ public class ScheduleRegisterRecorder {
                 rxSerial, patientName, patientIdRef, prescriberName, prescriberRegNo, lotNumber, actor, null,
                 ledgerTransactionId));
     }
+
+    // A returned unit comes back into the register; if it cannot go back on
+    // the shelf (damaged) it is destroyed straight away, mirroring the two
+    // ledger entries dispensing posts for the same return.
+    @Transactional
+    public void recordReturn(UUID facilityId, UUID productId, String rxSerial, String patientName,
+                             String patientIdRef, long quantity, String lotNumber, UUID recordedBy,
+                             boolean restocked, UUID ledgerTransactionId) {
+        if (scheduledProducts.scheduleOf(productId).isEmpty()) {
+            return;
+        }
+        User handler = userRepository.findById(recordedBy).orElseThrow();
+        RegisterStaff actor = new RegisterStaff(handler.getId(), handler.getFirstName() + " " + handler.getLastName());
+
+        appendReturnStep(RegisterEntryKind.RETURNED, facilityId, productId, rxSerial, patientName, patientIdRef,
+                quantity, lotNumber, actor, ledgerTransactionId);
+        if (!restocked) {
+            appendReturnStep(RegisterEntryKind.DESTROYED, facilityId, productId, rxSerial, patientName,
+                    patientIdRef, quantity, lotNumber, actor, ledgerTransactionId);
+        }
+    }
+
+    private void appendReturnStep(RegisterEntryKind kind, UUID facilityId, UUID productId, String rxSerial,
+                                  String patientName, String patientIdRef, long quantity, String lotNumber,
+                                  RegisterStaff actor, UUID ledgerTransactionId) {
+        appender.append(new RegisterEntryDetails(facilityId, productId, kind, quantity, rxSerial, patientName,
+                patientIdRef, null, null, lotNumber, actor, null, ledgerTransactionId));
+    }
 }

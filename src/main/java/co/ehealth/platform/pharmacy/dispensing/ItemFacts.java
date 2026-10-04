@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import co.ehealth.platform.pharmacy.DispensingRecord;
 import co.ehealth.platform.pharmacy.Prescription;
 import co.ehealth.platform.pharmacy.PrescriptionItem;
@@ -19,7 +20,7 @@ public record ItemFacts(Map<UUID, DispensingRecord> dispensingRecords,
                         Map<UUID, UUID> suggestedProductIds,
                         Map<UUID, PrescriptionSubstitution> latestSubstitutions,
                         Map<UUID, PharmacyProduct> products, Map<UUID, Integer> returnedByItem,
-                        Map<UUID, MedicineSchedule> schedules, StockSnapshot stock) {
+                        Map<UUID, DrugSchedule> schedules, StockSnapshot stock) {
 
     static final ItemFacts NONE = new ItemFacts(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
             new StockSnapshot(List.of(), LocalDate.EPOCH));

@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.register;
 
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +32,7 @@ public class ScheduleRegisterService {
     @Transactional
     public ScheduleRegisterEntry record(NewEntryCommand command, UUID actorUserId, String actorName) {
         requireLotNumber(command.lotNumber());
-        MedicineSchedule schedule = scheduledProducts.scheduleOf(command.productId())
+        DrugSchedule schedule = scheduledProducts.scheduleOf(command.productId())
                 .orElseThrow(() -> new InvalidRegisterEntryException(
                         "This medicine is not a Schedule 5 or 6 product, so it does not belong in the register."));
         RegisterStaff witness = schedule.requiresWitness()

@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.register;
 
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
 import co.ehealth.platform.identity.UserStatus;
@@ -38,7 +39,7 @@ class ScheduleRegisterWitnessTest {
                 null, null, null, null, null, "LOT-1", witnessStaffId, witnessPin);
     }
 
-    private void productIs(MedicineSchedule schedule) {
+    private void productIs(DrugSchedule schedule) {
         when(scheduledProducts.scheduleOf(PRODUCT_ID)).thenReturn(Optional.of(schedule));
     }
 
@@ -59,7 +60,7 @@ class ScheduleRegisterWitnessTest {
 
     @Test
     void scheduleSixWithoutAWitnessIsRefused() {
-        productIs(MedicineSchedule.S6);
+        productIs(DrugSchedule.S6);
 
         assertThrows(InvalidWitnessException.class, () -> service.record(command(null, null), ACTOR.id(), ACTOR.name()));
 
@@ -68,7 +69,7 @@ class ScheduleRegisterWitnessTest {
 
     @Test
     void witnessMustBeADifferentStaffMemberFromTheActor() {
-        productIs(MedicineSchedule.S6);
+        productIs(DrugSchedule.S6);
 
         InvalidWitnessException refusal = assertThrows(InvalidWitnessException.class,
                 () -> service.record(command(ACTOR.id(), "my-own-password"), ACTOR.id(), ACTOR.name()));
@@ -80,7 +81,7 @@ class ScheduleRegisterWitnessTest {
 
     @Test
     void wrongWitnessPasswordIsRefused() {
-        productIs(MedicineSchedule.S6);
+        productIs(DrugSchedule.S6);
         witnessAccountExists("correct-password", false);
 
         assertThrows(InvalidWitnessException.class,
@@ -91,7 +92,7 @@ class ScheduleRegisterWitnessTest {
 
     @Test
     void confirmedWitnessIsRecordedOnTheEntry() {
-        productIs(MedicineSchedule.S6);
+        productIs(DrugSchedule.S6);
         witnessAccountExists("correct-password", true);
 
         service.record(witnessedByColleague(), ACTOR.id(), ACTOR.name());
@@ -104,7 +105,7 @@ class ScheduleRegisterWitnessTest {
 
     @Test
     void scheduleFiveNeedsNoWitness() {
-        productIs(MedicineSchedule.S5);
+        productIs(DrugSchedule.S5);
 
         service.record(command(null, null), ACTOR.id(), ACTOR.name());
 

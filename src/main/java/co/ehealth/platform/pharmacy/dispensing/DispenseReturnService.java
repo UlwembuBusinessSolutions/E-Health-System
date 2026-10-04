@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.patient.Patient;
 import co.ehealth.platform.pharmacy.Prescription;
@@ -158,7 +159,7 @@ public class DispenseReturnService {
                                         Map<UUID, PharmacyBatch> batches, ReturnCommand command,
                                         PharmacyStockTransaction transaction, DispensingActor actor) {
         List<UUID> productIds = batches.values().stream().map(PharmacyBatch::getProductId).distinct().toList();
-        Map<UUID, MedicineSchedule> scheduled = scheduleLookup.schedulesFor(productIds);
+        Map<UUID, DrugSchedule> scheduled = scheduleLookup.schedulesFor(productIds);
         if (scheduled.isEmpty()) {
             return;
         }

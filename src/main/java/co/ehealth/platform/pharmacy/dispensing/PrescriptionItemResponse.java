@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import co.ehealth.platform.pharmacy.PrescriptionStatus;
 
 import java.time.Instant;
@@ -25,7 +26,7 @@ public record PrescriptionItemResponse(UUID id, String drugName, String dosage, 
                                        int returnedQuantity, long availableQuantity, StockStatus stockStatus,
                                        LotView suggestedLot, List<LotView> usableLots,
                                        List<LotView> skippedExpiredLots, boolean isScheduled,
-                                       MedicineSchedule schedule, SubstitutionStatus substitutionStatus,
+                                       DrugSchedule schedule, SubstitutionStatus substitutionStatus,
                                        UUID substituteProductId, String substituteProductName) {
 
     public record LotView(UUID batchId, String lot, LocalDate expiryDate, long available) {

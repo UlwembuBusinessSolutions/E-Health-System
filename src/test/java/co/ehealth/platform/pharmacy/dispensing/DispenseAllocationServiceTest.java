@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import static co.ehealth.platform.pharmacy.dispensing.DispensingTestData.FACILITY_ID;
 import static co.ehealth.platform.pharmacy.dispensing.DispensingTestData.PRODUCT_ID;
 import static co.ehealth.platform.pharmacy.dispensing.DispensingTestData.item;
@@ -176,7 +177,7 @@ class DispenseAllocationServiceTest {
 
     @Test
     void registersEveryLotOfAScheduledMedicineInTheSameTransaction() {
-        when(scheduleLookup.schedulesFor(any())).thenReturn(Map.of(PRODUCT_ID, MedicineSchedule.S6));
+        when(scheduleLookup.schedulesFor(any())).thenReturn(Map.of(PRODUCT_ID, DrugSchedule.S6));
         Patient patient = mock(Patient.class);
         when(partyDirectory.patients(any())).thenReturn(Map.of(prescription.getPatientId(), patient));
         when(partyDirectory.users(any())).thenReturn(Map.of(prescription.getPrescriberId(), mock(User.class)));

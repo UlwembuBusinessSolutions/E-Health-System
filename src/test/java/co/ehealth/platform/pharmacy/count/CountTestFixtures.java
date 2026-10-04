@@ -1,6 +1,7 @@
 package co.ehealth.platform.pharmacy.count;
 
 import co.ehealth.platform.pharmacy.stock.PharmacyProduct;
+import co.ehealth.platform.pharmacy.stock.ProductHandling;
 import co.ehealth.platform.pharmacy.stock.StockBaseUnit;
 import co.ehealth.platform.pharmacy.stock.StockCategory;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -44,7 +45,8 @@ final class CountTestFixtures {
 
     static PharmacyProduct product(UUID id, String name) {
         PharmacyProduct product = new PharmacyProduct("P-" + name, name, null, null, null, StockCategory.MEDICINE,
-                StockBaseUnit.TABLET, null, null, null, true, true, null, UUID.randomUUID(), "Admin", NOW);
+                StockBaseUnit.TABLET, null, null, null, true, true, null, new ProductHandling(false, null, false, null),
+                UUID.randomUUID(), "Admin", NOW);
         ReflectionTestUtils.setField(product, "id", id);
         return product;
     }
