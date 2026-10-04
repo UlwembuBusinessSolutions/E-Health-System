@@ -37,16 +37,19 @@ public class StockCountController {
     private final StockCountRecordingService recordingService;
     private final StockCountPostingService postingService;
     private final StockCountQueryService queryService;
+    private final StockCountSetupService setupService;
     private final PermissionService permissionService;
     private final UserRepository userRepository;
 
     public StockCountController(StockCountService countService, StockCountRecordingService recordingService,
                                 StockCountPostingService postingService, StockCountQueryService queryService,
-                                PermissionService permissionService, UserRepository userRepository) {
+                                StockCountSetupService setupService, PermissionService permissionService,
+                                UserRepository userRepository) {
         this.countService = countService;
         this.recordingService = recordingService;
         this.postingService = postingService;
         this.queryService = queryService;
+        this.setupService = setupService;
         this.permissionService = permissionService;
         this.userRepository = userRepository;
     }
@@ -58,10 +61,17 @@ public class StockCountController {
         return queryService.list(facilityId, status);
     }
 
-    @GetMapping("/{countId}")
-    public StockCountResponse detail(@PathVariable UUID countId) {
+    @GetMapping("/setup")
+    public CountSetupResponse setup(@RequestParam UUID facilityId) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
-        return queryService.detail(countId);
+        return setupService.setup(facilityId);
+    }
+
+    @GetMapping("/{countId}")
+    public StockCountResponse detail(@PathVariable UUID countId,
+                                     @RequestParam(defaultValue = "false") boolean revealSystem) {
+        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        return queryService.detail(countId, revealSystem);
     }
 
     @PostMapping

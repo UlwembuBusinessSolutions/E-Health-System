@@ -10,7 +10,7 @@ public record RegisterEntryResponse(UUID id, UUID facilityId, UUID productId, St
                                     String patientName, String patientIdRef, String prescriberName,
                                     String prescriberRegNo, long quantityIn, long quantityOut, long balanceAfter,
                                     String lotNumber, String dispensedByName, String witnessedByName,
-                                    UUID ledgerTransactionId) {
+                                    UUID ledgerTransactionId, String reason) {
 
     static RegisterEntryResponse from(ScheduleRegisterEntry entry, PharmacyProduct product) {
         return new RegisterEntryResponse(entry.getId(), entry.getFacilityId(), entry.getProductId(),
@@ -18,6 +18,6 @@ public record RegisterEntryResponse(UUID id, UUID facilityId, UUID productId, St
                 entry.getRxSerial(), entry.getPatientName(), entry.getPatientIdRef(), entry.getPrescriberName(),
                 entry.getPrescriberRegNo(), entry.getQuantityIn(), entry.getQuantityOut(), entry.getBalanceAfter(),
                 entry.getLotNumber(), entry.getDispensedByName(), entry.getWitnessedByName(),
-                entry.getLedgerTransactionId());
+                entry.getLedgerTransactionId(), entry.getReason());
     }
 }

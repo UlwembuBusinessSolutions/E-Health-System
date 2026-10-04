@@ -49,6 +49,8 @@ import co.ehealth.platform.pharmacy.receiving.ReceiptNotFoundException;
 import co.ehealth.platform.pharmacy.receiving.ReceiptStockUsedException;
 import co.ehealth.platform.pharmacy.serial.DuplicateSerialException;
 import co.ehealth.platform.pharmacy.serial.SerialNotInStockException;
+import co.ehealth.platform.pharmacy.dispensing.CollectionNotFoundException;
+import co.ehealth.platform.pharmacy.dispensing.CollectionProofNotFoundException;
 import co.ehealth.platform.pharmacy.dispensing.DispensingConflictException;
 import co.ehealth.platform.pharmacy.dispensing.DispensingValidationException;
 import co.ehealth.platform.pharmacy.stock.BatchExpiryConflictException;
@@ -444,6 +446,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
+    @ExceptionHandler({CollectionNotFoundException.class, CollectionProofNotFoundException.class})
+    public ResponseEntity<ApiErrorResponse> handleCollectionRecordNotFound(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     @ExceptionHandler(InvalidPrescriberMessageException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidPrescriberMessage(InvalidPrescriberMessageException ex) {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
@@ -670,7 +677,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     protected ResponseEntity<Object> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex,
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         return ResponseEntity.status(413).headers(headers)
-                .body(new ApiErrorResponse("File is too large. Maximum size is 5MB.", null));
+                .body(new ApiErrorResponse("File is too large. Maximum size is 10MB.", null));
     }
 
     // The safety net described in the class-level comment. Every other

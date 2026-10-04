@@ -71,6 +71,11 @@ class SerialUnitGatewayAdapter implements SerialUnitGateway {
                 .toList());
     }
 
+    @Override
+    public Map<UUID, List<String>> inStockSerialsByBatch(UUID productId) {
+        return serialUnitService.inStockSerialsByBatch(productId);
+    }
+
     private UUID entryOf(UUID transactionId) {
         return stockEntryRepository.findByTransactionId(transactionId).stream()
                 .findFirst()

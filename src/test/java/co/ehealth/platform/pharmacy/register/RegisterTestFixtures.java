@@ -18,7 +18,7 @@ final class RegisterTestFixtures {
 
     static RegisterEntryDetails details(RegisterEntryKind kind, long quantity, RegisterStaff witness) {
         return new RegisterEntryDetails(FACILITY_ID, PRODUCT_ID, kind, quantity, null, null, null, null, null,
-                "LOT-1", ACTOR, witness, null);
+                "LOT-1", ACTOR, witness, null, null);
     }
 
     static ScheduleRegisterEntry entry(RegisterEntryKind kind, long quantity, long balanceAfter) {

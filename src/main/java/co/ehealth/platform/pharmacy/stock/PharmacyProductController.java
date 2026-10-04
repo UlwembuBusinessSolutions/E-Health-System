@@ -8,6 +8,7 @@ import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -91,7 +92,7 @@ public class PharmacyProductController {
         PharmacyProduct product = productService.updateDetails(id, request.displayName(), request.genericName(),
                 request.strength(), request.dosageForm(), request.packSize(), request.barcode(),
                 request.manufacturer(), request.storageInstructions(), request.schedule(), request.coldChain(),
-                request.preferredSupplierId(), actor.getId(), actorName(actor));
+                request.preferredSupplierId(), request.levels(), actor.getId(), actorName(actor));
         return ResponseEntity.ok(ProductResponse.from(product));
     }
 
@@ -131,7 +132,14 @@ public class PharmacyProductController {
     public record UpdateProductRequest(@NotBlank String displayName, String genericName, String strength,
                                         String dosageForm, Integer packSize, String barcode, String manufacturer,
                                         String storageInstructions, DrugSchedule schedule, boolean coldChain,
-                                        UUID preferredSupplierId) {
+                                        UUID preferredSupplierId, UUID facilityId,
+                                        @PositiveOrZero Integer reorderThreshold,
+                                        @PositiveOrZero Integer targetQuantity) {
+
+        AssortmentLevels levels() {
+            return facilityId == null ? AssortmentLevels.NONE
+                    : new AssortmentLevels(facilityId, reorderThreshold, targetQuantity);
+        }
     }
 
     public record ProductResponse(UUID id, String code, String displayName, String genericName, String strength,

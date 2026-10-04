@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 // Plan section 15's GET /ledger plus the per-product history with a running
@@ -32,19 +34,20 @@ public class PharmacyLedgerController {
     }
 
     @GetMapping("/ledger")
-    public PagedResponse<LedgerEntryResponse> listLedger(
+    public LedgerPageResponse listLedger(
             @RequestParam UUID facilityId, @RequestParam(required = false) UUID productId,
-            @RequestParam(required = false) StockTransactionType type,
+            @RequestParam(required = false) String type,
             @RequestParam(required = false) UUID supplierId, @RequestParam(required = false) UUID patientId,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
-        var filter = new PharmacyLedgerQueryService.LedgerFilter(facilityId, productId, type, supplierId, patientId,
-                q, from, to);
+        var filter = new PharmacyLedgerQueryService.LedgerFilter(facilityId, productId, LedgerTypeFilter.parse(type),
+                supplierId, patientId, q, from, to);
         Page<LedgerRow> rows = ledgerQueryService.listLedger(filter, page, size);
-        return PagedResponse.of(rows, LedgerEntryResponse::from);
+        return LedgerPageResponse.of(PagedResponse.of(rows, LedgerEntryResponse::from),
+                ledgerQueryService.typeCounts(filter));
     }
 
     @GetMapping("/products/{id}/history")
@@ -56,16 +59,26 @@ public class PharmacyLedgerController {
         return PagedResponse.of(rows, LedgerEntryResponse::from);
     }
 
+    // The usual paged envelope plus the per-type counts the type chips show.
+    public record LedgerPageResponse(List<LedgerEntryResponse> items, int page, int size, long totalItems,
+                                     boolean hasMore, Map<String, Long> typeCounts) {
+        static LedgerPageResponse of(PagedResponse<LedgerEntryResponse> paged, Map<String, Long> typeCounts) {
+            return new LedgerPageResponse(paged.items(), paged.page(), paged.size(), paged.totalItems(),
+                    paged.hasMore(), typeCounts);
+        }
+    }
+
     // `reason` is the free-text note, `reasonCode` the picked reason;
     // balanceAfter is the lot's balance, runningBalance (history only) the
-    // product's total across lots.
+    // product's total across lots. stockUsed means this movement added stock
+    // that has since been used, so it can no longer be reversed.
     public record LedgerEntryResponse(UUID id, long seq, UUID transactionId, String type, UUID productId,
                                       String productName, String productCode, UUID batchId, String lotNumber,
                                       String expiryDate, long quantityDelta, long balanceAfter, Long runningBalance,
                                       String actorName, String reason, String reasonCode, String sourceReference,
                                       UUID supplierId, String supplierName, UUID patientId, String patientName,
                                       String prescriptionSerial, UUID reversalOfTransactionId,
-                                      UUID reversedByTransactionId, Instant createdAt) {
+                                      UUID reversedByTransactionId, boolean stockUsed, Instant createdAt) {
         static LedgerEntryResponse from(LedgerRow row) {
             PharmacyStockTransaction transaction = row.transaction();
             PharmacyBatch batch = row.batch();
@@ -77,7 +90,7 @@ public class PharmacyLedgerController {
                     transaction.getActorName(), transaction.getReason(), transaction.getReasonCode(),
                     transaction.getSourceReference(), transaction.getSupplierId(), row.supplierName(),
                     transaction.getPatientId(), row.patientName(), transaction.getPrescriptionSerial(),
-                    transaction.getReversalOfTransactionId(), row.reversedByTransactionId(),
+                    transaction.getReversalOfTransactionId(), row.reversedByTransactionId(), row.stockUsed(),
                     row.entry().getCreatedAt());
         }
     }

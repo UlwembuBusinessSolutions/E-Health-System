@@ -14,6 +14,8 @@ import java.util.UUID;
 @Service
 public class ScheduleRegisterRecorder {
 
+    private static final String DAMAGED_RETURN_REASON = "Damaged item returned by patient";
+
     private final ScheduledProductLookup scheduledProducts;
     private final ScheduleRegisterAppender appender;
     private final UserRepository userRepository;
@@ -25,20 +27,20 @@ public class ScheduleRegisterRecorder {
         this.userRepository = userRepository;
     }
 
+    // witnessStaffId is a witness dispensing has already confirmed (password
+    // checked); null when the medicine needs none.
     @Transactional
     public void recordDispense(UUID facilityId, UUID productId, String rxSerial, String patientName,
                                String patientIdRef, String prescriberName, String prescriberRegNo, long quantity,
-                               String lotNumber, UUID dispensedBy, UUID ledgerTransactionId) {
+                               String lotNumber, UUID dispensedBy, UUID ledgerTransactionId, UUID witnessStaffId) {
         if (scheduledProducts.scheduleOf(productId).isEmpty()) {
             return;
         }
-        User dispenser = userRepository.findById(dispensedBy).orElseThrow();
-        RegisterStaff actor = new RegisterStaff(dispenser.getId(),
-                dispenser.getFirstName() + " " + dispenser.getLastName());
+        RegisterStaff witness = witnessStaffId == null ? null : staffMember(witnessStaffId);
 
         appender.append(new RegisterEntryDetails(facilityId, productId, RegisterEntryKind.DISPENSED, quantity,
-                rxSerial, patientName, patientIdRef, prescriberName, prescriberRegNo, lotNumber, actor, null,
-                ledgerTransactionId));
+                rxSerial, patientName, patientIdRef, prescriberName, prescriberRegNo, lotNumber,
+                staffMember(dispensedBy), witness, ledgerTransactionId, null));
     }
 
     // A returned unit comes back into the register; if it cannot go back on
@@ -51,21 +53,25 @@ public class ScheduleRegisterRecorder {
         if (scheduledProducts.scheduleOf(productId).isEmpty()) {
             return;
         }
-        User handler = userRepository.findById(recordedBy).orElseThrow();
-        RegisterStaff actor = new RegisterStaff(handler.getId(), handler.getFirstName() + " " + handler.getLastName());
+        RegisterStaff actor = staffMember(recordedBy);
 
         appendReturnStep(RegisterEntryKind.RETURNED, facilityId, productId, rxSerial, patientName, patientIdRef,
-                quantity, lotNumber, actor, ledgerTransactionId);
+                quantity, lotNumber, actor, ledgerTransactionId, null);
         if (!restocked) {
             appendReturnStep(RegisterEntryKind.DESTROYED, facilityId, productId, rxSerial, patientName,
-                    patientIdRef, quantity, lotNumber, actor, ledgerTransactionId);
+                    patientIdRef, quantity, lotNumber, actor, ledgerTransactionId, DAMAGED_RETURN_REASON);
         }
     }
 
     private void appendReturnStep(RegisterEntryKind kind, UUID facilityId, UUID productId, String rxSerial,
                                   String patientName, String patientIdRef, long quantity, String lotNumber,
-                                  RegisterStaff actor, UUID ledgerTransactionId) {
+                                  RegisterStaff actor, UUID ledgerTransactionId, String reason) {
         appender.append(new RegisterEntryDetails(facilityId, productId, kind, quantity, rxSerial, patientName,
-                patientIdRef, null, null, lotNumber, actor, null, ledgerTransactionId));
+                patientIdRef, null, null, lotNumber, actor, null, ledgerTransactionId, reason));
+    }
+
+    private RegisterStaff staffMember(UUID userId) {
+        User user = userRepository.findById(userId).orElseThrow();
+        return new RegisterStaff(user.getId(), user.getFirstName() + " " + user.getLastName());
     }
 }

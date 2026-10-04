@@ -1,6 +1,7 @@
 package co.ehealth.platform.pharmacy.stock;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 // The seam between ledger operations (adjustments, reversals) and
@@ -28,4 +29,8 @@ public interface SerialUnitGateway {
     // units it added are removed again, units it removed come back IN_STOCK.
     // A no-op for transactions that involved no serial units.
     void reverseUnits(UUID originalTransactionId, UUID reversalTransactionId);
+
+    // The serials of a product still on the shelf, grouped by lot (batch id).
+    // Empty for a product that isn't serial-tracked.
+    Map<UUID, List<String>> inStockSerialsByBatch(UUID productId);
 }

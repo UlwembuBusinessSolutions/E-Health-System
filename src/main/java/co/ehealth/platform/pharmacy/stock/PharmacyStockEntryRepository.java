@@ -23,12 +23,11 @@ public interface PharmacyStockEntryRepository extends JpaRepository<PharmacyStoc
     // wide default range instead of NULL: an untyped NULL bind parameter makes
     // PostgreSQL infer bytea inside LOWER()/CONCAT() (see
     // PharmacyProductRepository.search()).
-    String LEDGER_FROM = "FROM PharmacyStockEntry e, PharmacyStockAccount a, PharmacyStockLocation l, "
+    String LEDGER_FILTERED_BY_EVERYTHING_BUT_TYPE = "FROM PharmacyStockEntry e, PharmacyStockAccount a, PharmacyStockLocation l, "
             + "PharmacyStockTransaction t, PharmacyProduct p, PharmacyBatch b "
             + "WHERE e.stockAccountId = a.id AND a.locationId = l.id AND l.facilityId = :facilityId "
             + "AND e.transactionId = t.id AND a.productId = p.id AND a.batchId = b.id "
             + "AND (:productId IS NULL OR a.productId = :productId) "
-            + "AND (:type = '' OR CAST(t.type AS string) = :type) "
             + "AND (:supplierId IS NULL OR t.supplierId = :supplierId) "
             + "AND (:patientId IS NULL OR t.patientId = :patientId) "
             + "AND e.createdAt >= :from AND e.createdAt < :to "
@@ -41,14 +40,35 @@ public interface PharmacyStockEntryRepository extends JpaRepository<PharmacyStoc
             + "AND (LOWER(CONCAT(pt.firstName, ' ', pt.lastName)) LIKE CONCAT('%', :q, '%') "
             + "OR LOWER(pt.mpiNumber) LIKE CONCAT('%', :q, '%')))) ";
 
+    // The type filter is a list; callers pass every type to mean "any", so
+    // there is never an empty IN () to bind.
+    String LEDGER_FROM = LEDGER_FILTERED_BY_EVERYTHING_BUT_TYPE + "AND t.type IN :types ";
+
     // Newest first by seq — the authoritative server order, not createdAt
     // (PharmacyStockEntry's own why-note).
     @Query(value = "SELECT e " + LEDGER_FROM + "ORDER BY e.seq DESC",
             countQuery = "SELECT COUNT(e) " + LEDGER_FROM)
     Page<PharmacyStockEntry> findLedger(@Param("facilityId") UUID facilityId, @Param("productId") UUID productId,
-                                         @Param("type") String type, @Param("supplierId") UUID supplierId,
+                                         @Param("types") Collection<StockTransactionType> types,
+                                         @Param("supplierId") UUID supplierId,
                                          @Param("patientId") UUID patientId, @Param("q") String q,
                                          @Param("from") Instant from, @Param("to") Instant to, Pageable pageable);
+
+    // How many entries each type would show under the same filters minus the
+    // type filter itself, so the type chips keep their counts once one is selected.
+    @Query("SELECT new co.ehealth.platform.pharmacy.stock.LedgerTypeCount(t.type, COUNT(e)) "
+            + LEDGER_FILTERED_BY_EVERYTHING_BUT_TYPE + "GROUP BY t.type")
+    List<LedgerTypeCount> countByType(@Param("facilityId") UUID facilityId, @Param("productId") UUID productId,
+                                      @Param("supplierId") UUID supplierId, @Param("patientId") UUID patientId,
+                                      @Param("q") String q, @Param("from") Instant from, @Param("to") Instant to);
+
+    // The newest outflow on each account, one row per account, so a whole ledger
+    // page can tell which received lots have since been used.
+    @Query("SELECT new co.ehealth.platform.pharmacy.stock.AccountOutflow(e.stockAccountId, MAX(e.seq)) "
+            + "FROM PharmacyStockEntry e, PharmacyStockTransaction t WHERE e.transactionId = t.id "
+            + "AND e.stockAccountId IN :accountIds AND t.type IN :types GROUP BY e.stockAccountId")
+    List<AccountOutflow> findLatestOutflowByAccount(@Param("accountIds") Collection<UUID> accountIds,
+                                                    @Param("types") Collection<StockTransactionType> types);
 
     // A product's running balance after any entry is the sum of every delta
     // posted up to that entry's seq — the history view derives the whole page

@@ -10,6 +10,8 @@ public interface PharmacySerialUnitRepository extends JpaRepository<PharmacySeri
 
     List<PharmacySerialUnit> findByProductIdAndSerialNumberIn(UUID productId, Collection<String> serialNumbers);
 
+    List<PharmacySerialUnit> findByProductIdAndStatusOrderBySerialNumberAsc(UUID productId, SerialUnitStatus status);
+
     List<PharmacySerialUnit> findByRemovedEntryIdInAndStatus(Collection<UUID> removedEntryIds,
                                                              SerialUnitStatus status);
 

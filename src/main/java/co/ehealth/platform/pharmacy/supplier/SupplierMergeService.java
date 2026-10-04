@@ -2,6 +2,7 @@ package co.ehealth.platform.pharmacy.supplier;
 
 import co.ehealth.platform.pharmacy.stock.PharmacyProductRepository;
 import co.ehealth.platform.pharmacy.stock.PharmacyReceiptRepository;
+import co.ehealth.platform.pharmacy.purchasing.PurchaseOrderRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -9,9 +10,9 @@ import java.time.Clock;
 import java.util.UUID;
 
 // Folds a duplicate supplier into the real one. Everything that pointed at
-// the source — receipts, product order lists, products' preferred supplier —
-// moves to the target in ONE transaction, so a failure half way never leaves
-// receipts split across two copies of the same company.
+// the source — receipts, purchase orders, product order lists, products'
+// preferred supplier — moves to the target in ONE transaction, so a failure
+// half way never leaves records split across two copies of the same company.
 @Service
 public class SupplierMergeService {
 
@@ -19,17 +20,20 @@ public class SupplierMergeService {
     private final PharmacySupplierRepository supplierRepository;
     private final PharmacySupplierProductRepository supplierProductRepository;
     private final PharmacyReceiptRepository receiptRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
     private final PharmacyProductRepository productRepository;
     private final Clock clock;
 
     public SupplierMergeService(SupplierService supplierService, PharmacySupplierRepository supplierRepository,
                                 PharmacySupplierProductRepository supplierProductRepository,
                                 PharmacyReceiptRepository receiptRepository,
+                                PurchaseOrderRepository purchaseOrderRepository,
                                 PharmacyProductRepository productRepository, Clock clock) {
         this.supplierService = supplierService;
         this.supplierRepository = supplierRepository;
         this.supplierProductRepository = supplierProductRepository;
         this.receiptRepository = receiptRepository;
+        this.purchaseOrderRepository = purchaseOrderRepository;
         this.productRepository = productRepository;
         this.clock = clock;
     }
@@ -50,6 +54,7 @@ public class SupplierMergeService {
         }
 
         receiptRepository.repointSupplier(sourceSupplierId, targetSupplierId);
+        purchaseOrderRepository.repointSupplier(sourceSupplierId, targetSupplierId);
         supplierProductRepository.copyLinks(sourceSupplierId, targetSupplierId);
         supplierProductRepository.deleteAllForSupplier(sourceSupplierId);
         productRepository.repointPreferredSupplier(sourceSupplierId, targetSupplierId);

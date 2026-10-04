@@ -78,6 +78,9 @@ public class ScheduleRegisterEntry {
     @Column(name = "witnessed_by_name", updatable = false, length = 200)
     private String witnessedByName;
 
+    @Column(updatable = false, length = 200)
+    private String reason;
+
     @Column(name = "ledger_transaction_id", updatable = false)
     private UUID ledgerTransactionId;
 
@@ -103,6 +106,7 @@ public class ScheduleRegisterEntry {
         this.witnessedBy = details.witness() == null ? null : details.witness().id();
         this.witnessedByName = details.witness() == null ? null : details.witness().name();
         this.ledgerTransactionId = details.ledgerTransactionId();
+        this.reason = details.reason();
     }
 
     public UUID getId() {
@@ -175,6 +179,10 @@ public class ScheduleRegisterEntry {
 
     public String getWitnessedByName() {
         return witnessedByName;
+    }
+
+    public String getReason() {
+        return reason;
     }
 
     public UUID getLedgerTransactionId() {

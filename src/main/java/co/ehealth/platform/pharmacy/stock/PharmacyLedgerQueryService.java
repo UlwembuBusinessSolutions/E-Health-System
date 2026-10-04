@@ -10,7 +10,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 // Read side of the ledger: the filterable facility-wide listing and a single
 // product's history with a running balance. Never writes anything.
@@ -35,23 +37,33 @@ public class PharmacyLedgerQueryService {
 
     // Every filter is optional. from/to are whole calendar days, both
     // inclusive, in the server's clock zone.
-    public record LedgerFilter(UUID facilityId, UUID productId, StockTransactionType type, UUID supplierId,
+    public record LedgerFilter(UUID facilityId, UUID productId, List<StockTransactionType> types, UUID supplierId,
                                UUID patientId, String q, LocalDate from, LocalDate to) {
     }
 
     public Page<LedgerRow> listLedger(LedgerFilter filter, int page, int size) {
         Pageable pageable = StockListParams.pageable(page, size);
         Page<PharmacyStockEntry> entries = stockEntryRepository.findLedger(filter.facilityId(), filter.productId(),
-                filter.type() == null ? "" : filter.type().name(), filter.supplierId(), filter.patientId(),
+                filter.types(), filter.supplierId(), filter.patientId(),
                 StockListParams.searchTerm(filter.q()), startOf(filter.from()), endOfDay(filter.to()), pageable);
         return new PageImpl<>(rowAssembler.assemble(entries.getContent()), pageable, entries.getTotalElements());
     }
 
     public Page<LedgerRow> listProductHistory(UUID facilityId, UUID productId, int page, int size) {
-        Page<LedgerRow> ledger = listLedger(new LedgerFilter(facilityId, productId, null, null, null, null, null,
-                null), page, size);
+        var filter = new LedgerFilter(facilityId, productId, LedgerTypeFilter.parse(null), null, null, null, null,
+                null);
+        Page<LedgerRow> ledger = listLedger(filter, page, size);
         return new PageImpl<>(withRunningBalances(ledger.getContent(), facilityId, productId), ledger.getPageable(),
                 ledger.getTotalElements());
+    }
+
+    // Counts per type under the same filters except the type filter, keyed by
+    // type name. Types with no entries are left out.
+    public Map<String, Long> typeCounts(LedgerFilter filter) {
+        return stockEntryRepository.countByType(filter.facilityId(), filter.productId(), filter.supplierId(),
+                        filter.patientId(), StockListParams.searchTerm(filter.q()), startOf(filter.from()),
+                        endOfDay(filter.to())).stream()
+                .collect(Collectors.toMap(typeCount -> typeCount.type().name(), LedgerTypeCount::count));
     }
 
     // Rows arrive newest first. The newest row's balance is the sum of every

@@ -7,6 +7,7 @@ import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,6 +22,13 @@ public interface ScheduleRegisterEntryRepository extends Repository<ScheduleRegi
     boolean existsByFacilityIdAndProductId(UUID facilityId, UUID productId);
 
     Optional<ScheduleRegisterEntry> findFirstByFacilityIdAndProductIdOrderBySeqDesc(UUID facilityId, UUID productId);
+
+    // The newest entry of each given product, in one query.
+    @Query("SELECT e FROM ScheduleRegisterEntry e WHERE e.facilityId = :facilityId "
+            + "AND e.productId IN :productIds AND e.seq = (SELECT MAX(latest.seq) FROM ScheduleRegisterEntry latest "
+            + "WHERE latest.facilityId = e.facilityId AND latest.productId = e.productId)")
+    List<ScheduleRegisterEntry> findLatestEntries(@Param("facilityId") UUID facilityId,
+                                                  @Param("productIds") Collection<UUID> productIds);
 
     Optional<ScheduleRegisterEntry> findFirstByFacilityIdAndProductIdAndEntryAtLessThanOrderBySeqDesc(
             UUID facilityId, UUID productId, Instant before);

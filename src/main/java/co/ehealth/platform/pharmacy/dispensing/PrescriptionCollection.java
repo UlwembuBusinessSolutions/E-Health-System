@@ -12,9 +12,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 // One hand-over event: who physically took the medicine and how the
-// pharmacist satisfied themselves they were allowed to. signatureRef and
-// proofDocumentRef are opaque references to wherever the captured
-// signature / authorisation scan lives — this record never stores the file.
+// pharmacist satisfied themselves they were allowed to. signatureDataUrl is the
+// collector's signature as a PNG data URL; proofDocumentRef is the reference
+// to the authorisation scan kept in CollectionProofStorage.
 @Entity
 @Table(name = "prescription_collections")
 public class PrescriptionCollection {
@@ -51,8 +51,8 @@ public class PrescriptionCollection {
     @Column(name = "proof_document_ref", updatable = false, length = 500)
     private String proofDocumentRef;
 
-    @Column(name = "signature_ref", updatable = false, length = 500)
-    private String signatureRef;
+    @Column(name = "signature_data_url", updatable = false, columnDefinition = "TEXT")
+    private String signatureDataUrl;
 
     @Column(name = "id_verified", nullable = false, updatable = false)
     private boolean idVerified;
@@ -73,8 +73,8 @@ public class PrescriptionCollection {
         this.prescriptionId = prescriptionId;
         this.collectedByPatient = command.collectedByPatient();
         this.idVerified = command.idVerified();
-        this.signatureRef = command.signature();
-        this.proofDocumentRef = command.proof();
+        this.signatureDataUrl = command.signature();
+        this.proofDocumentRef = command.proofRef();
         this.notes = command.notes();
         this.handedOverBy = handedOverBy;
         this.handedOverAt = handedOverAt;
@@ -91,5 +91,61 @@ public class PrescriptionCollection {
 
     public UUID getId() {
         return id;
+    }
+
+    public UUID getPrescriptionId() {
+        return prescriptionId;
+    }
+
+    public boolean isCollectedByPatient() {
+        return collectedByPatient;
+    }
+
+    public String getCollectorName() {
+        return collectorName;
+    }
+
+    public String getCollectorIdType() {
+        return collectorIdType;
+    }
+
+    public String getCollectorIdNumber() {
+        return collectorIdNumber;
+    }
+
+    public String getRelationship() {
+        return relationship;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public AuthorisationType getAuthorisationType() {
+        return authorisationType;
+    }
+
+    public String getProofDocumentRef() {
+        return proofDocumentRef;
+    }
+
+    public String getSignatureDataUrl() {
+        return signatureDataUrl;
+    }
+
+    public boolean isIdVerified() {
+        return idVerified;
+    }
+
+    public String getNotes() {
+        return notes;
+    }
+
+    public UUID getHandedOverBy() {
+        return handedOverBy;
+    }
+
+    public Instant getHandedOverAt() {
+        return handedOverAt;
     }
 }

@@ -36,7 +36,7 @@ class ScheduleRegisterWitnessTest {
 
     private ScheduleRegisterService.NewEntryCommand command(UUID witnessStaffId, String witnessPin) {
         return new ScheduleRegisterService.NewEntryCommand(FACILITY_ID, PRODUCT_ID, RegisterEntryKind.DESTROYED, 2,
-                null, null, null, null, null, "LOT-1", witnessStaffId, witnessPin);
+                null, null, null, null, null, "LOT-1", witnessStaffId, witnessPin, "Expired stock");
     }
 
     private void productIs(DrugSchedule schedule) {

@@ -49,19 +49,27 @@ public class StockCountQueryService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
     public StockCountResponse detail(UUID countId) {
+        return detail(countId, false);
+    }
+
+    // revealSystem lets the counter see the system quantity of the lines
+    // they have already counted on a blind draft (the "review before
+    // posting" step). Lines still to be counted stay hidden, otherwise the
+    // reveal would hand out the answers to the rest of the count.
+    @Transactional(readOnly = true)
+    public StockCountResponse detail(UUID countId, boolean revealSystem) {
         PharmacyStockCount count = lookup.requireCount(countId);
         List<PharmacyStockCountLine> lines = lineRepository.findByCountId(countId);
         Map<UUID, PharmacyProduct> products = productsOf(lines);
         Map<CountLotBalances.LotKey, Long> liveBalances = liveBalancesFor(count, lines);
 
         List<StockCountLineResponse> lineResponses = lines.stream()
-                .map(line -> lineResponse(count, line, products.get(line.getProductId()), liveBalances))
+                .map(line -> lineResponse(count, line, products.get(line.getProductId()), liveBalances, revealSystem))
                 .sorted(Comparator.comparing(StockCountLineResponse::productName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(StockCountLineResponse::lotNumber))
                 .toList();
-        return StockCountResponse.detailOf(count, lines, lineResponses);
+        return StockCountResponse.detailOf(count, lines, lineResponses, revealSystem);
     }
 
     @Transactional(readOnly = true)
@@ -74,9 +82,11 @@ public class StockCountQueryService {
 
     private StockCountLineResponse lineResponse(PharmacyStockCount count, PharmacyStockCountLine line,
                                                 PharmacyProduct product,
-                                                Map<CountLotBalances.LotKey, Long> liveBalances) {
+                                                Map<CountLotBalances.LotKey, Long> liveBalances,
+                                                boolean revealSystem) {
         Long liveBalance = liveBalances.get(new CountLotBalances.LotKey(line.getProductId(), line.getBatchId()));
-        return StockCountLineResponse.from(line, product, !count.hidesBaselines(), liveBalance);
+        boolean revealBaseline = !count.hidesBaselines() || (revealSystem && line.isCounted());
+        return StockCountLineResponse.from(line, product, revealBaseline, liveBalance);
     }
 
     private Map<UUID, PharmacyProduct> productsOf(List<PharmacyStockCountLine> lines) {

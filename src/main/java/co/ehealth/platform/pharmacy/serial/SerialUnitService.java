@@ -81,6 +81,17 @@ public class SerialUnitService {
         serialUnitRepository.saveAll(removedUnits);
     }
 
+    // The serials of a product still on the shelf, grouped by lot, from one
+    // query. Units without a lot are not listed.
+    @Transactional(readOnly = true)
+    public Map<UUID, List<String>> inStockSerialsByBatch(UUID productId) {
+        return serialUnitRepository.findByProductIdAndStatusOrderBySerialNumberAsc(productId, SerialUnitStatus.IN_STOCK)
+                .stream()
+                .filter(unit -> unit.getBatchId() != null)
+                .collect(Collectors.groupingBy(PharmacySerialUnit::getBatchId,
+                        Collectors.mapping(PharmacySerialUnit::getSerialNumber, Collectors.toList())));
+    }
+
     private static List<String> cleanAndRejectRepeats(Collection<String> serialNumbers) {
         Set<String> seen = new HashSet<>();
         return serialNumbers.stream().map(serial -> {

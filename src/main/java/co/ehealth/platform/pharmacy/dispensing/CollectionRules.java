@@ -9,7 +9,14 @@ import org.springframework.util.StringUtils;
 @Component
 public class CollectionRules {
 
+    static final String PNG_DATA_URL_PREFIX = "data:image/png;base64,";
+    static final int MAX_SIGNATURE_CHARACTERS = 200_000;
+
     public void validate(CollectCommand command, boolean containsScheduledMedicine) {
+        requireValidSignature(command.signature());
+        if (StringUtils.hasText(command.proofRef())) {
+            ProofReference.requireWellFormed(command.proofRef());
+        }
         if (command.collectedByPatient()) {
             return;
         }
@@ -27,6 +34,20 @@ public class CollectionRules {
         }
     }
 
+    // The signature pad produces a small PNG data URL. Anything else, or
+    // anything large, is refused rather than stored in the collection row.
+    private void requireValidSignature(String signature) {
+        if (!StringUtils.hasText(signature)) {
+            return;
+        }
+        if (!signature.startsWith(PNG_DATA_URL_PREFIX)) {
+            throw new DispensingValidationException("The signature must be a PNG image.");
+        }
+        if (signature.length() > MAX_SIGNATURE_CHARACTERS) {
+            throw new DispensingValidationException("The signature image is too large. Clear it and sign again.");
+        }
+    }
+
     private boolean hasCollectorDetails(CollectCommand.Collector collector) {
         return StringUtils.hasText(collector.name()) && StringUtils.hasText(collector.idType())
                 && StringUtils.hasText(collector.idNumber()) && StringUtils.hasText(collector.relationship());
@@ -40,7 +61,7 @@ public class CollectionRules {
             throw new DispensingValidationException("Schedule 5/6 medicine can only be collected by someone else "
                     + "with the patient's written authorisation. Verbal consent is not enough.");
         }
-        if (!StringUtils.hasText(command.proof())) {
+        if (!StringUtils.hasText(command.proofRef())) {
             throw new DispensingValidationException("Attach the patient's written authorisation before handing "
                     + "over Schedule 5/6 medicine.");
         }

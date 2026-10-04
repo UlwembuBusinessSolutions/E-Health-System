@@ -2,6 +2,7 @@ package co.ehealth.platform.pharmacy;
 
 import co.ehealth.platform.pharmacy.stock.PharmacyProductRepository;
 import co.ehealth.platform.pharmacy.stock.PharmacyReceiptRepository;
+import co.ehealth.platform.pharmacy.purchasing.PurchaseOrderRepository;
 import co.ehealth.platform.pharmacy.supplier.InvalidSupplierStateException;
 import co.ehealth.platform.pharmacy.supplier.PharmacySupplier;
 import co.ehealth.platform.pharmacy.supplier.PharmacySupplierProductRepository;
@@ -33,6 +34,7 @@ class SupplierMergeServiceTest {
     @Mock PharmacySupplierRepository supplierRepository;
     @Mock PharmacySupplierProductRepository supplierProductRepository;
     @Mock PharmacyReceiptRepository receiptRepository;
+    @Mock PurchaseOrderRepository purchaseOrderRepository;
     @Mock PharmacyProductRepository productRepository;
 
     private SupplierMergeService mergeService;
@@ -42,7 +44,7 @@ class SupplierMergeServiceTest {
     @BeforeEach
     void setUp() {
         mergeService = new SupplierMergeService(supplierService, supplierRepository, supplierProductRepository,
-                receiptRepository, productRepository, PharmacyTestData.CLOCK);
+                receiptRepository, purchaseOrderRepository, productRepository, PharmacyTestData.CLOCK);
         source = PharmacyTestData.supplier("Cipla Medpro");
         target = PharmacyTestData.supplier("Cipla Medpro (Pty) Ltd");
     }
@@ -53,14 +55,16 @@ class SupplierMergeServiceTest {
     }
 
     @Test
-    void repointsReceiptsProductLinksAndPreferredSupplierThenArchivesTheSource() {
+    void repointsReceiptsOrdersProductLinksAndPreferredSupplierThenArchivesTheSource() {
         bothSuppliersExist();
 
         PharmacySupplier survivor = mergeService.merge(source.getId(), target.getId());
 
         assertEquals(target, survivor);
-        InOrder inOrder = inOrder(receiptRepository, supplierProductRepository, productRepository, supplierRepository);
+        InOrder inOrder = inOrder(receiptRepository, purchaseOrderRepository, supplierProductRepository,
+                productRepository, supplierRepository);
         inOrder.verify(receiptRepository).repointSupplier(source.getId(), target.getId());
+        inOrder.verify(purchaseOrderRepository).repointSupplier(source.getId(), target.getId());
         inOrder.verify(supplierProductRepository).copyLinks(source.getId(), target.getId());
         inOrder.verify(supplierProductRepository).deleteAllForSupplier(source.getId());
         inOrder.verify(productRepository).repointPreferredSupplier(source.getId(), target.getId());

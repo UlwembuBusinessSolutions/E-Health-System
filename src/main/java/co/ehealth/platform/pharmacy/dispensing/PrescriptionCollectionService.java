@@ -91,7 +91,7 @@ public class PrescriptionCollectionService {
         }
 
         List<HandedOverItem> handedOver = handOver.stream()
-                .map(item -> dispenseInFull(prescription, item, actor)).toList();
+                .map(item -> dispenseInFull(prescription, item, actor, command.witness())).toList();
         UUID collectionId = collectionRepository.save(
                 new PrescriptionCollection(prescriptionId, command, actor.userId(), clock.instant())).getId();
         rollup.refresh(prescription);
@@ -129,9 +129,10 @@ public class PrescriptionCollectionService {
         return !scheduleLookup.schedulesFor(productIds).isEmpty();
     }
 
-    private HandedOverItem dispenseInFull(Prescription prescription, PrescriptionItem item, DispensingActor actor) {
+    private HandedOverItem dispenseInFull(Prescription prescription, PrescriptionItem item, DispensingActor actor,
+                                          WitnessCredentials witness) {
         DispenseOutcome outcome = allocationService.dispense(prescription, item.getId(),
-                DispenseRequest.remaining(), actor);
+                DispenseRequest.remaining(witness), actor);
         return new HandedOverItem(item.getId(), item.getDrugName(), outcome.dispensedNow(), outcome.draws());
     }
 }

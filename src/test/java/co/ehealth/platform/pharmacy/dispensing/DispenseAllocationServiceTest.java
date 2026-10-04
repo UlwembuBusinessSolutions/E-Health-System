@@ -1,6 +1,7 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
 import co.ehealth.platform.pharmacy.stock.DrugSchedule;
+import co.ehealth.platform.pharmacy.register.InvalidWitnessException;
 import static co.ehealth.platform.pharmacy.dispensing.DispensingTestData.FACILITY_ID;
 import static co.ehealth.platform.pharmacy.dispensing.DispensingTestData.PRODUCT_ID;
 import static co.ehealth.platform.pharmacy.dispensing.DispensingTestData.item;
@@ -14,6 +15,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -65,6 +67,7 @@ class DispenseAllocationServiceTest {
     @Mock private PatientLedgerPoster ledgerPoster;
     @Mock private ProductScheduleLookup scheduleLookup;
     @Mock private ScheduleRegisterRecorder registerRecorder;
+    @Mock private WitnessConfirmation witnessConfirmation;
     @Mock private PartyDirectory partyDirectory;
     @Mock private AuditLogService auditLogService;
 
@@ -79,7 +82,7 @@ class DispenseAllocationServiceTest {
         Clock clock = Clock.fixed(Instant.parse("2026-10-04T10:00:00Z"), ZoneOffset.UTC);
         service = new DispenseAllocationService(itemRepository, itemLock, dispensingRecordRepository,
                 allocationRepository, lotReader, new FefoLotSelector(), substitutionLookup, ledgerPoster,
-                scheduleLookup, registerRecorder, partyDirectory, auditLogService, clock);
+                scheduleLookup, registerRecorder, witnessConfirmation, partyDirectory, auditLogService, clock);
 
         prescription = prescription();
         item = item(prescription, 20, PRODUCT_ID);
@@ -96,7 +99,7 @@ class DispenseAllocationServiceTest {
 
     @Test
     void partialDispenseTakesOnlyTheRequestedQuantityAndLeavesTheRestPending() {
-        DispenseOutcome outcome = service.dispense(prescription, item.getId(), new DispenseRequest(8, null), actor);
+        DispenseOutcome outcome = service.dispense(prescription, item.getId(), new DispenseRequest(8, null, WitnessCredentials.NONE), actor);
 
         assertEquals(8, outcome.dispensedNow());
         assertEquals(8, item.getDispensedQuantity());
@@ -107,7 +110,7 @@ class DispenseAllocationServiceTest {
 
     @Test
     void dispensingWithoutAQuantityTakesEverythingRemainingAndCompletesTheItem() {
-        service.dispense(prescription, item.getId(), new DispenseRequest(8, null), actor);
+        service.dispense(prescription, item.getId(), new DispenseRequest(8, null, WitnessCredentials.NONE), actor);
 
         DispenseOutcome outcome = service.dispense(prescription, item.getId(), DispenseRequest.remaining(), actor);
 
@@ -119,7 +122,7 @@ class DispenseAllocationServiceTest {
 
     @Test
     void eachAttemptGetsItsOwnIdempotencyKeyDerivedFromTheAlreadyDispensedQuantity() {
-        service.dispense(prescription, item.getId(), new DispenseRequest(8, null), actor);
+        service.dispense(prescription, item.getId(), new DispenseRequest(8, null, WitnessCredentials.NONE), actor);
         service.dispense(prescription, item.getId(), DispenseRequest.remaining(), actor);
 
         ArgumentCaptor<String> keys = ArgumentCaptor.forClass(String.class);
@@ -131,7 +134,7 @@ class DispenseAllocationServiceTest {
 
     @Test
     void deductsTheDispensedQuantityFromTheChosenLotAsANegativeLedgerEntry() {
-        service.dispense(prescription, item.getId(), new DispenseRequest(8, null), actor);
+        service.dispense(prescription, item.getId(), new DispenseRequest(8, null, WitnessCredentials.NONE), actor);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<EntryRequest>> entries = ArgumentCaptor.forClass(List.class);
@@ -144,10 +147,10 @@ class DispenseAllocationServiceTest {
 
     @Test
     void refusesAQuantityLargerThanWhatIsStillToDispense() {
-        service.dispense(prescription, item.getId(), new DispenseRequest(8, null), actor);
+        service.dispense(prescription, item.getId(), new DispenseRequest(8, null, WitnessCredentials.NONE), actor);
 
         assertThrows(DispensingValidationException.class,
-                () -> service.dispense(prescription, item.getId(), new DispenseRequest(13, null), actor));
+                () -> service.dispense(prescription, item.getId(), new DispenseRequest(13, null, WitnessCredentials.NONE), actor));
         verify(ledgerPoster, org.mockito.Mockito.times(1)).post(any(), any(), any(), anyString(), anyString(),
                 anyList());
     }
@@ -155,7 +158,7 @@ class DispenseAllocationServiceTest {
     @Test
     void refusesAZeroQuantity() {
         assertThrows(DispensingValidationException.class,
-                () -> service.dispense(prescription, item.getId(), new DispenseRequest(0, null), actor));
+                () -> service.dispense(prescription, item.getId(), new DispenseRequest(0, null, WitnessCredentials.NONE), actor));
     }
 
     @Test
@@ -177,23 +180,85 @@ class DispenseAllocationServiceTest {
 
     @Test
     void registersEveryLotOfAScheduledMedicineInTheSameTransaction() {
-        when(scheduleLookup.schedulesFor(any())).thenReturn(Map.of(PRODUCT_ID, DrugSchedule.S6));
-        Patient patient = mock(Patient.class);
-        when(partyDirectory.patients(any())).thenReturn(Map.of(prescription.getPatientId(), patient));
-        when(partyDirectory.users(any())).thenReturn(Map.of(prescription.getPrescriberId(), mock(User.class)));
+        scheduledProductWithKnownParties(DrugSchedule.S5);
 
-        service.dispense(prescription, item.getId(), new DispenseRequest(5, null), actor);
+        service.dispense(prescription, item.getId(), new DispenseRequest(5, null, WitnessCredentials.NONE), actor);
 
         verify(registerRecorder).recordDispense(eq(FACILITY_ID), eq(PRODUCT_ID), eq(prescription.getSerialNumber()),
                 any(), eq(prescription.getPatientId().toString()), any(), any(), eq(5L), eq("LOT-A"),
-                eq(actor.userId()), any());
+                eq(actor.userId()), any(), isNull());
+    }
+
+    @Test
+    void scheduleSixWithoutAWitnessIsRefusedBeforeAnyStockMoves() {
+        scheduledProductWithKnownParties(DrugSchedule.S6);
+
+        DispensingValidationException refusal = assertThrows(DispensingValidationException.class, () -> service
+                .dispense(prescription, item.getId(), new DispenseRequest(5, null, WitnessCredentials.NONE), actor));
+
+        assertEquals("A second pharmacist must witness Schedule 6 medicine.", refusal.getMessage());
+        verify(ledgerPoster, never()).post(any(), any(), any(), anyString(), anyString(), anyList());
+        verify(registerRecorder, never()).recordDispense(any(), any(), any(), any(), any(), any(), any(), anyLong(),
+                any(), any(), any(), any());
+    }
+
+    @Test
+    void scheduleSixWithAWitnessWhoseNameButNotPasswordWasGivenIsRefused() {
+        scheduledProductWithKnownParties(DrugSchedule.S6);
+        var passwordMissing = new WitnessCredentials(UUID.randomUUID(), " ");
+
+        assertThrows(DispensingValidationException.class, () -> service
+                .dispense(prescription, item.getId(), new DispenseRequest(5, null, passwordMissing), actor));
+
+        verify(witnessConfirmation, never()).confirm(any(), any());
+    }
+
+    @Test
+    void confirmedWitnessIsPassedToTheRegisterEntry() {
+        scheduledProductWithKnownParties(DrugSchedule.S6);
+        var witness = new WitnessCredentials(UUID.randomUUID(), "witness-password");
+        when(witnessConfirmation.confirm(actor.userId(), witness)).thenReturn(witness.staffId());
+
+        service.dispense(prescription, item.getId(), new DispenseRequest(5, null, witness), actor);
+
+        verify(registerRecorder).recordDispense(any(), eq(PRODUCT_ID), any(), any(), any(), any(), any(), eq(5L),
+                eq("LOT-A"), eq(actor.userId()), any(), eq(witness.staffId()));
+    }
+
+    @Test
+    void witnessWhoFailsConfirmationStopsTheDispense() {
+        scheduledProductWithKnownParties(DrugSchedule.S6);
+        var witness = new WitnessCredentials(UUID.randomUUID(), "wrong-password");
+        when(witnessConfirmation.confirm(actor.userId(), witness))
+                .thenThrow(new InvalidWitnessException("The witness could not be confirmed."));
+
+        assertThrows(InvalidWitnessException.class,
+                () -> service.dispense(prescription, item.getId(), new DispenseRequest(5, null, witness), actor));
+
+        verify(ledgerPoster, never()).post(any(), any(), any(), anyString(), anyString(), anyList());
+    }
+
+    @Test
+    void scheduleFiveNeedsNoWitnessAndNeverAsksForOne() {
+        scheduledProductWithKnownParties(DrugSchedule.S5);
+
+        service.dispense(prescription, item.getId(), new DispenseRequest(5, null, WitnessCredentials.NONE), actor);
+
+        verify(witnessConfirmation, never()).confirm(any(), any());
+    }
+
+    private void scheduledProductWithKnownParties(DrugSchedule schedule) {
+        when(scheduleLookup.schedulesFor(any())).thenReturn(Map.of(PRODUCT_ID, schedule));
+        Patient patient = mock(Patient.class);
+        when(partyDirectory.patients(any())).thenReturn(Map.of(prescription.getPatientId(), patient));
+        when(partyDirectory.users(any())).thenReturn(Map.of(prescription.getPrescriberId(), mock(User.class)));
     }
 
     @Test
     void ordinaryMedicinesNeverTouchTheScheduleRegister() {
-        service.dispense(prescription, item.getId(), new DispenseRequest(5, null), actor);
+        service.dispense(prescription, item.getId(), new DispenseRequest(5, null, WitnessCredentials.NONE), actor);
 
-        verify(registerRecorder, never()).recordDispense(any(), any(), any(), any(), any(), any(), any(), anyLong(), any(), any(), any());
+        verify(registerRecorder, never()).recordDispense(any(), any(), any(), any(), any(), any(), any(), anyLong(), any(), any(), any(), any());
     }
 
     @Test

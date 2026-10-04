@@ -15,11 +15,11 @@ import java.util.UUID;
 public interface ScheduleRegisterRecorder {
 
     // Same parameter list as the register's own recordDispense (agent B4), so
-    // the integrator can connect them directly. patientIdRef is the patient's
-    // id as text.
+    // the integrator can connect them directly. witnessStaffId is the confirmed
+    // Schedule 6 witness, or null. patientIdRef is the patient's id as text.
     void recordDispense(UUID facilityId, UUID productId, String rxSerial, String patientName, String patientIdRef,
                         String prescriberName, String prescriberRegNo, long quantity, String lotNumber,
-                        UUID dispensedBy, UUID ledgerTransactionId);
+                        UUID dispensedBy, UUID ledgerTransactionId, UUID witnessStaffId);
 
     void recordReturn(ReturnEntry entry);
 

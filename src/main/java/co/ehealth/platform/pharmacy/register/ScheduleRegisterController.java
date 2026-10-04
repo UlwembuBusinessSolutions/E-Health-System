@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 // Scheduled medicines register — contract section 3 (B4). PHRM:VIEW reads,
@@ -33,16 +35,22 @@ public class ScheduleRegisterController {
     private final ScheduleRegisterService registerService;
     private final ScheduleRegisterQueryService queryService;
     private final ScheduleDayCloseService dayCloseService;
+    private final RegisterProductListService productListService;
+    private final RegisterWitnessDirectory witnessDirectory;
     private final FacilityBusinessDay businessDay;
     private final PermissionService permissionService;
     private final UserRepository userRepository;
 
     public ScheduleRegisterController(ScheduleRegisterService registerService,
                                       ScheduleRegisterQueryService queryService,
+                                      RegisterProductListService productListService,
+                                      RegisterWitnessDirectory witnessDirectory,
                                       ScheduleDayCloseService dayCloseService, FacilityBusinessDay businessDay,
                                       PermissionService permissionService, UserRepository userRepository) {
         this.registerService = registerService;
         this.queryService = queryService;
+        this.productListService = productListService;
+        this.witnessDirectory = witnessDirectory;
         this.dayCloseService = dayCloseService;
         this.businessDay = businessDay;
         this.permissionService = permissionService;
@@ -58,6 +66,20 @@ public class ScheduleRegisterController {
         return queryService.list(facilityId, productId, page, size);
     }
 
+    @GetMapping("/products")
+    public ProductsResponse products(@RequestParam UUID facilityId) {
+        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        return new ProductsResponse(productListService.productsAt(facilityId));
+    }
+
+    // Excludes the signed-in user: a witness has to be a second person.
+    @GetMapping("/witnesses")
+    public WitnessesResponse witnesses(@RequestParam UUID facilityId,
+                                       @AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        return new WitnessesResponse(witnessDirectory.witnessesFor(facilityId, principal.userId()));
+    }
+
     @PostMapping("/entries")
     public ResponseEntity<RegisterEntryResponse> addEntry(@Valid @RequestBody NewEntryRequest request,
                                                           @AuthenticationPrincipal AuthenticatedPrincipal principal) {
@@ -66,7 +88,7 @@ public class ScheduleRegisterController {
         var command = new ScheduleRegisterService.NewEntryCommand(request.facilityId(), request.productId(),
                 request.kind(), request.quantity(), request.rxSerial(), request.patientName(),
                 request.patientIdRef(), request.prescriber(), request.prescriberRegNo(), request.lotNumber(),
-                request.witnessStaffId(), request.witnessPin());
+                request.witnessStaffId(), request.witnessPin(), request.reason());
         ScheduleRegisterEntry entry = registerService.record(command, actor.getId(), nameOf(actor));
         return ResponseEntity.status(HttpStatus.CREATED).body(queryService.entry(entry));
     }
@@ -104,7 +126,14 @@ public class ScheduleRegisterController {
     public record NewEntryRequest(@NotNull UUID facilityId, @NotNull UUID productId, @NotNull RegisterEntryKind kind,
                                   @Positive long quantity, String rxSerial, String patientName,
                                   String patientIdRef, String prescriber, String prescriberRegNo,
-                                  @NotBlank String lotNumber, UUID witnessStaffId, String witnessPin) {
+                                  @NotBlank String lotNumber, UUID witnessStaffId, String witnessPin,
+                                  @Size(max = 200) String reason) {
+    }
+
+    public record ProductsResponse(List<RegisterProductListService.RegisterProduct> items) {
+    }
+
+    public record WitnessesResponse(List<RegisterWitnessDirectory.WitnessOption> items) {
     }
 
     public record CloseDayRequest(@NotNull UUID facilityId, @NotNull UUID productId, LocalDate date,

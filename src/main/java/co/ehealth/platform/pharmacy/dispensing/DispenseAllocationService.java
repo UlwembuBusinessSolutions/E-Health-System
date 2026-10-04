@@ -9,6 +9,7 @@ import co.ehealth.platform.pharmacy.PrescriptionAlreadyDispensedException;
 import co.ehealth.platform.pharmacy.PrescriptionItem;
 import co.ehealth.platform.pharmacy.PrescriptionItemRepository;
 import co.ehealth.platform.pharmacy.PrescriptionStatus;
+import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import co.ehealth.platform.pharmacy.stock.PharmacyStockLedgerService.EntryRequest;
 import co.ehealth.platform.pharmacy.stock.PharmacyStockTransaction;
 import co.ehealth.platform.pharmacy.stock.StockBucket;
@@ -40,6 +41,7 @@ public class DispenseAllocationService {
     private final PatientLedgerPoster ledgerPoster;
     private final ProductScheduleLookup scheduleLookup;
     private final ScheduleRegisterRecorder registerRecorder;
+    private final WitnessConfirmation witnessConfirmation;
     private final PartyDirectory partyDirectory;
     private final AuditLogService auditLogService;
     private final Clock clock;
@@ -49,7 +51,8 @@ public class DispenseAllocationService {
                                       DispenseAllocationRepository allocationRepository, StockLotReader lotReader,
                                       FefoLotSelector lotSelector, SubstitutionLookup substitutionLookup,
                                       PatientLedgerPoster ledgerPoster, ProductScheduleLookup scheduleLookup,
-                                      ScheduleRegisterRecorder registerRecorder, PartyDirectory partyDirectory,
+                                      ScheduleRegisterRecorder registerRecorder,
+                                      WitnessConfirmation witnessConfirmation, PartyDirectory partyDirectory,
                                       AuditLogService auditLogService, Clock clock) {
         this.itemRepository = itemRepository;
         this.itemLock = itemLock;
@@ -61,16 +64,22 @@ public class DispenseAllocationService {
         this.ledgerPoster = ledgerPoster;
         this.scheduleLookup = scheduleLookup;
         this.registerRecorder = registerRecorder;
+        this.witnessConfirmation = witnessConfirmation;
         this.partyDirectory = partyDirectory;
         this.auditLogService = auditLogService;
         this.clock = clock;
     }
 
     // quantity null means "everything still remaining"; batchId null means
-    // "first-expiring-first, never an expired lot".
-    public record DispenseRequest(Integer quantity, UUID batchId) {
+    // "first-expiring-first, never an expired lot". witness is only read when
+    // the product is Schedule 6.
+    public record DispenseRequest(Integer quantity, UUID batchId, WitnessCredentials witness) {
         public static DispenseRequest remaining() {
-            return new DispenseRequest(null, null);
+            return remaining(WitnessCredentials.NONE);
+        }
+
+        public static DispenseRequest remaining(WitnessCredentials witness) {
+            return new DispenseRequest(null, null, witness);
         }
     }
 
@@ -109,6 +118,8 @@ public class DispenseAllocationService {
         }
         UUID productId = requireProduct(item);
         int quantity = resolveQuantity(item, request.quantity());
+        DrugSchedule schedule = scheduleLookup.schedulesFor(List.of(productId)).get(productId);
+        UUID witnessStaffId = confirmedWitness(schedule, request.witness(), actor);
 
         StockPicture shelf = lotReader.shelf(prescription.getFacilityId(), productId);
         List<LotDraw> draws = lotSelector.allocate(shelf, quantity, request.batchId());
@@ -120,7 +131,9 @@ public class DispenseAllocationService {
         if (item.getStatus() == PrescriptionStatus.DISPENSED) {
             dispensingRecordRepository.save(new DispensingRecord(item.getId(), actor.userId(), clock.instant()));
         }
-        recordScheduledDispense(prescription, productId, draws, transaction, actor);
+        if (schedule != null) {
+            recordScheduledDispense(prescription, productId, draws, transaction, actor, witnessStaffId);
+        }
         auditLogService.append(actor.userId(), prescription.getFacilityId(), "PRESCRIPTION_ITEM_DISPENSED",
                 "PrescriptionItem", item.getId().toString(), null,
                 "quantity=" + quantity + ";remaining=" + item.getRemainingQuantity());
@@ -170,14 +183,26 @@ public class DispenseAllocationService {
                 .toList());
     }
 
-    // Schedule 5/6 medicines get a register entry per lot, inside this same
-    // transaction. Skipped entirely for ordinary products so they never pay
-    // for the patient/prescriber lookups.
-    private void recordScheduledDispense(Prescription prescription, UUID productId, List<LotDraw> draws,
-                                          PharmacyStockTransaction transaction, DispensingActor actor) {
-        if (!scheduleLookup.schedulesFor(List.of(productId)).containsKey(productId)) {
-            return;
+    // A Schedule 6 medicine can only leave the pharmacy with a second
+    // pharmacist confirming it, checked before any stock moves. Other
+    // schedules (and unscheduled products) need no witness, and any witness
+    // supplied for them is ignored.
+    private UUID confirmedWitness(DrugSchedule schedule, WitnessCredentials credentials, DispensingActor actor) {
+        if (schedule == null || !schedule.requiresWitness()) {
+            return null;
         }
+        if (!credentials.isComplete()) {
+            throw new DispensingValidationException("A second pharmacist must witness Schedule 6 medicine.");
+        }
+        return witnessConfirmation.confirm(actor.userId(), credentials);
+    }
+
+    // Schedule 5/6 medicines get a register entry per lot, inside this same
+    // transaction, so ordinary products never pay for the patient/prescriber
+    // lookups.
+    private void recordScheduledDispense(Prescription prescription, UUID productId, List<LotDraw> draws,
+                                          PharmacyStockTransaction transaction, DispensingActor actor,
+                                          UUID witnessStaffId) {
         String patientName = PartyDirectory.fullName(partyDirectory.patients(List.of(prescription.getPatientId()))
                 .get(prescription.getPatientId()));
         User prescriber = partyDirectory.users(List.of(prescription.getPrescriberId()))
@@ -187,7 +212,7 @@ public class DispenseAllocationService {
                     prescription.getSerialNumber(), patientName, prescription.getPatientId().toString(),
                     prescriber == null ? null : PartyDirectory.fullName(prescriber),
                     prescriber == null ? null : PartyDirectory.registrationNumber(prescriber), draw.quantity(),
-                    draw.lot().lotNumber(), actor.userId(), transaction.getId());
+                    draw.lot().lotNumber(), actor.userId(), transaction.getId(), witnessStaffId);
         }
     }
 }

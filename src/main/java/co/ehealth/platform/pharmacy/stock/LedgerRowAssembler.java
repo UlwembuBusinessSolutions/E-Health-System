@@ -15,8 +15,8 @@ import java.util.stream.Collectors;
 
 // Turns a page of bare ledger entries into display rows. Everything a row
 // needs is fetched with one batched IN query per table (accounts, products,
-// lots, transactions, patients, reversals, suppliers) — six round trips for
-// the page, however many rows it holds, instead of six per row.
+// lots, transactions, patients, reversals, suppliers, outflows) — seven round trips for
+// the page, however many rows it holds, instead of seven per row.
 @Component
 class LedgerRowAssembler {
 
@@ -24,17 +24,20 @@ class LedgerRowAssembler {
     private final PharmacyProductRepository productRepository;
     private final PharmacyBatchRepository batchRepository;
     private final PharmacyStockTransactionRepository stockTransactionRepository;
+    private final PharmacyStockEntryRepository stockEntryRepository;
     private final PatientRepository patientRepository;
     private final SupplierNameLookup supplierNameLookup;
 
     LedgerRowAssembler(PharmacyStockAccountRepository stockAccountRepository,
                        PharmacyProductRepository productRepository, PharmacyBatchRepository batchRepository,
                        PharmacyStockTransactionRepository stockTransactionRepository,
+                       PharmacyStockEntryRepository stockEntryRepository,
                        PatientRepository patientRepository, SupplierNameLookup supplierNameLookup) {
         this.stockAccountRepository = stockAccountRepository;
         this.productRepository = productRepository;
         this.batchRepository = batchRepository;
         this.stockTransactionRepository = stockTransactionRepository;
+        this.stockEntryRepository = stockEntryRepository;
         this.patientRepository = patientRepository;
         this.supplierNameLookup = supplierNameLookup;
     }
@@ -58,6 +61,7 @@ class LedgerRowAssembler {
                 .findByReversalOfTransactionIdIn(transactions.keySet()).stream()
                 .collect(Collectors.toMap(PharmacyStockTransaction::getReversalOfTransactionId,
                         PharmacyStockTransaction::getId));
+        Map<UUID, Long> latestOutflowSeqByAccount = latestOutflowSeqByAccount(accounts.keySet());
 
         return entries.stream().map(entry -> {
             PharmacyStockAccount account = accounts.get(entry.getStockAccountId());
@@ -65,8 +69,24 @@ class LedgerRowAssembler {
             return new LedgerRow(entry, account, products.get(account.getProductId()), transaction,
                     batches.get(account.getBatchId()), lookup(patientNames, transaction.getPatientId()),
                     lookup(supplierNames, transaction.getSupplierId()), reversalByOriginal.get(transaction.getId()),
-                    null);
+                    isStockUsed(entry, transaction, account, latestOutflowSeqByAccount), null);
         }).toList();
+    }
+
+    // The same rule that blocks a reversal, so the Ledger can disable the
+    // Reverse action up front instead of letting the pharmacist hit the error.
+    private static boolean isStockUsed(PharmacyStockEntry entry, PharmacyStockTransaction transaction,
+                                       PharmacyStockAccount account, Map<UUID, Long> latestOutflowSeqByAccount) {
+        if (!ReversalRules.REVERSIBLE_TYPES.contains(transaction.getType())) {
+            return false;
+        }
+        boolean outflowSince = latestOutflowSeqByAccount.getOrDefault(account.getId(), Long.MIN_VALUE) > entry.getSeq();
+        return ReversalRules.isStockUsed(entry.getQuantityDelta(), account.getQuantity(), outflowSince);
+    }
+
+    private Map<UUID, Long> latestOutflowSeqByAccount(Set<UUID> accountIds) {
+        return stockEntryRepository.findLatestOutflowByAccount(accountIds, ReversalRules.STOCK_OUTFLOW_TYPES).stream()
+                .collect(Collectors.toMap(AccountOutflow::accountId, AccountOutflow::latestSeq));
     }
 
     private Map<UUID, String> patientNames(Set<UUID> patientIds) {

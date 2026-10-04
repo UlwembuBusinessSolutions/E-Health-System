@@ -18,15 +18,18 @@ public class PharmacyStockQueryService {
     private final PharmacyProductRepository productRepository;
     private final PharmacyBatchRepository batchRepository;
     private final PharmacyFacilityProductRepository facilityProductRepository;
+    private final SerialUnitGateway serialUnitGateway;
 
     public PharmacyStockQueryService(PharmacyStockAccountRepository stockAccountRepository,
                                       PharmacyProductRepository productRepository,
                                       PharmacyBatchRepository batchRepository,
-                                      PharmacyFacilityProductRepository facilityProductRepository) {
+                                      PharmacyFacilityProductRepository facilityProductRepository,
+                                      SerialUnitGateway serialUnitGateway) {
         this.stockAccountRepository = stockAccountRepository;
         this.productRepository = productRepository;
         this.batchRepository = batchRepository;
         this.facilityProductRepository = facilityProductRepository;
+        this.serialUnitGateway = serialUnitGateway;
     }
 
     // One row per product with positive stock somewhere at this facility —
@@ -56,6 +59,11 @@ public class PharmacyStockQueryService {
 
     public List<PharmacyBatch> listBatches(UUID productId) {
         return batchRepository.findByProductIdOrderByExpiryDateAsc(productId);
+    }
+
+    // Serials on the shelf per lot, for the batch list of a serial-tracked product.
+    public Map<UUID, List<String>> inStockSerialsByBatch(UUID productId) {
+        return serialUnitGateway.inStockSerialsByBatch(productId);
     }
 
     public List<PharmacyStockAccount> listAccountsForProduct(UUID productId) {

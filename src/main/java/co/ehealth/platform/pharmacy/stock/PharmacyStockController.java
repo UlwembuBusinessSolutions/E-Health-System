@@ -53,9 +53,11 @@ public class PharmacyStockController {
         Map<UUID, Long> quantityByBatchId = stockQueryService.listAccountsForProduct(id).stream()
                 .collect(java.util.stream.Collectors.groupingBy(PharmacyStockAccount::getBatchId,
                         java.util.stream.Collectors.summingLong(PharmacyStockAccount::getQuantity)));
+        Map<UUID, List<String>> serialsByBatchId = stockQueryService.inStockSerialsByBatch(id);
         List<BatchRow> items = stockQueryService.listBatches(id).stream()
                 .filter(batch -> quantityByBatchId.getOrDefault(batch.getId(), 0L) > 0)
-                .map(batch -> BatchRow.from(batch, quantityByBatchId.get(batch.getId())))
+                .map(batch -> BatchRow.from(batch, quantityByBatchId.get(batch.getId()),
+                        serialsByBatchId.getOrDefault(batch.getId(), List.of())))
                 .toList();
         return ResponseEntity.ok(Map.of("items", items));
     }
@@ -120,11 +122,11 @@ public class PharmacyStockController {
     }
 
     public record BatchRow(UUID batchId, String lotNumber, String manufacturer, String expiryDate,
-                            ExpiryPrecision expiryPrecision, long quantity) {
-        static BatchRow from(PharmacyBatch batch, long quantity) {
+                            ExpiryPrecision expiryPrecision, long quantity, List<String> serialNumbers) {
+        static BatchRow from(PharmacyBatch batch, long quantity, List<String> serialNumbers) {
             return new BatchRow(batch.getId(), batch.getLotNumber(), batch.getManufacturer(),
                     batch.getExpiryDate() == null ? null : batch.getExpiryDate().toString(),
-                    batch.getExpiryPrecision(), quantity);
+                    batch.getExpiryPrecision(), quantity, serialNumbers);
         }
     }
 }

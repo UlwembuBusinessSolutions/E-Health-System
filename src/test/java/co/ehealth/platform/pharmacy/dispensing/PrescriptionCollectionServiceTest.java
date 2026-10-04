@@ -128,7 +128,8 @@ class PrescriptionCollectionServiceTest {
     @Test
     void namedItemsRestrictTheHandOver() {
         stubDispense(inStock);
-        CollectCommand command = new CollectCommand(List.of(inStock.getId()), true, null, false, null, null, null);
+        CollectCommand command = new CollectCommand(List.of(inStock.getId()), true, null, false, null, null, null,
+                WitnessCredentials.NONE);
 
         CollectOutcome outcome = service.collect(prescription.getId(), command, actor.userId());
 
@@ -141,7 +142,8 @@ class PrescriptionCollectionServiceTest {
         when(scheduleLookup.schedulesFor(any())).thenReturn(Map.of(productId, DrugSchedule.S5));
         var collector = new CollectCommand.Collector("Sipho", "SA_ID", "8001015009087", "Brother", null,
                 AuthorisationType.VERBAL);
-        CollectCommand command = new CollectCommand(null, false, collector, true, null, "proof", null);
+        CollectCommand command = new CollectCommand(null, false, collector, true, null, UUID.randomUUID().toString(), null,
+                WitnessCredentials.NONE);
 
         assertThrows(DispensingValidationException.class,
                 () -> service.collect(prescription.getId(), command, actor.userId()));

@@ -3,6 +3,7 @@ package co.ehealth.platform.pharmacy.stock;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 // Default until the serial table exists: no product is serial-tracked yet, so
@@ -33,5 +34,10 @@ class UnwiredSerialUnitGateway implements SerialUnitGateway {
 
     @Override
     public void reverseUnits(UUID originalTransactionId, UUID reversalTransactionId) {
+    }
+
+    @Override
+    public Map<UUID, List<String>> inStockSerialsByBatch(UUID productId) {
+        return Map.of();
     }
 }

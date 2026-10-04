@@ -14,6 +14,8 @@ public interface PharmacySupplierProductRepository
 
     List<PharmacySupplierProduct> findBySupplierId(UUID supplierId);
 
+    List<PharmacySupplierProduct> findBySupplierIdIn(Collection<UUID> supplierIds);
+
     record ProductCount(UUID supplierId, long productCount) {
     }
 

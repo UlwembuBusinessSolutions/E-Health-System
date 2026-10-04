@@ -33,7 +33,7 @@ public class DispensingDefaultsConfig {
             public void recordDispense(UUID facilityId, UUID productId, String rxSerial, String patientName,
                                        String patientIdRef, String prescriberName, String prescriberRegNo,
                                        long quantity, String lotNumber, UUID dispensedBy,
-                                       UUID ledgerTransactionId) {
+                                       UUID ledgerTransactionId, UUID witnessStaffId) {
                 // intentionally empty — see class comment
             }
 

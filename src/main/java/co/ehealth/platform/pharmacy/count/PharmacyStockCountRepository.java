@@ -16,6 +16,13 @@ public interface PharmacyStockCountRepository extends JpaRepository<PharmacyStoc
 
     List<PharmacyStockCount> findByFacilityIdAndStatusOrderByStartedAtDesc(UUID facilityId, CountStatus status);
 
+    // The latest posted time per area label, in one grouped query.
+    @Query("SELECT new co.ehealth.platform.pharmacy.count.AreaLastCounted(c.scopeLabel, MAX(c.postedAt)) "
+            + "FROM PharmacyStockCount c WHERE c.facilityId = :facilityId "
+            + "AND c.status = co.ehealth.platform.pharmacy.count.CountStatus.POSTED "
+            + "AND c.scope = co.ehealth.platform.pharmacy.count.CountScope.AREA GROUP BY c.scopeLabel")
+    List<AreaLastCounted> latestPostedAreaCounts(@Param("facilityId") UUID facilityId);
+
     // Posting takes this lock so two simultaneous "post" clicks queue up:
     // the second one then sees POSTED and returns without posting again.
     @Lock(LockModeType.PESSIMISTIC_WRITE)

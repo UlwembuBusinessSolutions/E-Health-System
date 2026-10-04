@@ -4,8 +4,6 @@ import co.ehealth.platform.pharmacy.stock.PharmacyFacilityProduct;
 import co.ehealth.platform.pharmacy.stock.PharmacyFacilityProductRepository;
 import co.ehealth.platform.pharmacy.stock.PharmacyProduct;
 import co.ehealth.platform.pharmacy.stock.PharmacyProductRepository;
-import co.ehealth.platform.pharmacy.stock.PharmacyStockAccount;
-import co.ehealth.platform.pharmacy.stock.PharmacyStockAccountRepository;
 import co.ehealth.platform.pharmacy.supplier.PharmacySupplier;
 import co.ehealth.platform.pharmacy.supplier.PharmacySupplierProduct;
 import co.ehealth.platform.pharmacy.supplier.PharmacySupplierProductRepository;
@@ -30,18 +28,18 @@ public class ReorderService {
     private final PharmacySupplierProductRepository supplierProductRepository;
     private final PharmacyProductRepository productRepository;
     private final PharmacyFacilityProductRepository facilityProductRepository;
-    private final PharmacyStockAccountRepository stockAccountRepository;
+    private final FacilityOnHand facilityOnHand;
 
     public ReorderService(SupplierService supplierService,
                           PharmacySupplierProductRepository supplierProductRepository,
                           PharmacyProductRepository productRepository,
                           PharmacyFacilityProductRepository facilityProductRepository,
-                          PharmacyStockAccountRepository stockAccountRepository) {
+                          FacilityOnHand facilityOnHand) {
         this.supplierService = supplierService;
         this.supplierProductRepository = supplierProductRepository;
         this.productRepository = productRepository;
         this.facilityProductRepository = facilityProductRepository;
-        this.stockAccountRepository = stockAccountRepository;
+        this.facilityOnHand = facilityOnHand;
     }
 
     public record ReorderLine(PharmacyProduct product, long onHand, Integer reorderThreshold,
@@ -58,9 +56,7 @@ public class ReorderService {
         Map<UUID, PharmacyFacilityProduct> assortmentByProduct = facilityProductRepository
                 .findByFacilityIdAndActiveTrue(facilityId).stream()
                 .collect(Collectors.toMap(PharmacyFacilityProduct::getProductId, Function.identity()));
-        Map<UUID, Long> onHandByProduct = stockAccountRepository.findPositiveByFacility(facilityId).stream()
-                .collect(Collectors.groupingBy(PharmacyStockAccount::getProductId,
-                        Collectors.summingLong(PharmacyStockAccount::getQuantity)));
+        Map<UUID, Long> onHandByProduct = facilityOnHand.byProduct(facilityId);
 
         List<ReorderLine> lines = productRepository.findAllById(linkedProductIds).stream()
                 .filter(PharmacyProduct::isActive)

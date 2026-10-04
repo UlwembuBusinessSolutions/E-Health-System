@@ -25,9 +25,10 @@ class DispensingRegisterAdapter implements ScheduleRegisterRecorder {
     @Transactional
     public void recordDispense(UUID facilityId, UUID productId, String rxSerial, String patientName,
                                String patientIdRef, String prescriberName, String prescriberRegNo, long quantity,
-                               String lotNumber, UUID dispensedBy, UUID ledgerTransactionId) {
+                               String lotNumber, UUID dispensedBy, UUID ledgerTransactionId,
+                               UUID witnessStaffId) {
         register.recordDispense(facilityId, productId, rxSerial, patientName, patientIdRef, prescriberName,
-                prescriberRegNo, quantity, lotNumber, dispensedBy, ledgerTransactionId);
+                prescriberRegNo, quantity, lotNumber, dispensedBy, ledgerTransactionId, witnessStaffId);
     }
 
     @Override

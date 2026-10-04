@@ -78,13 +78,26 @@ public class PharmacyProductService {
     public PharmacyProduct updateDetails(UUID productId, String displayName, String genericName, String strength,
                                           String dosageForm, Integer packSize, String barcode, String manufacturer,
                                           String storageInstructions, DrugSchedule schedule, boolean coldChain,
-                                          UUID preferredSupplierId, UUID actorUserId, String actorName) {
+                                          UUID preferredSupplierId, AssortmentLevels levels, UUID actorUserId,
+                                          String actorName) {
         PharmacyProduct product = get(productId);
         requireSupplierExists(preferredSupplierId);
         product.updateDetails(displayName, genericName, strength, dosageForm, packSize, barcode, manufacturer,
                 storageInstructions, actorUserId, actorName, clock.instant());
         product.updateHandling(schedule, coldChain, preferredSupplierId);
+        if (levels.isPresent()) {
+            updateAssortmentLevels(productId, levels);
+        }
         return productRepository.save(product);
+    }
+
+    // The levels belong to the facility's assortment row, which a product
+    // edited from a facility that never stocked it gets created on the spot.
+    private void updateAssortmentLevels(UUID productId, AssortmentLevels levels) {
+        PharmacyFacilityProduct assortment = getOrCreateAssortment(productId, levels.facilityId(),
+                levels.reorderThreshold(), levels.targetQuantity());
+        assortment.updateLevels(levels.reorderThreshold(), levels.targetQuantity());
+        facilityProductRepository.save(assortment);
     }
 
     // A serial-tracked unit is its own identity while a lot is a group of

@@ -10,6 +10,7 @@ import co.ehealth.platform.pharmacy.dispensing.DispensingResponses.DispenseItemR
 import co.ehealth.platform.pharmacy.dispensing.PrescriptionCollectionService;
 import co.ehealth.platform.pharmacy.dispensing.PrescriptionResponse;
 import co.ehealth.platform.pharmacy.dispensing.PrescriptionViewAssembler;
+import co.ehealth.platform.pharmacy.dispensing.WitnessCredentials;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -118,7 +119,8 @@ public class PrescriptionController {
                                                               DispenseItemRequest request,
                                                               @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         DispenseRequest dispenseRequest = request == null ? DispenseRequest.remaining()
-                : new DispenseRequest(request.quantity(), request.batchId());
+                : new DispenseRequest(request.quantity(), request.batchId(),
+                        new WitnessCredentials(request.witnessStaffId(), request.witnessPassword()));
         var outcome = prescriptionService.dispenseItem(id, itemId, dispenseRequest, staff.userId());
         return ResponseEntity.ok(DispenseItemResponse.of(outcome));
     }
@@ -171,8 +173,10 @@ public class PrescriptionController {
 
     // Both fields optional: quantity defaults to everything remaining
     // (partial dispensing means a smaller number), batchId to
-    // first-expiring-first.
-    public record DispenseItemRequest(@Positive Integer quantity, UUID batchId) {
+    // first-expiring-first. The witness fields are only needed for a Schedule 6
+    // medicine.
+    public record DispenseItemRequest(@Positive Integer quantity, UUID batchId, UUID witnessStaffId,
+                                      String witnessPassword) {
     }
 
     // note is deliberately not @NotBlank — an empty body ({}) is a valid

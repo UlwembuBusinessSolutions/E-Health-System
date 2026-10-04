@@ -11,9 +11,11 @@ import java.util.UUID;
 // Confirms a Schedule 6 witness. The identity module has no PIN concept, so
 // the witness's PIN is their own account password, typed at the moment of
 // witnessing and checked with the same password encoder as login. It must be
-// a second person: the actor cannot witness themselves.
+// a second person: the actor cannot witness themselves. Public so dispensing
+// (through its integration adapter) applies the very same check to Schedule 6
+// hand-overs as the register applies to manual entries.
 @Component
-class WitnessVerifier {
+public class WitnessVerifier {
 
     // One message for "no such staff member" and "wrong password" so the
     // endpoint cannot be used to discover which staff ids exist.
@@ -28,7 +30,7 @@ class WitnessVerifier {
         this.passwordEncoder = passwordEncoder;
     }
 
-    RegisterStaff verify(UUID actorUserId, UUID witnessStaffId, String witnessPin) {
+    public RegisterStaff verify(UUID actorUserId, UUID witnessStaffId, String witnessPin) {
         if (witnessStaffId == null || witnessPin == null || witnessPin.isBlank()) {
             throw new InvalidWitnessException(
                     "Schedule 6 medicines need a witness. Choose the witness and have them enter their password.");

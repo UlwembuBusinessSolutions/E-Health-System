@@ -16,6 +16,11 @@ public enum RegisterEntryKind {
         return incoming;
     }
 
+    // Writing stock off the register needs an explanation an inspector can read.
+    public boolean requiresReason() {
+        return this == DESTROYED || this == LOST;
+    }
+
     public long balanceAfter(long balanceBefore, long quantity) {
         return incoming ? balanceBefore + quantity : balanceBefore - quantity;
     }
