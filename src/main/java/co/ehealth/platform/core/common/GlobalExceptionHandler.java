@@ -58,6 +58,15 @@ import co.ehealth.platform.pharmacy.supplier.DuplicateSupplierResponse;
 import co.ehealth.platform.pharmacy.supplier.InvalidSupplierStateException;
 import co.ehealth.platform.pharmacy.supplier.SupplierNotFoundException;
 import co.ehealth.platform.pharmacy.stock.DuplicateProductCodeException;
+import co.ehealth.platform.pharmacy.count.InvalidStockCountException;
+import co.ehealth.platform.pharmacy.count.InvalidStockCountStateException;
+import co.ehealth.platform.pharmacy.count.MissingCountReasonsException;
+import co.ehealth.platform.pharmacy.count.StockCountLineNotFoundException;
+import co.ehealth.platform.pharmacy.count.StockCountNotFoundException;
+import co.ehealth.platform.pharmacy.register.InvalidRegisterEntryException;
+import co.ehealth.platform.pharmacy.register.InvalidWitnessException;
+import co.ehealth.platform.pharmacy.register.RegisterBalanceExceededException;
+import co.ehealth.platform.pharmacy.register.RegisterDayClosedException;
 import co.ehealth.platform.pharmacy.stock.IdempotencyConflictException;
 import co.ehealth.platform.pharmacy.stock.InsufficientStockException;
 import co.ehealth.platform.pharmacy.stock.InvalidStockRequestException;
@@ -573,6 +582,32 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(PharmacyValidationException.class)
     public ResponseEntity<ApiErrorResponse> handlePharmacyValidation(PharmacyValidationException ex) {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(new ApiErrorResponse(ex.getMessage(), null));
+    // Pharmacy stock counts and the scheduled medicines register
+    // (co.ehealth.platform.pharmacy.count / .register). 422 is used where the
+    // request is well-formed but breaks a business rule the user can fix.
+    @ExceptionHandler({StockCountNotFoundException.class, StockCountLineNotFoundException.class})
+    public ResponseEntity<ApiErrorResponse> handleStockCountNotFound(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler({InvalidStockCountStateException.class, RegisterBalanceExceededException.class,
+            RegisterDayClosedException.class})
+    public ResponseEntity<ApiErrorResponse> handlePharmacyCountOrRegisterConflict(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler({InvalidStockCountException.class, InvalidRegisterEntryException.class,
+            InvalidWitnessException.class})
+    public ResponseEntity<ApiErrorResponse> handlePharmacyCountOrRegisterInvalid(RuntimeException ex) {
+        return ResponseEntity.unprocessableEntity().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // fieldErrors maps each line id missing a reason to a description of
+    // that line, so the screen can highlight exactly those rows.
+    @ExceptionHandler(MissingCountReasonsException.class)
+    public ResponseEntity<ApiErrorResponse> handleMissingCountReasons(MissingCountReasonsException ex) {
+        return ResponseEntity.unprocessableEntity()
+                .body(new ApiErrorResponse(ex.getMessage(), ex.getLinesWithoutReason()));
     }
 
     // StaffPhotoService.uploadPhoto() wraps a checked IOException from
