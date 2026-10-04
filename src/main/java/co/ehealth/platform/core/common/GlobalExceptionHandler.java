@@ -47,11 +47,15 @@ import co.ehealth.platform.pharmacy.stock.BatchExpiryConflictException;
 import co.ehealth.platform.pharmacy.stock.DuplicateProductCodeException;
 import co.ehealth.platform.pharmacy.stock.IdempotencyConflictException;
 import co.ehealth.platform.pharmacy.stock.InsufficientStockException;
+import co.ehealth.platform.pharmacy.stock.InvalidStockRequestException;
 import co.ehealth.platform.pharmacy.stock.MissingExpiryException;
 import co.ehealth.platform.pharmacy.stock.PharmacyProductNotFoundException;
 import co.ehealth.platform.pharmacy.stock.ProductArchivedException;
 import co.ehealth.platform.pharmacy.stock.ProductHasStockException;
 import co.ehealth.platform.pharmacy.stock.ProductNotStockedAtFacilityException;
+import co.ehealth.platform.pharmacy.stock.StockReversalBlockedException;
+import co.ehealth.platform.pharmacy.stock.StockTransactionNotFoundException;
+import co.ehealth.platform.pharmacy.stock.TransactionAlreadyReversedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -497,6 +501,26 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(IdempotencyConflictException.class)
     public ResponseEntity<ApiErrorResponse> handleIdempotencyConflict(IdempotencyConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidStockRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidStockRequest(InvalidStockRequestException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(StockReversalBlockedException.class)
+    public ResponseEntity<ApiErrorResponse> handleStockReversalBlocked(StockReversalBlockedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(TransactionAlreadyReversedException.class)
+    public ResponseEntity<ApiErrorResponse> handleTransactionAlreadyReversed(TransactionAlreadyReversedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(StockTransactionNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleStockTransactionNotFound(StockTransactionNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     // StaffPhotoService.uploadPhoto() wraps a checked IOException from

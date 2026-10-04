@@ -43,27 +43,44 @@ public class PharmacyStockLedgerService {
     public record EntryRequest(UUID productId, UUID batchId, UUID locationId, StockBucket bucket, long quantityDelta) {
     }
 
-    // Returns the ORIGINAL transaction, not a fresh one, when idempotencyKey
-    // already exists with a matching bodyHash — plan section 7, STK-10: "a
-    // retried request with the same key/body returns the original result."
-    // A reused key with a different bodyHash is rejected (IdempotencyConflictException)
-    // rather than silently posting a second, different movement under the
-    // same key.
+    // The original posting for an idempotency key, when this exact request
+    // was already posted — plan section 7, STK-10: "a retried request with
+    // the same key/body returns the original result." A reused key with a
+    // different bodyHash is rejected (IdempotencyConflictException) rather
+    // than silently posting a second, different movement under the same
+    // key. Public so callers with side effects beyond the ledger (serial
+    // units, audit rows) can skip them on a replay.
+    public Optional<PharmacyStockTransaction> findPriorPosting(String idempotencyKey, String bodyHash) {
+        Optional<PharmacyStockTransaction> existing = stockTransactionRepository.findByIdempotencyKey(idempotencyKey);
+        if (existing.isPresent() && !existing.get().getBodyHash().equals(bodyHash)) {
+            throw new IdempotencyConflictException();
+        }
+        return existing;
+    }
+
     @Transactional
     public PharmacyStockTransaction postEntries(StockTransactionType type, UUID facilityId, UUID actorUserId,
                                                  String actorName, String reason, String sourceReference,
                                                  String idempotencyKey, String bodyHash,
                                                  List<EntryRequest> entryRequests) {
-        Optional<PharmacyStockTransaction> existing = stockTransactionRepository.findByIdempotencyKey(idempotencyKey);
-        if (existing.isPresent()) {
-            if (!existing.get().getBodyHash().equals(bodyHash)) {
-                throw new IdempotencyConflictException();
-            }
-            return existing.get();
+        return postEntries(type, facilityId, actorUserId, actorName, reason, sourceReference, idempotencyKey,
+                bodyHash, LedgerContext.NONE, entryRequests);
+    }
+
+    // Returns the ORIGINAL transaction, not a fresh one, on an idempotent
+    // replay (see findPriorPosting).
+    @Transactional
+    public PharmacyStockTransaction postEntries(StockTransactionType type, UUID facilityId, UUID actorUserId,
+                                                 String actorName, String reason, String sourceReference,
+                                                 String idempotencyKey, String bodyHash, LedgerContext context,
+                                                 List<EntryRequest> entryRequests) {
+        Optional<PharmacyStockTransaction> prior = findPriorPosting(idempotencyKey, bodyHash);
+        if (prior.isPresent()) {
+            return prior.get();
         }
 
         PharmacyStockTransaction transaction = stockTransactionRepository.save(new PharmacyStockTransaction(
-                type, facilityId, actorUserId, actorName, reason, sourceReference, idempotencyKey, bodyHash, null,
+                type, facilityId, actorUserId, actorName, reason, sourceReference, idempotencyKey, bodyHash, context,
                 clock.instant()));
 
         // Deterministic lock order — every caller posting against an
