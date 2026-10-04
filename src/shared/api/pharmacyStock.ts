@@ -7,9 +7,11 @@ import { tenantAuthHeaders } from "./auth";
 // that module has no stock/batch concept yet (Phase 3 wires the two
 // together), and this file exists independently of it until then.
 
-export type StockCategory = "MEDICINE" | "SUPPLY";
-export type StockBaseUnit = "TABLET" | "CAPSULE" | "BOTTLE" | "VIAL" | "SEALED_PACK" | "EACH";
+export type StockCategory = "MEDICINE" | "SUPPLY" | "DEVICE";
+export type StockBaseUnit = "TABLET" | "CAPSULE" | "BOTTLE" | "VIAL" | "SEALED_PACK" | "BOX" | "KIT" | "EACH";
 export type ExpiryPrecision = "DAY" | "MONTH";
+/** SAHPRA schedule of a controlled medicine; null on the product means unscheduled. */
+export type DrugSchedule = "S5" | "S6";
 
 export interface PharmacyProduct {
   id: string;
@@ -25,6 +27,11 @@ export interface PharmacyProduct {
   manufacturer: string | null;
   batchTracked: boolean;
   expiryTracked: boolean;
+  /** One ledger identity per unit (devices). Mutually exclusive with batchTracked. */
+  serialTracked: boolean;
+  schedule: DrugSchedule | null;
+  coldChain: boolean;
+  preferredSupplierId: string | null;
   storageInstructions: string | null;
   active: boolean;
   createdByName: string;
@@ -76,6 +83,10 @@ export interface CreateProductPayload {
   manufacturer?: string;
   batchTracked: boolean;
   expiryTracked: boolean;
+  serialTracked: boolean;
+  schedule?: DrugSchedule;
+  coldChain: boolean;
+  preferredSupplierId?: string;
   storageInstructions?: string;
   facilityId: string;
   reorderThreshold?: number;
@@ -95,6 +106,11 @@ export interface UpdateProductPayload {
   barcode?: string;
   manufacturer?: string;
   storageInstructions?: string;
+  preferredSupplierId?: string | null;
+  // The reorder level belongs to the facility's assortment, not the catalog
+  // product, so changing it needs the facility it applies to.
+  facilityId?: string;
+  reorderThreshold?: number;
 }
 
 export async function updateProduct(id: string, payload: UpdateProductPayload): Promise<PharmacyProduct> {
@@ -117,6 +133,9 @@ export async function reactivateProduct(id: string): Promise<PharmacyProduct> {
 
 export type StockStatus = "In stock" | "Low stock" | "Out of stock";
 
+/** Server-side narrowing of the stock list; archived products are listed separately. */
+export type StockStatusFilter = "LOW" | "OUT" | "EXPIRING";
+
 export interface StockRow {
   productId: string;
   code: string;
@@ -125,14 +144,46 @@ export interface StockRow {
   available: number;
   reorderThreshold: number | null;
   status: StockStatus;
+  nextExpiry: string | null;
+  serialTracked: boolean;
+  schedule: DrugSchedule | null;
+  lotCount: number;
+  archived: boolean;
 }
 
-export async function listStock(facilityId: string): Promise<StockRow[]> {
-  const response = await apiClient.get<{ items: StockRow[] }>(
-    `/api/v1/pharmacy/stock?facilityId=${encodeURIComponent(facilityId)}`,
-    { headers: tenantAuthHeaders() },
-  );
-  return response.items;
+export interface ListStockParams {
+  facilityId: string;
+  q?: string;
+  status?: StockStatusFilter;
+  archived?: boolean;
+  page?: number;
+  size?: number;
+}
+
+export async function listStock(params: ListStockParams): Promise<PagedResult<StockRow>> {
+  const search = new URLSearchParams({ facilityId: params.facilityId });
+  if (params.q) search.set("q", params.q);
+  if (params.status) search.set("status", params.status);
+  if (params.archived) search.set("archived", "true");
+  if (params.page !== undefined) search.set("page", String(params.page));
+  if (params.size !== undefined) search.set("size", String(params.size));
+  return apiClient.get<PagedResult<StockRow>>(`/api/v1/pharmacy/stock?${search.toString()}`, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export interface StockDashboard {
+  lowCount: number;
+  outCount: number;
+  expiringCount: number;
+  expiredCount: number;
+  awaitingCollectionCount: number;
+}
+
+export async function getStockDashboard(facilityId: string): Promise<StockDashboard> {
+  return apiClient.get<StockDashboard>(`/api/v1/pharmacy/dashboard?facilityId=${encodeURIComponent(facilityId)}`, {
+    headers: tenantAuthHeaders(),
+  });
 }
 
 export interface BatchRow {
@@ -142,6 +193,8 @@ export interface BatchRow {
   expiryDate: string | null;
   expiryPrecision: ExpiryPrecision | null;
   quantity: number;
+  /** Units still in stock from this lot; empty unless the product is serial-tracked. */
+  serialNumbers: string[];
 }
 
 export async function listBatches(productId: string): Promise<BatchRow[]> {
@@ -164,6 +217,13 @@ export interface LedgerEntry {
   reason: string | null;
   sourceReference: string | null;
   createdAt: string;
+  expiryDate: string | null;
+  supplierId: string | null;
+  supplierName: string | null;
+  patientId: string | null;
+  patientName: string | null;
+  prescriptionSerial: string | null;
+  reversedByTransactionId: string | null;
 }
 
 export interface ListLedgerParams {
@@ -181,6 +241,92 @@ export async function listLedger(params: ListLedgerParams): Promise<PagedResult<
   return apiClient.get<PagedResult<LedgerEntry>>(`/api/v1/pharmacy/ledger?${search.toString()}`, {
     headers: tenantAuthHeaders(),
   });
+}
+
+export interface ListProductHistoryParams {
+  facilityId: string;
+  page?: number;
+  size?: number;
+}
+
+/** One product's ledger entries, each carrying its running balance. */
+export async function listProductHistory(
+  productId: string,
+  params: ListProductHistoryParams,
+): Promise<PagedResult<LedgerEntry>> {
+  const search = new URLSearchParams({ facilityId: params.facilityId });
+  if (params.page !== undefined) search.set("page", String(params.page));
+  if (params.size !== undefined) search.set("size", String(params.size));
+  return apiClient.get<PagedResult<LedgerEntry>>(
+    `/api/v1/pharmacy/products/${productId}/history?${search.toString()}`,
+    { headers: tenantAuthHeaders() },
+  );
+}
+
+export interface ExpiryLot {
+  productId: string;
+  productName: string;
+  productCode: string;
+  baseUnit: StockBaseUnit;
+  batchId: string;
+  lotNumber: string;
+  expiryDate: string;
+  quantity: number;
+}
+
+/** Lots expiring within `days`, plus already-expired lots that still hold stock. */
+export async function listExpiry(facilityId: string, days = 90): Promise<ExpiryLot[]> {
+  const search = new URLSearchParams({ facilityId, days: String(days) });
+  const response = await apiClient.get<{ items: ExpiryLot[] }>(`/api/v1/pharmacy/expiry?${search.toString()}`, {
+    headers: tenantAuthHeaders(),
+  });
+  return response.items;
+}
+
+export type AdjustmentMode = "ADD" | "REMOVE";
+export type RemoveReason = "EXPIRED" | "DAMAGED" | "RECALLED" | "LOST_OR_STOLEN" | "WRONG_ENTRY" | "OTHER";
+export type AddReason = "FOUND_IN_COUNT" | "RETURNED_BY_PATIENT" | "RETURNED_FROM_WARD" | "WRONG_ENTRY" | "OTHER";
+export type AdjustmentReason = RemoveReason | AddReason;
+
+export interface AdjustStockPayload {
+  facilityId: string;
+  productId: string;
+  batchId?: string;
+  /** Serial-tracked products only; `quantity` must equal the number of serials. */
+  serialNumbers?: string[];
+  mode: AdjustmentMode;
+  quantity: number;
+  reason: AdjustmentReason;
+  /** Required (at least 3 characters) when the reason is OTHER. */
+  note?: string;
+}
+
+export interface AdjustmentResult {
+  transactionId: string;
+  quantityDelta: number;
+  balanceAfter: number;
+}
+
+// Same why-note as receiveStock: the key identifies one submit attempt, so a
+// retry of that attempt can never write a second ledger entry.
+export async function adjustStock(payload: AdjustStockPayload, idempotencyKey: string): Promise<AdjustmentResult> {
+  return apiClient.post<AdjustmentResult>("/api/v1/pharmacy/adjustments", payload, {
+    headers: { ...tenantAuthHeaders(), "Idempotency-Key": idempotencyKey },
+  });
+}
+
+export interface SupplierOption {
+  id: string;
+  name: string;
+}
+
+// A minimal read of the suppliers list, only to fill the "usual supplier"
+// pickers. The full supplier client lives in pharmacyReceiving.ts.
+export async function listSupplierOptions(): Promise<SupplierOption[]> {
+  const response = await apiClient.get<{ items: SupplierOption[] }>("/api/v1/pharmacy/suppliers?status=ACTIVE&size=100", {
+    headers: tenantAuthHeaders(),
+  });
+  return response.items;
 }
 
 export interface ReceiveLinePayload {
