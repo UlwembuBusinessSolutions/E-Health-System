@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -56,12 +57,38 @@ public class PharmacyReceiptLine {
     @Column(name = "batch_id")
     private UUID batchId;
 
+    // baseQuantity is what was actually stocked; whatever the supplier
+    // delivered beyond it was refused at the door and is kept here so the
+    // receipt still tells the whole story.
+    @Column(name = "rejected_quantity", nullable = false)
+    private int rejectedQuantity;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "flag_reason", length = 20)
+    private ReceiptFlagReason flagReason;
+
+    @Column(name = "flag_note", length = 500)
+    private String flagNote;
+
+    @Column(name = "temperature_c", precision = 4, scale = 1)
+    private BigDecimal temperatureC;
+
+    @Column(name = "cold_box_intact")
+    private Boolean coldBoxIntact;
+
     protected PharmacyReceiptLine() {
     }
 
     public PharmacyReceiptLine(UUID receiptId, UUID productId, String manufacturer, String lotNumber,
                                 LocalDate expiryDate, ExpiryPrecision expiryPrecision, Integer packs,
-                                Integer packSizeUsed, int baseQuantity, UUID batchId) {
+                                Integer packSizeUsed, int baseQuantity, UUID batchId, int rejectedQuantity,
+                                ReceiptFlagReason flagReason, String flagNote, BigDecimal temperatureC,
+                                Boolean coldBoxIntact) {
+        this.rejectedQuantity = rejectedQuantity;
+        this.flagReason = flagReason;
+        this.flagNote = flagNote;
+        this.temperatureC = temperatureC;
+        this.coldBoxIntact = coldBoxIntact;
         this.receiptId = receiptId;
         this.productId = productId;
         this.manufacturer = manufacturer;
@@ -116,5 +143,25 @@ public class PharmacyReceiptLine {
 
     public UUID getBatchId() {
         return batchId;
+    }
+
+    public int getRejectedQuantity() {
+        return rejectedQuantity;
+    }
+
+    public ReceiptFlagReason getFlagReason() {
+        return flagReason;
+    }
+
+    public String getFlagNote() {
+        return flagNote;
+    }
+
+    public BigDecimal getTemperatureC() {
+        return temperatureC;
+    }
+
+    public Boolean getColdBoxIntact() {
+        return coldBoxIntact;
     }
 }
