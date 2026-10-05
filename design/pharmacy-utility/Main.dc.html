@@ -1,0 +1,433 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; background: #f4f5f3; color: #171916; }
+    a { color: #185950; } a:hover { color: #144840; }
+    button { font-family: inherit; cursor: pointer; }
+    input { font-family: inherit; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 8px; font-weight: 600; font-size: 13.5px; transition: background-color .15s, border-color .15s; border: none; white-space: nowrap; }
+    .btn-primary { background: #1f6f63; color: #fff; box-shadow: 0 1px 2px rgba(23,25,22,.06); }
+    .btn-primary:hover { background: #185950; }
+    .btn-primary:disabled { background: #82b8af; cursor: not-allowed; }
+    .btn-secondary { background: #ffffff; color: #171916; border: 1px solid #c2c7bf; }
+    .btn-secondary:hover { background: #eceeec; }
+    .btn-secondary:disabled { color: #636a62; cursor: not-allowed; opacity: .55; }
+    .btn-danger-ghost { background: transparent; color: #a13d2e; border: 1px solid #dfa79c; }
+    .btn-danger-ghost:hover { background: #fbeeec; }
+    .btn-danger-ghost:disabled { color: #636a62; border-color: #dfe2dd; cursor: not-allowed; opacity: .55; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .pill-dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+    .card { border-radius: 16px; border: 1px solid #dfe2dd; background: #ffffff; box-shadow: 0 1px 2px rgba(23,25,22,.04), 0 8px 24px -12px rgba(23,25,22,.16); }
+    .field-input { height: 44px; width: 100%; border-radius: 8px; border: 1px solid #c2c7bf; background: #ffffff; padding: 0 14px 0 40px; font-size: 15px; color: #171916; outline: none; }
+    .field-input::placeholder { color: rgba(99,106,98,.7); }
+    .field-input:focus { border-color: #4f958a; box-shadow: 0 0 0 3px #d7e9e6; }
+  </style>
+</helmet>
+
+<div style="width: 100%; min-height: 100vh; padding: 32px 40px 64px;">
+  <div style="max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+
+    <!-- Page header -->
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; background: #eef6f5; color: #1f6f63; flex-shrink: 0;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 20.5 3.5 13.5a5 5 0 0 1 7-7l7 7a5 5 0 0 1-7 7Z"/><path d="M8.5 8.5l7 7"/></svg>
+        </span>
+        <div>
+          <h1 style="margin: 0; font-size: 22px; font-weight: 600; color: #171916;">Pharmacy</h1>
+          <p style="margin: 2px 0 0; font-size: 14px; color: #636a62;">Prescriptions waiting to be dispensed, oldest first.</p>
+        </div>
+      </div>
+      <span class="pill" style="background: #ffffff; border: 1px solid #dfe2dd; color: #636a62;">Demo Main Clinic</span>
+    </div>
+
+    <!-- Look up prescription utility -->
+    <div class="card" style="padding: 20px 22px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1f6f63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <h2 style="margin: 0; font-size: 14.5px; font-weight: 600; color: #171916;">Look up a prescription</h2>
+      </div>
+      <p style="margin: 0 0 14px; font-size: 12.5px; color: #636a62;">For a prescription that's entirely dropped off the queue below — every item was out of stock and nothing was left pending. Still visible in the queue? Dispense it directly from there once stock is back.</p>
+
+      <div style="display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap;">
+        <div style="position: relative; flex: 1; min-width: 220px;">
+          <span style="position: absolute; left: 14px; top: 0; height: 44px; display: flex; align-items: center; color: #636a62; pointer-events: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          </span>
+          <input class="field-input" type="text" placeholder="e.g. RX-0000005" value="{{lookupQuery}}" onChange="{{onLookupChange}}" />
+        </div>
+        <button class="btn btn-primary" style="height: 44px;" onClick="{{onLookupSearch}}">Search</button>
+      </div>
+
+      <sc-if value="{{showNotFound}}" hint-placeholder-val="{{false}}">
+        <p style="margin: 14px 0 0; font-size: 13px; color: #863225;">No prescription found with that serial number.</p>
+      </sc-if>
+
+      <sc-if value="{{lookupFound}}" hint-placeholder-val="{{false}}">
+        <div style="margin-top: 16px; border-top: 1px solid #dfe2dd; padding-top: 16px;">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div>
+              <p style="margin: 0; font-family: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace; font-size: 13px; font-weight: 600; color: #171916;">{{lookupFound.serial}}</p>
+              <p style="margin: 3px 0 0; font-size: 12.5px; color: #636a62;">{{lookupFound.patientName}} <span style="font-family: ui-monospace, monospace;">· {{lookupFound.patientMpi}}</span></p>
+              <p style="margin: 3px 0 0; font-size: 12px; color: #636a62;">Prescribed by {{lookupFound.prescriberName}} <span style="font-family: ui-monospace, monospace;">· Reg. {{lookupFound.prescriberReg}}</span> · issued {{lookupFound.issuedDate}}</p>
+            </div>
+          </div>
+
+          <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <sc-for list="{{lookupItems}}" as="item" hint-placeholder-count="1">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #dfe2dd; border-radius: 10px; padding: 10px 14px; background: #f4f5f3;">
+                <div style="min-width: 0;">
+                  <p style="margin: 0; font-size: 13.5px; color: #171916;">{{item.drug}} — {{item.dose}} <span style="color: #636a62;">× {{item.qty}}</span></p>
+                  <sc-if value="{{item.note}}" hint-placeholder-val="{{false}}">
+                    <p style="margin: 3px 0 0; font-size: 12px; color: #863225;">Marked out of stock by {{item.by}}: {{item.note}}</p>
+                  </sc-if>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+                  <span class="pill" style="background: {{item.statusBg}}; color: {{item.statusFg}};"><span class="pill-dot"></span>{{item.statusLabel}}</span>
+                  <sc-if value="{{item.isPending}}" hint-placeholder-val="{{true}}">
+                    <button class="btn btn-primary" onClick="{{item.onDispense}}">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+                      Dispense now
+                    </button>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- Queue -->
+    <div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <h2 style="margin: 0; font-size: 14px; font-weight: 600; color: #171916; text-transform: uppercase; letter-spacing: .02em;">Active queue</h2>
+        <span style="font-size: 12px; color: #636a62;">{{queueCount}} waiting</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <sc-for list="{{prescriptions}}" as="rx" hint-placeholder-count="3">
+          <div class="card" style="padding: 18px 20px; transition: opacity .3s; opacity: {{rx.cardOpacity}};">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+              <div style="min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                  <p style="margin: 0; font-size: 14px; font-weight: 600; color: #171916;">{{rx.patientName}}</p>
+                  <span style="font-family: ui-monospace, monospace; font-size: 12px; color: #636a62;">{{rx.patientMpi}}</span>
+                </div>
+                <p style="margin: 4px 0 0; font-family: ui-monospace, monospace; font-size: 12px; color: #636a62;">{{rx.serial}} · issued {{rx.issuedTime}}</p>
+                <p style="margin: 3px 0 0; font-size: 12px; color: #636a62;">Prescribed by {{rx.prescriberName}} <span style="font-family: ui-monospace, monospace;">· Reg. {{rx.prescriberReg}}</span></p>
+              </div>
+              <button class="btn btn-secondary" disabled="{{rx.resolved}}" onClick="{{rx.onMarkAllCollected}}">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                Mark all as collected
+              </button>
+            </div>
+
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #dfe2dd; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 220px;">
+                <sc-if value="{{rx.showComposer}}" hint-placeholder-val="{{false}}">
+                  <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <textarea
+                      class="field-input"
+                      style="height: auto; min-height: 68px; padding: 10px 14px 10px 14px; resize: vertical; font-size: 13.5px; line-height: 1.4;"
+                      placeholder="e.g. Dosage seems high for this patient's weight — please confirm before I dispense."
+                      value="{{rx.messageDraft}}"
+                      onChange="{{rx.onChangeDraft}}"
+                    ></textarea>
+                    <div style="display: flex; gap: 8px;">
+                      <button class="btn btn-primary" disabled="{{rx.sendDisabled}}" onClick="{{rx.onSendMessage}}">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                        Send email
+                      </button>
+                      <button class="btn btn-secondary" onClick="{{rx.onCloseComposer}}">Cancel</button>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{rx.hasMessages}}" hint-placeholder-val="{{false}}">
+                  <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <sc-for list="{{rx.messages}}" as="msg" hint-placeholder-count="1">
+                      <p style="margin: 0; font-size: 12px; color: #636a62; line-height: 1.5;">
+                        <span style="font-weight: 600; color: #171916;">You</span> to {{rx.prescriberName}} · {{msg.time}} — {{msg.text}}
+                      </p>
+                    </sc-for>
+                    <p style="margin: 2px 0 0; font-size: 11.5px; color: #1c6540; display: flex; align-items: center; gap: 5px;">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                      Email sent to {{rx.prescriberEmail}}
+                    </p>
+                  </div>
+                </sc-if>
+              </div>
+              <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                <a class="btn btn-secondary" href="tel:{{rx.prescriberPhone}}" title="Call {{rx.prescriberName}}" style="text-decoration: none;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.99.36 1.97.67 2.91a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.17-1.24a2 2 0 0 1 2.11-.45c.94.31 1.92.54 2.91.67A2 2 0 0 1 22 16.92z"/></svg>
+                  Call
+                </a>
+                <button class="btn btn-secondary" onClick="{{rx.onOpenComposer}}">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
+                  Message prescriber
+                </button>
+              </div>
+            </div>
+
+            <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 8px;">
+              <sc-for list="{{rx.items}}" as="item" hint-placeholder-count="2">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #dfe2dd; border-radius: 10px; padding: 10px 14px; background: #f4f5f3;">
+                  <p style="margin: 0; font-size: 13.5px; color: #171916; min-width: 0;">{{item.drug}} — {{item.dose}} <span style="color: #636a62;">× {{item.qty}}</span></p>
+                  <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+                    <span class="pill" style="background: {{item.statusBg}}; color: {{item.statusFg}};"><span class="pill-dot"></span>{{item.statusLabel}}</span>
+                    <sc-if value="{{item.canDispense}}" hint-placeholder-val="{{true}}">
+                      <div style="display: flex; gap: 6px;">
+                        <button class="btn btn-secondary" style="height: 34px; padding: 0 10px;" onClick="{{item.onDispense}}" title="Dispense this item">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+                          Dispense
+                        </button>
+                        <sc-if value="{{item.isPending}}" hint-placeholder-val="{{true}}">
+                          <button class="btn btn-danger-ghost" style="height: 34px; padding: 0 10px;" onClick="{{item.onOutOfStock}}" title="Mark this item out of stock">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M9 3v5"/><path d="M15 3v5"/><path d="M9.5 15.5l5 5M14.5 15.5l-5 5"/></svg>
+                            Out of stock
+                          </button>
+                        </sc-if>
+                      </div>
+                    </sc-if>
+                  </div>
+                </div>
+                <sc-if value="{{item.outOfStockHint}}" hint-placeholder-val="{{false}}">
+                  <p style="margin: -4px 0 0; font-size: 11.5px; color: #863225;">Marked out of stock earlier — dispense as soon as it's back.</p>
+                </sc-if>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{rx.resolved}}" hint-placeholder-val="{{false}}">
+              <p style="margin: 12px 0 0; font-size: 12px; color: #636a62; display: flex; align-items: center; gap: 6px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                {{rx.resolvedMessage}}
+              </p>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      prescriptions: [
+        {
+          id: "rx1", serial: "RX-0000006", patientName: "Nomvula Dube", patientMpi: "MPI-0000004",
+          prescriberName: "Thandiwe Mokwena", prescriberReg: "MP-TEST-000123", issuedTime: "08:12",
+          prescriberEmail: "t.mokwena.test@democlinic.example", prescriberPhone: "+27821234599",
+          showComposer: false, messageDraft: "", messages: [],
+          items: [
+            { id: "i1", drug: "Paracetamol", dose: "500mg TDS", qty: 20, status: "PENDING" },
+            { id: "i2", drug: "Amoxicillin", dose: "250mg/5ml suspension", qty: 1, status: "OUT_OF_STOCK" },
+          ],
+        },
+        {
+          id: "rx2", serial: "RX-0000007", patientName: "Thabo Dlamini", patientMpi: "MPI-0000002",
+          prescriberName: "Thandiwe Mokwena", prescriberReg: "MP-TEST-000123", issuedTime: "08:40",
+          prescriberEmail: "t.mokwena.test@democlinic.example", prescriberPhone: "+27821234599",
+          showComposer: false, messageDraft: "", messages: [],
+          items: [
+            { id: "i3", drug: "Ibuprofen", dose: "400mg TDS", qty: 30, status: "PENDING" },
+          ],
+        },
+        {
+          id: "rx3", serial: "RX-0000008", patientName: "Carletta Cheli", patientMpi: "MPI-0000003",
+          prescriberName: "Thandiwe Mokwena", prescriberReg: "MP-TEST-000123", issuedTime: "09:05",
+          prescriberEmail: "t.mokwena.test@democlinic.example", prescriberPhone: "+27821234599",
+          showComposer: false, messageDraft: "",
+          // Seeded with one message already sent, so the "sent" confirmation
+          // and thread are visible immediately without needing to click
+          // through the compose flow first.
+          messages: [{ text: "Patient reports no improvement after 2 days on the amoxicillin — please advise.", time: "09:20" }],
+          items: [
+            { id: "i4", drug: "Amoxicillin", dose: "500mg TDS", qty: 21, status: "PENDING" },
+            { id: "i5", drug: "Loratadine", dose: "10mg OD", qty: 14, status: "PENDING" },
+          ],
+        },
+      ],
+      lookupQuery: "",
+      lookupResult: null,
+      lookupDb: {
+        "RX-0000005": {
+          serial: "RX-0000005", patientName: "Lerato Dube", patientMpi: "DC-0000044",
+          prescriberName: "Thandiwe Mokwena", prescriberReg: "MP-TEST-000123", issuedDate: "16 Sep",
+          items: [
+            { id: "l1", drug: "Amoxicillin", dose: "500mg TDS", qty: 21, status: "OUT_OF_STOCK",
+              note: "Amoxicillin unavailable, restock expected Friday", by: "Karabo Sithole" },
+          ],
+        },
+      },
+    };
+  }
+
+  setItemStatus(rxId, itemId, status) {
+    this.setState((s) => ({
+      prescriptions: s.prescriptions.map((rx) =>
+        rx.id !== rxId ? rx : { ...rx, items: rx.items.map((it) => (it.id !== itemId ? it : { ...it, status })) },
+      ),
+    }));
+  }
+
+  markAllCollected(rxId) {
+    this.setState((s) => ({
+      prescriptions: s.prescriptions.map((rx) =>
+        rx.id !== rxId
+          ? rx
+          : { ...rx, items: rx.items.map((it) => (it.status === "PENDING" ? { ...it, status: "DISPENSED" } : it)) },
+      ),
+    }));
+  }
+
+  openComposer(rxId) {
+    this.setState((s) => ({
+      prescriptions: s.prescriptions.map((rx) => (rx.id !== rxId ? rx : { ...rx, showComposer: true })),
+    }));
+  }
+
+  closeComposer(rxId) {
+    this.setState((s) => ({
+      prescriptions: s.prescriptions.map((rx) =>
+        rx.id !== rxId ? rx : { ...rx, showComposer: false, messageDraft: "" },
+      ),
+    }));
+  }
+
+  changeDraft(rxId, value) {
+    this.setState((s) => ({
+      prescriptions: s.prescriptions.map((rx) => (rx.id !== rxId ? rx : { ...rx, messageDraft: value })),
+    }));
+  }
+
+  // Sends a real email to the prescriber (the real implementation calls
+  // EmailService the same way every other outbound email in this app
+  // already does) — the mockup just records it in the thread and shows
+  // the same "sent" confirmation the real page would.
+  sendMessage(rxId) {
+    this.setState((s) => ({
+      prescriptions: s.prescriptions.map((rx) => {
+        if (rx.id !== rxId) return rx;
+        const text = (rx.messageDraft || "").trim();
+        if (!text) return rx;
+        const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        return { ...rx, messages: [...rx.messages, { text, time }], messageDraft: "", showComposer: false };
+      }),
+    }));
+  }
+
+  runLookup() {
+    const q = (this.state.lookupQuery || "").trim().toUpperCase();
+    if (!q) return;
+    const found = this.state.lookupDb[q];
+    this.setState({ lookupResult: found ? Object.assign({}, found) : "not_found" });
+  }
+
+  dispenseLookupItem(itemId) {
+    this.setState((s) => {
+      if (!s.lookupResult || s.lookupResult === "not_found") return null;
+      return {
+        lookupResult: {
+          ...s.lookupResult,
+          items: s.lookupResult.items.map((it) => (it.id !== itemId ? it : { ...it, status: "DISPENSED" })),
+        },
+      };
+    });
+  }
+
+  renderVals() {
+    const statusMeta = {
+      PENDING: { label: "Pending", bg: "#fbf3e8", fg: "#8a5117" },
+      DISPENSED: { label: "Dispensed", bg: "#eaf5ee", fg: "#1c6540" },
+      OUT_OF_STOCK: { label: "Out of stock", bg: "#fbeeec", fg: "#863225" },
+    };
+
+    const prescriptions = this.state.prescriptions.map((rx) => {
+      const pendingCount = rx.items.filter((i) => i.status === "PENDING").length;
+      const outOfStockCount = rx.items.filter((i) => i.status === "OUT_OF_STOCK").length;
+      const resolved = pendingCount === 0;
+      const items = rx.items.map((it) => {
+        const meta = statusMeta[it.status];
+        const rxId = rx.id;
+        const itId = it.id;
+        return Object.assign({}, it, {
+          statusLabel: meta.label,
+          statusBg: meta.bg,
+          statusFg: meta.fg,
+          isPending: it.status === "PENDING",
+          // Out of stock is never a dead end — once it's back, dispensing is
+          // still one click away right here, no need to leave the queue and
+          // use the lookup box (that's for once the WHOLE card has dropped
+          // off the queue, not for a still-visible item).
+          canDispense: it.status !== "DISPENSED",
+          outOfStockHint: it.status === "OUT_OF_STOCK",
+          onDispense: () => this.setItemStatus(rxId, itId, "DISPENSED"),
+          onOutOfStock: () => this.setItemStatus(rxId, itId, "OUT_OF_STOCK"),
+        });
+      });
+      const rxId = rx.id;
+      const resolvedMessage =
+        outOfStockCount > 0
+          ? `${outOfStockCount} item${outOfStockCount > 1 ? "s" : ""} out of stock — no longer in the active queue. Find it later by looking up ${rx.serial}.`
+          : "Fully collected — no longer in the active queue.";
+      return Object.assign({}, rx, {
+        items,
+        pendingCount,
+        outOfStockCount,
+        resolved,
+        resolvedMessage,
+        cardOpacity: resolved ? 0.6 : 1,
+        hasMessages: rx.messages.length > 0,
+        sendDisabled: !(rx.messageDraft || "").trim(),
+        onMarkAllCollected: () => this.markAllCollected(rxId),
+        onOpenComposer: () => this.openComposer(rxId),
+        onCloseComposer: () => this.closeComposer(rxId),
+        onChangeDraft: (e) => this.changeDraft(rxId, e.target.value),
+        onSendMessage: () => this.sendMessage(rxId),
+      });
+    });
+
+    const lookupResult = this.state.lookupResult;
+    const lookupFound = lookupResult && lookupResult !== "not_found" ? lookupResult : null;
+    const lookupItems = lookupFound
+      ? lookupFound.items.map((it) => {
+          const meta = statusMeta[it.status];
+          const itId = it.id;
+          return Object.assign({}, it, {
+            statusLabel: meta.label,
+            statusBg: meta.bg,
+            statusFg: meta.fg,
+            isPending: it.status === "PENDING",
+            onDispense: () => this.dispenseLookupItem(itId),
+          });
+        })
+      : [];
+
+    return {
+      prescriptions,
+      queueCount: prescriptions.filter((rx) => !rx.resolved).length,
+      lookupQuery: this.state.lookupQuery,
+      onLookupChange: (e) => this.setState({ lookupQuery: e.target.value }),
+      onLookupSearch: () => this.runLookup(),
+      showNotFound: lookupResult === "not_found",
+      lookupFound,
+      lookupItems,
+    };
+  }
+}
+</script>
+</body>
+</html>

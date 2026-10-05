@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import { mkdir, readFile } from 'node:fs/promises';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+const page = await browser.newPage();
+const patient = { id: 'sample', firstName: 'Zoë', lastName: 'Mokoena', mpiNumber: 'DC-0000038', dateOfBirth: '1990-01-01', idNumber: '9001010000000' };
+try {
+  await page.addInitScript(() => { sessionStorage.setItem('ulwembu.tenantToken', 'test'); sessionStorage.setItem('ulwembu.tenantSlug', 'demo'); });
+  await page.route('**/api/v1/auth/me', r => r.fulfill({ json: { id: 'staff', firstName: 'Reception', lastName: 'Officer', roles: [] } }));
+  await page.route('**/api/v1/patients/sample', r => { assert.equal(r.request().headers()['x-tenant-id'], 'demo'); return r.fulfill({ json: patient }); });
+  await page.goto('http://127.0.0.1:5186/print/patient-label/sample');
+  await page.getByRole('button', { name: 'Print label', exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector('.patient-label')?.naturalWidth === 1200);
+  await mkdir('test-results', { recursive: true });
+  await page.locator('.patient-label').screenshot({ path: 'test-results/label.png' });
+  const downloadEvent = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download PDF (A4)', exact: true }).click();
+  const download = await downloadEvent;
+  await download.saveAs('test-results/label.pdf');
+  assert.equal((await readFile('test-results/label.pdf')).subarray(0, 5).toString(), '%PDF-');
+  await page.evaluate(() => { window.print = () => { window.printCalled = true; }; });
+  await page.getByRole('button', { name: 'Print label', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.printCalled), true);
+  await page.getByLabel('Printer paper').selectOption('label');
+  await page.emulateMedia({ media: 'print' });
+  await page.pdf({ path: 'test-results/label-print.pdf', preferCSSPageSize: true });
+  await page.emulateMedia({ media: 'screen' });
+  await page.route('**/api/v1/patients/missing', r => r.fulfill({ status: 404, json: { message: 'Not found' } }));
+  await page.goto('http://127.0.0.1:5186/print/patient-label/missing');
+  await page.getByRole('alert').waitFor({ timeout: 20000 });
+  assert.equal(await page.getByRole('button', { name: 'Print label', exact: true }).isDisabled(), true);
+  console.log('PASS: authenticated patient fetch, label preview, PDF download, print action, label paper and missing patient. API mocked.');
+} finally { await browser.close(); }
