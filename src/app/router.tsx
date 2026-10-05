@@ -45,6 +45,7 @@ import { AddClinicScreen } from "@/platform/AddClinicScreen";
 import { UsersPage } from "@/platform/UsersPage";
 import { CreateOperatorScreen } from "@/platform/CreateOperatorScreen";
 import { AuditPage } from "@/platform/AuditPage";
+import { WaitingTimeReportPage } from "@/rpta/WaitingTimeReportPage";
 
 export function AppRouter() {
   return (
@@ -158,6 +159,10 @@ export function AppRouter() {
         <Route path="patients/:id" element={<PatientDetailPage />} />
         <Route path="queue" element={<QueuePage />} />
         <Route path="vitals" element={<VitalsIntakePage />} />
+        <Route
+          path="rpta/waiting-time-report"
+          element={<WaitingTimeReportPage />}
+        />
         <Route path="pharmacy" element={<PharmacyLayout />}>
           <Route index element={<PharmacyQueuePage />} />
           <Route path="stock" element={<StockListPage />} />
