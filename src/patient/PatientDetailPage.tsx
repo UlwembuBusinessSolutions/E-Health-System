@@ -1,3 +1,5 @@
+import { PrescriptionBuilder } from "@/prescribing/PrescriptionBuilder";
+import { EMPTY_DRAFT, draftProblems, toPayload, type PrescriptionDraft } from "@/prescribing/prescriptionDraft";
 import { generateUUID } from "../utils/uuid";
 import { PatientVisitsTab } from "./PatientVisitsTab";
 import { createPortal } from "react-dom";
@@ -74,7 +76,6 @@ import {
   createPrescription,
   getPatientPrescriptions,
   type Prescription,
-  type PrescriptionItemInput,
 } from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
 import { printQueueTicket } from "@/shared/lib/printTicket";
@@ -114,7 +115,6 @@ import { TriageColourBadge } from "@/shared/components/TriageColourBadge";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 
-const EMPTY_ITEM: PrescriptionItemInput = { drugName: "", dosage: "", quantity: 1 };
 
 const VISIT_TYPE_OPTIONS: { value: VisitType; label: string }[] = [
   { value: "NEW", label: "New visit" },
@@ -740,7 +740,7 @@ export function PatientDetailPage() {
   const [visitError, setVisitError] = useState<string | null>(null);
   const [startedVisit, setStartedVisit] = useState<VisitWithToken | null>(null);
   const [isPrescribing, setIsPrescribing] = useState(false);
-  const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItemInput[]>([{ ...EMPTY_ITEM }]);
+  const [prescriptionDraft, setPrescriptionDraft] = useState<PrescriptionDraft>(EMPTY_DRAFT);
   const [prescriptionError, setPrescriptionError] = useState<string | null>(null);
   const [createdPrescription, setCreatedPrescription] = useState<Prescription | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
@@ -1009,7 +1009,10 @@ export function PatientDetailPage() {
   };
 
   const prescribe = useMutation({
-    mutationFn: (visitId: string) => createPrescription({ visitId, items: prescriptionItems }),
+    mutationFn: (visitId: string) => {
+      const { pharmacyItems, purchaseItems } = toPayload(prescriptionDraft);
+      return createPrescription({ visitId, items: pharmacyItems, purchaseItems });
+    },
     onSuccess: (result) => {
       setCreatedPrescription(result);
       setIsPrescribing(false);
@@ -1022,16 +1025,12 @@ export function PatientDetailPage() {
   const handlePrescribe = () => {
     setPrescriptionError(null);
     if (!startedVisit) return;
-    const incomplete = prescriptionItems.some((item) => !item.drugName.trim() || !item.dosage.trim());
-    if (incomplete) {
-      setPrescriptionError("Every item needs a drug name and dosage.");
+    const problems = draftProblems(prescriptionDraft);
+    if (problems.length > 0) {
+      setPrescriptionError(problems.join(" "));
       return;
     }
     prescribe.mutate(startedVisit.visit.id);
-  };
-
-  const updateItem = (index: number, patch: Partial<PrescriptionItemInput>) => {
-    setPrescriptionItems((items) => items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
   };
 
   const patient = patientQuery.data;
@@ -1832,56 +1831,9 @@ export function PatientDetailPage() {
                       {prescriptionError}
                     </p>
                   )}
-                  <div className="flex flex-col gap-3">
-                    {prescriptionItems.map((item, index) => (
-                      <div key={index} className="grid grid-cols-1 gap-3 sm:grid-cols-[2fr_2fr_1fr_auto]">
-                        <Input
-                          label="Drug name"
-                          required={index === 0}
-                          placeholder="Paracetamol"
-                          value={item.drugName}
-                          onChange={(e) => updateItem(index, { drugName: e.target.value })}
-                        />
-                        <Input
-                          label="Dosage"
-                          required={index === 0}
-                          placeholder="500mg twice daily"
-                          value={item.dosage}
-                          onChange={(e) => updateItem(index, { dosage: e.target.value })}
-                        />
-                        <Input
-                          label="Quantity"
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={(e) => updateItem(index, { quantity: Number(e.target.value) || 1 })}
-                        />
-                        <div className="flex items-end">
-                          <button
-                            type="button"
-                            disabled={prescriptionItems.length === 1}
-                            onClick={() =>
-                              setPrescriptionItems((items) => items.filter((_, i) => i !== index))
-                            }
-                            className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary transition-colors duration-150 hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-40"
-                            aria-label="Remove item"
-                          >
-                            <Trash2 className="size-4" aria-hidden />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setPrescriptionItems((items) => [...items, { ...EMPTY_ITEM }])}
-                    className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-600 hover:text-brand-700"
-                  >
-                    <Plus className="size-3.5" aria-hidden />
-                    Add another item
-                  </button>
+                  <PrescriptionBuilder draft={prescriptionDraft} onChange={setPrescriptionDraft} />
                   <div className="mt-4 flex gap-2">
-                    <Button loading={prescribe.isPending} onClick={handlePrescribe}>
+                    <Button loading={prescribe.isPending} disabled={draftProblems(prescriptionDraft).length > 0} onClick={handlePrescribe}>
                       Create prescription
                     </Button>
                     <Button variant="secondary" onClick={() => setIsPrescribing(false)}>

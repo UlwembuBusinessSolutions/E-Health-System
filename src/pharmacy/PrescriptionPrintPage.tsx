@@ -2,7 +2,7 @@
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { FileText, Printer } from "lucide-react";
-import { getPrescription, type PrescriptionStatus } from "@/shared/api/pharmacy";
+import { getPrescription, type PrescriptionStatus, type PurchaseReason } from "@/shared/api/pharmacy";
 import { getOrganizationSelf } from "@/shared/api/organization";
 import { getFacilities } from "@/shared/api/facilities";
 import "./PrescriptionPrintPage.css";
@@ -12,6 +12,11 @@ const statusLabels: Record<PrescriptionStatus, string> = {
   DISPENSED: "Dispensed",
   OUT_OF_STOCK: "Out of stock · Not dispensed",
   PARTIALLY_DISPENSED: "Partially dispensed",
+};
+const purchaseReasonLabels: Record<PurchaseReason, string> = {
+  OUT_OF_STOCK: "Out of stock at the clinic pharmacy",
+  SHORT_STOCK: "Rest of the quantity, not available at the clinic pharmacy",
+  NOT_STOCKED: "Not stocked by the clinic pharmacy",
 };
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-ZA", { day: "2-digit", month: "long", year: "numeric" });
@@ -86,17 +91,27 @@ export function PrescriptionPrintPage() {
           <div className="rx-section-heading"><span className="rx-symbol" aria-hidden>℞</span><div><h2 id="rx-medications-heading">Prescribed medication</h2><p>Medication and directions as prescribed</p></div></div>
           <table className="rx-table">
             <thead><tr><th scope="col" className="rx-number">No.</th><th scope="col">Medication / directions</th><th scope="col" className="rx-quantity">Quantity</th></tr></thead>
-            <tbody>{p.items.map((item, index) => <tr key={index}><td className="rx-number">{String(index + 1).padStart(2, "0")}</td><td><strong className="rx-drug">{item.drugName}</strong><p className="rx-directions">{item.dosage}</p></td><td className="rx-quantity"><strong>{item.quantity}</strong></td></tr>)}</tbody>
+            <tbody>{p.items.map((item, index) => <tr key={index}><td className="rx-number">{String(index + 1).padStart(2, "0")}</td><td><strong className="rx-drug">{item.drugName}</strong><p className="rx-directions">{item.dosage}</p></td><td className="rx-quantity"><strong>{item.quantity}</strong>{item.dispensedQuantity > 0 && <span className="rx-dispensed">Dispensed {item.dispensedQuantity}</span>}</td></tr>)}</tbody>
           </table>
-          {p.items.length === 0 && <p className="rx-empty">No medication items recorded.</p>}
+          {p.items.length === 0 && p.purchaseItems.length === 0 && <p className="rx-empty">No medication items recorded.</p>}
+          {p.items.length === 0 && p.purchaseItems.length > 0 && <p className="rx-empty">Nothing on this prescription is dispensed by the clinic pharmacy.</p>}
         </section>
+        {p.purchaseItems.length > 0 && (
+          <section className="rx-buy" aria-labelledby="rx-buy-heading">
+            <div className="rx-section-heading"><span className="rx-symbol" aria-hidden>℞</span><div><h2 id="rx-buy-heading">To buy at a pharmacy</h2><p>Not available from the clinic pharmacy. Take this prescription to any pharmacy.</p></div></div>
+            <table className="rx-table">
+              <thead><tr><th scope="col" className="rx-number">No.</th><th scope="col">Medication / directions</th><th scope="col" className="rx-quantity">Quantity</th></tr></thead>
+              <tbody>{p.purchaseItems.map((item, index) => <tr key={item.id}><td className="rx-number">{String(index + 1).padStart(2, "0")}</td><td><strong className="rx-drug">{item.drugName}</strong><p className="rx-directions">{item.dosage}</p><p className="rx-buy-reason">{purchaseReasonLabels[item.reason]}{item.note ? ` · ${item.note}` : ""}</p></td><td className="rx-quantity"><strong>{item.quantity}</strong></td></tr>)}</tbody>
+            </table>
+          </section>
+        )}
         <section className="rx-signoff" aria-label="Prescriber authorisation">
           <div className="rx-signature"><div className="rx-signature-line" /><p className="rx-label">Prescriber signature</p><p>{p.prescriberName ?? "Name not recorded"}</p></div>
           <div className="rx-stamp"><span>Practice stamp</span></div>
           <div className="rx-signature"><div className="rx-signature-line" /><p className="rx-label">Date signed</p></div>
         </section>
         <section className="rx-dispensing" aria-label="Dispensing record">
-          <div className="rx-dispensing-heading"><h2 className="rx-label">Dispensing record</h2><span className={`rx-status rx-status-${p.status.toLowerCase()}`}>{statusLabels[p.status]}</span></div>
+          <div className="rx-dispensing-heading"><h2 className="rx-label">Dispensing record</h2>{p.items.length > 0 && <span className={`rx-status rx-status-${p.status.toLowerCase()}`}>{statusLabels[p.status]}</span>}</div>
           {p.items.map((item, index) => (
             <p key={index}>
               <strong>{item.drugName}:</strong> {statusLabels[item.status]}

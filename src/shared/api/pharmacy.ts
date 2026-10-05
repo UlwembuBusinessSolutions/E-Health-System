@@ -69,6 +69,20 @@ export interface PrescriptionItem {
   substituteProductName: string | null;
 }
 
+/** Why a medicine is on the "patient buys this" list. Worked out by the server from the shelf at the time. */
+export type PurchaseReason = "OUT_OF_STOCK" | "SHORT_STOCK" | "NOT_STOCKED";
+
+export interface PurchasePrescriptionItem {
+  id: string;
+  drugName: string;
+  dosage: string;
+  quantity: number;
+  productId: string | null;
+  productName: string | null;
+  reason: PurchaseReason;
+  note: string | null;
+}
+
 export interface Prescription {
   id: string;
   serialNumber: string;
@@ -94,6 +108,9 @@ export interface Prescription {
   // DISPENSED.
   status: PrescriptionStatus;
   items: PrescriptionItem[];
+  // Medicines the patient is to buy instead; never dispensed and never keep the
+  // prescription waiting in the queue.
+  purchaseItems: PurchasePrescriptionItem[];
   createdAt: string;
 }
 
@@ -101,11 +118,23 @@ export interface PrescriptionItemInput {
   drugName: string;
   dosage: string;
   quantity: number;
+  // Set when the prescriber picked the medicine from the pharmacy's stock list.
+  productId?: string;
+}
+
+/** A medicine the patient buys instead of receiving it from the pharmacy. */
+export interface PurchaseItemInput {
+  drugName: string;
+  dosage: string;
+  quantity: number;
+  productId?: string;
+  note?: string;
 }
 
 export interface CreatePrescriptionPayload {
   visitId: string;
   items: PrescriptionItemInput[];
+  purchaseItems?: PurchaseItemInput[];
   // Optional traceability only — set when this prescription is created
   // from within a signed Consultation's "Send to pharmacy" outcome
   // (shared/api/consultations.ts). Omitting it behaves exactly as before

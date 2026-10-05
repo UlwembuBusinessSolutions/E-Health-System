@@ -9,6 +9,7 @@ import { CollectionSummaryLine } from "./CollectionSummaryLine";
 import { useRequestSubstitution } from "./hooks/useItemMutations";
 import { useSendPrescriberMessage } from "./hooks/usePrescriberMessage";
 import { ItemRow } from "./ItemRow";
+import { PurchaseItemsList } from "./PurchaseItemsList";
 import { MessagePrescriberForm } from "./MessagePrescriberForm";
 import { PrescriptionHeader } from "./PrescriptionHeader";
 
@@ -71,6 +72,8 @@ export function PrescriptionCard({ prescription: p }: { prescription: Prescripti
           <ItemRow key={item.id} prescription={p} item={item} onAskSubstitute={openSubstituteRequest} />
         ))}
       </ul>
+
+      <PurchaseItemsList items={p.purchaseItems} />
 
       <CardActions
         prescription={p}
