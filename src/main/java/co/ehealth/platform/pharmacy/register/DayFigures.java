@@ -9,8 +9,11 @@ public record DayFigures(long opening, long received, long dispensed, long destr
 
     static DayFigures of(long balanceBeforeDay, List<ScheduleRegisterEntry> entriesOfDay) {
         long openingEntries = totalOf(entriesOfDay, RegisterEntryKind.OPENING);
+        // A cancelled receipt takes stock back out, so it nets against what was received.
+        long receivedNet = totalOf(entriesOfDay, RegisterEntryKind.RECEIVED)
+                - totalOf(entriesOfDay, RegisterEntryKind.REVERSED);
         return new DayFigures(balanceBeforeDay + openingEntries,
-                totalOf(entriesOfDay, RegisterEntryKind.RECEIVED), totalOf(entriesOfDay, RegisterEntryKind.DISPENSED),
+                receivedNet, totalOf(entriesOfDay, RegisterEntryKind.DISPENSED),
                 totalOf(entriesOfDay, RegisterEntryKind.DESTROYED), totalOf(entriesOfDay, RegisterEntryKind.LOST),
                 totalOf(entriesOfDay, RegisterEntryKind.RETURNED));
     }

@@ -62,6 +62,19 @@ public class ScheduleRegisterRecorder {
                 lotNumber, actor, null, ledgerTransactionId, null));
     }
 
+    // A cancelled receipt: the stock it brought in leaves the register again,
+    // with the reason the receipt was cancelled so an inspector can follow it.
+    @Transactional
+    public void recordReversal(UUID facilityId, UUID productId, String lotNumber, long quantity, UUID recordedBy,
+                               UUID ledgerTransactionId, String reason) {
+        if (scheduledProducts.scheduleOf(productId).isEmpty()) {
+            return;
+        }
+        appender.append(new RegisterEntryDetails(facilityId, productId, RegisterEntryKind.REVERSED, quantity, null,
+                null, null, null, null, lotNumber, staffMember(recordedBy), null, ledgerTransactionId,
+                "Receipt cancelled: " + reason));
+    }
+
     // A returned unit comes back into the register; if it cannot go back on
     // the shelf (damaged) it is destroyed straight away, mirroring the two
     // ledger entries dispensing posts for the same return.

@@ -47,4 +47,10 @@ public interface PharmacyReceiptRepository extends JpaRepository<PharmacyReceipt
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE PharmacyReceipt r SET r.supplierId = :targetId WHERE r.supplierId = :sourceId")
     void repointSupplier(@Param("sourceId") UUID sourceId, @Param("targetId") UUID targetId);
+
+    // Has this supplier's invoice number already been received and not reversed?
+    // The CSV import uses it to warn before the same invoice is loaded twice.
+    @Query("SELECT COUNT(r) > 0 FROM PharmacyReceipt r WHERE r.supplierId = :supplierId "
+            + "AND LOWER(r.invoiceNumber) = LOWER(:invoiceNumber) AND r.reversedAt IS NULL")
+    boolean existsLiveInvoice(@Param("supplierId") UUID supplierId, @Param("invoiceNumber") String invoiceNumber);
 }

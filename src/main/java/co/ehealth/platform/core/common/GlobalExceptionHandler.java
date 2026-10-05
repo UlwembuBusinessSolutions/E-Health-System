@@ -43,6 +43,8 @@ import co.ehealth.platform.visit.QueueTokenNotFoundException;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import co.ehealth.platform.triage.InvalidTriageCaptureException;
 import co.ehealth.platform.triage.TriageAssessmentNotFoundException;
+import co.ehealth.platform.pharmacy.csvimport.ImportBatchNotFoundException;
+import co.ehealth.platform.pharmacy.csvimport.ImportConflictException;
 import co.ehealth.platform.pharmacy.openingstock.OpeningStockAlreadyLoadedException;
 import co.ehealth.platform.pharmacy.receiving.ReceiptAlreadyReversedException;
 import co.ehealth.platform.pharmacy.receiving.ReceiptNotFoundException;
@@ -574,14 +576,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(DuplicateSupplierResponse.from(ex));
     }
 
-    @ExceptionHandler({SupplierNotFoundException.class, ReceiptNotFoundException.class})
+    @ExceptionHandler({SupplierNotFoundException.class, ReceiptNotFoundException.class,
+            ImportBatchNotFoundException.class})
     public ResponseEntity<ApiErrorResponse> handlePharmacyRecordNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler({InvalidSupplierStateException.class, DuplicateSerialException.class,
             SerialNotInStockException.class, ReceiptAlreadyReversedException.class,
-            ReceiptStockUsedException.class, OpeningStockAlreadyLoadedException.class})
+            ReceiptStockUsedException.class, OpeningStockAlreadyLoadedException.class,
+            ImportConflictException.class})
     public ResponseEntity<ApiErrorResponse> handlePharmacyConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }

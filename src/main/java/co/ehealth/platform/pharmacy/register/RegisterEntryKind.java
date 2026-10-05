@@ -4,7 +4,7 @@ package co.ehealth.platform.pharmacy.register;
 // stock is fixed here so no caller can post, say, a "dispensed" entry that
 // increases the balance.
 public enum RegisterEntryKind {
-    DISPENSED(false), RECEIVED(true), DESTROYED(false), LOST(false), RETURNED(true), OPENING(true);
+    DISPENSED(false), RECEIVED(true), DESTROYED(false), LOST(false), RETURNED(true), OPENING(true), REVERSED(false);
 
     private final boolean incoming;
 
@@ -18,7 +18,7 @@ public enum RegisterEntryKind {
 
     // Writing stock off the register needs an explanation an inspector can read.
     public boolean requiresReason() {
-        return this == DESTROYED || this == LOST;
+        return this == DESTROYED || this == LOST || this == REVERSED;
     }
 
     public long balanceAfter(long balanceBefore, long quantity) {
