@@ -28,6 +28,11 @@ import co.ehealth.platform.patient.PatientDocumentNotFoundException;
 import co.ehealth.platform.patient.PatientGuardianNotFoundException;
 import co.ehealth.platform.patient.PatientNotFoundException;
 import co.ehealth.platform.patient.TooManyGuardiansException;
+
+import co.ehealth.platform.patient.InvalidOfflineSyncException;
+import co.ehealth.platform.patient.OfflineSyncRecordNotFoundException;
+import co.ehealth.platform.patient.OfflineSyncStateException;
+
 import co.ehealth.platform.facility.FacilityNotFoundException;
 import co.ehealth.platform.facility.PharmacyFacilityNotConfiguredException;
 import co.ehealth.platform.pharmacy.NotLicensedException;
@@ -448,6 +453,25 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // PrescriptionAlreadyDispensedException above.
     @ExceptionHandler(InvalidConsultationStateException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidConsultationState(InvalidConsultationStateException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // OfflineSyncService — bad batch size / missing device id / missing
+    // resolution or reason. A client input problem.
+    @ExceptionHandler(InvalidOfflineSyncException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidOfflineSync(InvalidOfflineSyncException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(OfflineSyncRecordNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleOfflineSyncRecordNotFound(OfflineSyncRecordNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // Resolving a record that isn't an open conflict — "conflicts with
+    // current state", same shape as InvalidConsultationStateException.
+    @ExceptionHandler(OfflineSyncStateException.class)
+    public ResponseEntity<ApiErrorResponse> handleOfflineSyncState(OfflineSyncStateException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
