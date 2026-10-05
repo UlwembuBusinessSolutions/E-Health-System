@@ -1,17 +1,24 @@
 -- RECQ-F03 / BR-RECQ-080
 -- Automatic patient journey timing from registration through pharmacy.
+
 CREATE TABLE waiting_time_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
     visit_id UUID NOT NULL UNIQUE REFERENCES visits(id),
+    pharmacy_visit_id UUID UNIQUE REFERENCES visits(id),
+
     patient_id UUID NOT NULL REFERENCES patients(id),
     facility_id UUID NOT NULL REFERENCES facilities(id),
 
     registration_started_at TIMESTAMPTZ NOT NULL,
     registration_completed_at TIMESTAMPTZ,
+
     triage_started_at TIMESTAMPTZ,
     triage_completed_at TIMESTAMPTZ,
+
     consultation_started_at TIMESTAMPTZ,
     consultation_completed_at TIMESTAMPTZ,
+
     pharmacy_started_at TIMESTAMPTZ,
     pharmacy_completed_at TIMESTAMPTZ,
 
