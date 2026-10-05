@@ -14,5 +14,6 @@ public record PrescriptionResponse(UUID id, String serialNumber, UUID visitId, U
                                    String patientMpi, UUID facilityId, UUID prescriberId, String prescriberName,
                                    String prescriberRegistrationNumber, String prescriberPhone,
                                    String prescriberEmail, UUID consultationId, PrescriptionStatus status,
-                                   List<PrescriptionItemResponse> items, Instant createdAt) {
+                                   List<PrescriptionItemResponse> items,
+                                   List<PrescriptionPurchaseItemResponse> purchaseItems, Instant createdAt) {
 }

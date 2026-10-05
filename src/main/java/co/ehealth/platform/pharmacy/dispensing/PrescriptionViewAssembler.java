@@ -1,6 +1,8 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
 import co.ehealth.platform.pharmacy.stock.DrugSchedule;
+import co.ehealth.platform.pharmacy.stock.PharmacyProduct;
+import co.ehealth.platform.pharmacy.stock.PharmacyProductRepository;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.patient.Patient;
 import co.ehealth.platform.pharmacy.DispensingRecord;
@@ -8,6 +10,8 @@ import co.ehealth.platform.pharmacy.Prescription;
 import co.ehealth.platform.pharmacy.PrescriptionItem;
 import co.ehealth.platform.pharmacy.PrescriptionItemRepository;
 import co.ehealth.platform.pharmacy.PrescriptionOutOfStockRecord;
+import co.ehealth.platform.pharmacy.PrescriptionPurchaseItem;
+import co.ehealth.platform.pharmacy.PrescriptionPurchaseItemRepository;
 import co.ehealth.platform.pharmacy.PrescriptionStatus;
 import co.ehealth.platform.pharmacy.dispensing.PrescriptionItemResponse.LotView;
 import org.springframework.stereotype.Component;
@@ -28,9 +32,15 @@ public class PrescriptionViewAssembler {
     private final PrescriptionItemRepository itemRepository;
     private final ItemFactsLoader factsLoader;
     private final PartyDirectory partyDirectory;
+    private final PrescriptionPurchaseItemRepository purchaseItemRepository;
+    private final PharmacyProductRepository productRepository;
 
     public PrescriptionViewAssembler(PrescriptionItemRepository itemRepository, ItemFactsLoader factsLoader,
-                                      PartyDirectory partyDirectory) {
+                                      PartyDirectory partyDirectory,
+                                      PrescriptionPurchaseItemRepository purchaseItemRepository,
+                                      PharmacyProductRepository productRepository) {
+        this.purchaseItemRepository = purchaseItemRepository;
+        this.productRepository = productRepository;
         this.itemRepository = itemRepository;
         this.factsLoader = factsLoader;
         this.partyDirectory = partyDirectory;
@@ -54,10 +64,26 @@ public class PrescriptionViewAssembler {
         Map<UUID, Patient> patients = partyDirectory
                 .patients(prescriptions.stream().map(Prescription::getPatientId).collect(Collectors.toSet()));
         Map<UUID, User> users = partyDirectory.users(staffIdsOn(prescriptions, facts));
+        Map<UUID, List<PrescriptionPurchaseItem>> purchasesByPrescription = purchaseItemRepository
+                .findByPrescriptionIdIn(prescriptionIds).stream()
+                .collect(Collectors.groupingBy(PrescriptionPurchaseItem::getPrescriptionId));
+        Map<UUID, String> purchaseProductNames = productNames(purchasesByPrescription);
 
         return prescriptions.stream().map(prescription -> toResponse(prescription,
                 itemsByPrescription.getOrDefault(prescription.getId(), List.of()), facts,
-                patients.get(prescription.getPatientId()), users)).toList();
+                patients.get(prescription.getPatientId()), users,
+                purchasesByPrescription.getOrDefault(prescription.getId(), List.of()), purchaseProductNames))
+                .toList();
+    }
+
+    private Map<UUID, String> productNames(Map<UUID, List<PrescriptionPurchaseItem>> purchases) {
+        Set<UUID> productIds = purchases.values().stream().flatMap(List::stream)
+                .map(PrescriptionPurchaseItem::getProductId).filter(id -> id != null).collect(Collectors.toSet());
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+        return productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(PharmacyProduct::getId, PharmacyProduct::getDisplayName));
     }
 
     private Set<UUID> staffIdsOn(List<Prescription> prescriptions, ItemFacts facts) {
@@ -69,7 +95,9 @@ public class PrescriptionViewAssembler {
     }
 
     private PrescriptionResponse toResponse(Prescription prescription, List<PrescriptionItem> items,
-                                            ItemFacts facts, Patient patient, Map<UUID, User> users) {
+                                            ItemFacts facts, Patient patient, Map<UUID, User> users,
+                                            List<PrescriptionPurchaseItem> purchases,
+                                            Map<UUID, String> purchaseProductNames) {
         User prescriber = users.get(prescription.getPrescriberId());
         List<PrescriptionItemResponse> itemResponses = items.stream()
                 .map(item -> toItemResponse(prescription, item, facts, users)).toList();
@@ -80,7 +108,12 @@ public class PrescriptionViewAssembler {
                 prescriber == null ? null : PartyDirectory.registrationNumber(prescriber),
                 prescriber == null ? null : prescriber.getContactNumber(),
                 prescriber == null ? null : prescriber.getEmail(), prescription.getConsultationId(),
-                prescription.getStatus(), itemResponses, prescription.getCreatedAt());
+                prescription.getStatus(), itemResponses,
+                purchases.stream().map(purchase -> new PrescriptionPurchaseItemResponse(purchase.getId(),
+                        purchase.getDrugName(), purchase.getDosage(), purchase.getQuantity(), purchase.getProductId(),
+                        purchaseProductNames.get(purchase.getProductId()), purchase.getReason(),
+                        purchase.getNote())).toList(),
+                prescription.getCreatedAt());
     }
 
     private PrescriptionItemResponse toItemResponse(Prescription prescription, PrescriptionItem item,

@@ -13,9 +13,9 @@ import co.ehealth.platform.pharmacy.dispensing.PrescriptionViewAssembler;
 import co.ehealth.platform.pharmacy.dispensing.WitnessCredentials;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -56,11 +56,17 @@ public class PrescriptionController {
     @PostMapping("/api/v1/prescriptions")
     public ResponseEntity<PrescriptionResponse> create(@Valid @RequestBody CreatePrescriptionRequest request,
                                                          @AuthenticationPrincipal AuthenticatedPrincipal staff) {
-        var items = request.items().stream()
-                .map(i -> new PrescriptionService.PrescriptionItemInput(i.drugName(), i.dosage(), i.quantity()))
+        List<ItemRequest> requested = request.items() == null ? List.of() : request.items();
+        var items = requested.stream()
+                .map(i -> new PrescriptionService.PrescriptionItemInput(i.drugName(), i.dosage(), i.quantity(),
+                        i.productId()))
                 .toList();
-        var command =
-                new PrescriptionService.CreatePrescriptionCommand(request.visitId(), items, request.consultationId());
+        List<PrescriptionService.PrescriptionPurchaseItemInput> purchaseItems = request.purchaseItems() == null
+                ? List.of()
+                : request.purchaseItems().stream().map(i -> new PrescriptionService.PrescriptionPurchaseItemInput(
+                        i.drugName(), i.dosage(), i.quantity(), i.productId(), i.note())).toList();
+        var command = new PrescriptionService.CreatePrescriptionCommand(request.visitId(), items,
+                request.consultationId(), purchaseItems);
         Prescription prescription = prescriptionService.create(command, staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(viewAssembler.assemble(prescription));
     }
@@ -164,11 +170,20 @@ public class PrescriptionController {
 
     // consultationId is optional — omitted (or null) keeps this request
     // behaving exactly as it did before that field existed.
-    public record CreatePrescriptionRequest(@NotNull UUID visitId, @NotEmpty List<@Valid ItemRequest> items,
-                                             UUID consultationId) {
+    public record CreatePrescriptionRequest(@NotNull UUID visitId, List<@Valid ItemRequest> items,
+                                             UUID consultationId,
+                                             List<@Valid PurchaseItemRequest> purchaseItems) {
     }
 
-    public record ItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity) {
+    // productId is set when the prescriber chose the medicine from the pharmacy's
+    // stock list; the quantity is then checked against the shelf.
+    public record ItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity,
+                              UUID productId) {
+    }
+
+    // A medicine the patient buys instead of receiving it from the pharmacy.
+    public record PurchaseItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity,
+                                      UUID productId, @Size(max = 300) String note) {
     }
 
     // Both fields optional: quantity defaults to everything remaining

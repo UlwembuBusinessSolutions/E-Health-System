@@ -10,6 +10,8 @@ import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.identity.StaffService;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
+import co.ehealth.platform.pharmacy.prescribing.PrescribingStockService;
+import co.ehealth.platform.pharmacy.stock.PharmacyValidationException;
 import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService;
 import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService.DispenseOutcome;
 import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService.DispenseRequest;
@@ -26,8 +28,10 @@ import org.springframework.util.StringUtils;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class PrescriptionService {
@@ -49,6 +53,8 @@ public class PrescriptionService {
     private final DrugMappingService drugMappingService;
     private final PrescriptionRollup prescriptionRollup;
     private final ItemLock itemLock;
+    private final PrescriptionPurchaseItemRepository purchaseItemRepository;
+    private final PrescribingStockService prescribingStock;
 
     public PrescriptionService(PrescriptionRepository prescriptionRepository,
                                 PrescriptionItemRepository prescriptionItemRepository,
@@ -59,7 +65,10 @@ public class PrescriptionService {
                                 AuditLogService auditLogService, Clock clock, PermissionService permissionService,
                                 DispensingGuard dispensingGuard, DispenseAllocationService dispenseAllocationService,
                                 DrugMappingService drugMappingService, PrescriptionRollup prescriptionRollup,
-                                ItemLock itemLock) {
+                                ItemLock itemLock, PrescriptionPurchaseItemRepository purchaseItemRepository,
+                                PrescribingStockService prescribingStock) {
+        this.purchaseItemRepository = purchaseItemRepository;
+        this.prescribingStock = prescribingStock;
         this.prescriptionRepository = prescriptionRepository;
         this.prescriptionItemRepository = prescriptionItemRepository;
         this.outOfStockRecordRepository = outOfStockRecordRepository;
@@ -92,15 +101,46 @@ public class PrescriptionService {
                     "You need a current HPCSA or SANC registration to prescribe.");
         }
         Visit visit = visitService.get(cmd.visitId());
+        List<PrescriptionPurchaseItemInput> purchaseInputs = cmd.purchaseItems();
+        if (cmd.items().isEmpty() && purchaseInputs.isEmpty()) {
+            throw new PharmacyValidationException("A prescription needs at least one medicine.");
+        }
+        // The pharmacy may only be asked for what it holds: checked here, inside the
+        // sign transaction, so a prescription can never leave the consulting room
+        // promising stock that is not there.
+        prescribingStock.requireCovered(visit.getFacilityId(), cmd.items().stream()
+                .filter(item -> item.productId() != null)
+                .map(item -> new PrescribingStockService.StockLine(item.productId(), item.quantity())).toList());
 
         String serialNumber = "RX-" + String.format("%07d", prescriptionRepository.nextSerialSequenceValue());
         Prescription prescription = new Prescription(serialNumber, visit.getId(), visit.getPatientId(),
                 visit.getFacilityId(), prescriberId, clock.instant(), cmd.consultationId());
+        if (cmd.items().isEmpty()) {
+            // Everything on it is for the patient to buy, so the pharmacy has nothing to hand over.
+            prescription.markNothingToDispense();
+        }
         prescriptionRepository.save(prescription);
 
         for (PrescriptionItemInput item : cmd.items()) {
-            prescriptionItemRepository.save(
-                    new PrescriptionItem(prescription.getId(), item.drugName(), item.dosage(), item.quantity()));
+            PrescriptionItem saved = new PrescriptionItem(prescription.getId(), item.drugName(), item.dosage(),
+                    item.quantity());
+            if (item.productId() != null) {
+                // The prescriber picked the product from the pharmacy's list, so the
+                // pharmacist never has to match the name to a product by hand.
+                saved.mapToProduct(item.productId());
+            }
+            prescriptionItemRepository.save(saved);
+        }
+        Map<UUID, Integer> dispensedByProduct = cmd.items().stream().filter(item -> item.productId() != null)
+                .collect(Collectors.groupingBy(PrescriptionItemInput::productId,
+                        Collectors.summingInt(PrescriptionItemInput::quantity)));
+        for (PrescriptionPurchaseItemInput item : purchaseInputs) {
+            int alreadyDispensed = item.productId() == null ? 0 : dispensedByProduct.getOrDefault(item.productId(), 0);
+            purchaseItemRepository.save(new PrescriptionPurchaseItem(prescription.getId(), item.drugName(),
+                    item.dosage(), item.quantity(), item.productId(),
+                    prescribingStock.classifyPurchase(visit.getFacilityId(), item.productId(), item.quantity(),
+                            alreadyDispensed),
+                    item.note()));
         }
 
         auditLogService.append(prescriberId, visit.getFacilityId(), "PRESCRIPTION_CREATED", "Prescription",
@@ -262,9 +302,30 @@ public class PrescriptionService {
     // consultationId is optional traceability only (Prescription's own
     // why-note) — null keeps this call's behaviour identical to before it
     // existed.
-    public record CreatePrescriptionCommand(UUID visitId, List<PrescriptionItemInput> items, UUID consultationId) {
+    public record CreatePrescriptionCommand(UUID visitId, List<PrescriptionItemInput> items, UUID consultationId,
+                                            List<PrescriptionPurchaseItemInput> purchaseItems) {
+
+        public CreatePrescriptionCommand {
+            items = items == null ? List.of() : items;
+            purchaseItems = purchaseItems == null ? List.of() : purchaseItems;
+        }
+
+        public CreatePrescriptionCommand(UUID visitId, List<PrescriptionItemInput> items, UUID consultationId) {
+            this(visitId, items, consultationId, List.of());
+        }
     }
 
-    public record PrescriptionItemInput(String drugName, String dosage, int quantity) {
+    // productId is set when the prescriber chose the medicine from the pharmacy's
+    // stock list; null for a typed name the pharmacist will match later.
+    public record PrescriptionItemInput(String drugName, String dosage, int quantity, UUID productId) {
+
+        public PrescriptionItemInput(String drugName, String dosage, int quantity) {
+            this(drugName, dosage, quantity, null);
+        }
+    }
+
+    // A medicine the patient should buy rather than receive from the pharmacy.
+    public record PrescriptionPurchaseItemInput(String drugName, String dosage, int quantity, UUID productId,
+                                                String note) {
     }
 }
