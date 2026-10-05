@@ -11,6 +11,7 @@ const KIND_LABELS: Record<RegisterEntryKind, string> = {
   LOST: "Lost",
   RETURNED: "Returned to supplier",
   OPENING: "Opening balance",
+  REVERSED: "Receipt cancelled",
 };
 
 const DASH = "—";

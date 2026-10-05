@@ -28,6 +28,7 @@ import {
   AddProductPage,
   DispensingQueuePage,
   LedgerPage,
+  ImportPage,
   OpeningStockPage,
   PharmacyLayout,
   PrescriptionPrintPage,
@@ -195,6 +196,7 @@ export function AppRouter() {
           <Route path="ledger" element={<LedgerPage />} />
           <Route path="counts" element={<StockCountPage />} />
           <Route path="register" element={<ScheduleRegisterPage />} />
+          <Route path="import" element={<ImportPage />} />
           <Route path="opening-stock" element={<OpeningStockPage />} />
         </Route>
         <Route

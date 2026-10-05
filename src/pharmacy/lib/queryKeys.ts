@@ -64,6 +64,12 @@ export const pharmacyKeys = {
     arrivals: (facilityId: string) => [ROOT, "dispensing", "arrivals", facilityId] as const,
     collection: (prescriptionId: string) => [ROOT, "dispensing", "collection", prescriptionId] as const,
   },
+  imports: {
+    all: [ROOT, "imports"] as const,
+    recent: (facilityId: string) => [ROOT, "imports", "recent", facilityId] as const,
+    check: (supplierId: string | null, invoiceNumber: string, rows: unknown) =>
+      [ROOT, "imports", "check", supplierId, invoiceNumber, rows] as const,
+  },
   opening: {
     validate: (facilityId: string, rows: unknown) => [ROOT, "opening-stock", "validate", facilityId, rows] as const,
   },

@@ -2,6 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import clsx from "clsx";
 import {
   ClipboardCheck,
+  FileUp,
   Package,
   PackagePlus,
   PackageOpen,
@@ -38,6 +39,7 @@ const MORE_LINKS: MoreMenuLink[] = [
   { to: "/app/pharmacy/counts", label: "Count stock", icon: ClipboardCheck },
   { to: "/app/pharmacy/suppliers", label: "Suppliers", icon: Truck },
   { to: "/app/pharmacy/register", label: "Scheduled register", icon: ShieldCheck },
+  { to: "/app/pharmacy/import", label: "Import from CSV", icon: FileUp },
   { to: "/app/pharmacy/opening-stock", label: "Load opening stock", icon: PackageOpen },
 ];
 

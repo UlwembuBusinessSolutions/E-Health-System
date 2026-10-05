@@ -9,7 +9,7 @@ import type { DrugSchedule } from "./pharmacyStock";
 
 const BASE = "/api/v1/pharmacy/schedule-register";
 
-export type RegisterEntryKind = "DISPENSED" | "RECEIVED" | "DESTROYED" | "LOST" | "RETURNED" | "OPENING";
+export type RegisterEntryKind = "DISPENSED" | "RECEIVED" | "DESTROYED" | "LOST" | "RETURNED" | "OPENING" | "REVERSED";
 /** The kinds a person can record by hand; the rest are written by dispensing and receiving. */
 export type ManualRemovalKind = Extract<RegisterEntryKind, "DISPENSED" | "DESTROYED" | "LOST" | "RETURNED">;
 
