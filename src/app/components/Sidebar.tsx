@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ClipboardList, Gauge, HeartPulse, LogOut, Pill, Settings, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
+import { ClipboardList, Gauge, HeartPulse, LogOut, Pill, RefreshCw, Settings, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 import { canTakeVitals } from "@/auth/roles";
 import { getTenantSlug } from "@/shared/api/auth";
@@ -13,13 +13,9 @@ function initials(firstName: string, lastName: string): string {
 
 // The tenant app's own rail — light surface-raised against the app's
 // surface canvas, brand-500 accent, deliberately the opposite register from
-// the Platform Console's dark ink-900 sidebar (platform/components/Sidebar.tsx's
-// own why-note): that one reads as "internal control plane," this one is
-// the actual clinic-facing product, same visual family as the photographic
-// tenant login it follows. Structure (logo mark, nav list, active-item
-// accent bar, account footer) mirrors the platform sidebar exactly — same
-// component, different palette — so switching between the two products
-// still feels like one system.
+// the Platform Console's dark ink-900 sidebar. Structure (logo mark, nav
+// list, active-item accent bar, account footer) mirrors the platform
+// sidebar exactly.
 export function Sidebar() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -31,6 +27,7 @@ export function Sidebar() {
     { to: "/app", label: "Dashboard", icon: Gauge, end: true },
     { to: "/app/patients", label: "Patients", icon: UserRound, end: false },
     { to: "/app/queue", label: "Queue", icon: Ticket, end: false },
+    { to: "/app/sync", label: "Sync", icon: RefreshCw, end: false }, // OFFLINE
     ...(canTakeVitals(user?.role)
       ? [{ to: "/app/vitals", label: "Take Vitals", icon: HeartPulse, end: false }]
       : []),
@@ -46,8 +43,7 @@ export function Sidebar() {
   // reads getTenantSlug() too, and clearTenantAuth() (inside logout())
   // erases it. Navigating first moves the matched route off /app before
   // user ever goes null, so RequireAuth's redirect never has a reason to
-  // fire during a sign-out click at all — it only ever runs for a stale
-  // bookmark/direct nav to /app with no session, its actual job.
+  // fire during a sign-out click at all.
   const handleSignOut = () => {
     const slug = getTenantSlug();
     navigate(slug ? `/org/${slug}/login` : "/login", { replace: true });
@@ -69,7 +65,7 @@ export function Sidebar() {
             {org?.displayName ?? "Loading…"}
           </p>
           <p className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">
-            {org?.shortName ?? " "}
+            {org?.shortName ?? " "}
           </p>
         </div>
       </div>
