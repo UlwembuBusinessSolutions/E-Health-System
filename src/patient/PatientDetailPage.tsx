@@ -105,6 +105,7 @@ import {
 } from "@/shared/api/triage";
 import { ApiError } from "@/shared/api/client";
 import { useAuth } from "@/auth/AuthContext";
+import { canTakeVitals } from "@/auth/roles";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
 import { Input } from "@/shared/components/Input";
@@ -726,6 +727,7 @@ export function PatientDetailPage() {
   const patientId = id ?? "";
   const { user } = useAuth();
   const isOrgAdmin = user?.role === "ORG_ADMIN";
+  const canCaptureVitals = canTakeVitals(user?.role);
   // Starting a visit stays outside the tabs below — it's a primary action
   // relevant no matter which tab someone's looking at, not "content" that
   // should hide when the Vitals tab (a different, cross-visit view of the
@@ -1361,14 +1363,14 @@ export function PatientDetailPage() {
                     >
                       Print ticket
                     </Button>
-                    <Button
+                    {canCaptureVitals && <Button
                       variant="secondary"
                       size="md"
                       icon={<HeartPulse className="size-3.5" aria-hidden />}
                       onClick={() => setIsCapturingVitals(true)}
                     >
                       Take vitals
-                    </Button>
+                    </Button>}
                     {!isPrescribing && !createdPrescription && (
                       <Button
                         variant="secondary"
@@ -1484,7 +1486,7 @@ export function PatientDetailPage() {
                   <p className="text-[13.5px] text-text-secondary">
                     Start a visit before recording vitals so the readings are linked to the correct consultation.
                   </p>
-                  {!isStartingVisit && (
+                  {!isStartingVisit && canCaptureVitals && (
                     <Button
                       className="mt-3"
                       variant="secondary"
@@ -1762,14 +1764,14 @@ export function PatientDetailPage() {
                     <p className="text-[13.5px] text-text-secondary">No vitals captured yet for this visit.</p>
                   )}
                   <div className="mt-4 flex items-center gap-2">
-                    <Button
+                    {canCaptureVitals && <Button
                       variant="secondary"
                       size="md"
                       icon={<HeartPulse className="size-3.5" aria-hidden />}
                       onClick={() => setIsCapturingVitals(true)}
                     >
                       {latestVitals ? "Take new reading" : "Take vitals"}
-                    </Button>
+                    </Button>}
                     {earlierVitals.length > 0 && (
                       <button
                         type="button"

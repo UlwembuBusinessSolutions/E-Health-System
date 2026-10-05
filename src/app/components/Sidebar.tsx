@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import { ClipboardList, Gauge, HeartPulse, LogOut, Pill, Settings, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
+import { canTakeVitals } from "@/auth/roles";
 import { getTenantSlug } from "@/shared/api/auth";
 import { getOrganizationSelf } from "@/shared/api/organization";
 import { CalendarDays } from "lucide-react";
@@ -10,12 +11,6 @@ import { CalendarDays } from "lucide-react";
 function initials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
-
-// Mirrors TriageService.CLINICAL_ROLES exactly — the roles the capture
-// endpoint actually accepts. Gating the nav link on the same set keeps a
-// pharmacist or queue marshall from being handed an entry point to a flow
-// that would just 403 on save; the real enforcement stays server-side.
-const CLINICAL_ROLES = new Set(["Professional Nurse", "Doctor", "Clinician", "Occupational Health Practitioner"]);
 
 // Mirrors V12__role_permissions.sql's APPT:VIEW/APPT:MANAGE grants exactly
 // — every seeded role except Pharmacist and Social Worker holds one or the
@@ -60,7 +55,7 @@ export function Sidebar() {
     ...(user?.role && APPOINTMENT_ROLES.has(user.role)
       ? [{ to: "/app/appointments", label: "Appointments", icon: CalendarDays, end: false }]
       : []),
-    ...(user?.role && CLINICAL_ROLES.has(user.role)
+    ...(canTakeVitals(user?.role)
       ? [{ to: "/app/vitals", label: "Take Vitals", icon: HeartPulse, end: false }]
       : []),
     { to: "/app/pharmacy", label: "Pharmacy", icon: Pill, end: false },

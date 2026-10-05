@@ -5,6 +5,7 @@ import { ForgotPasswordScreen } from "@/auth/ForgotPasswordScreen";
 import { SsoCallbackPage } from "@/auth/SsoCallbackPage";
 import { RequireAuth } from "@/auth/RequireAuth";
 import { RequireRole } from "@/auth/RequireRole";
+import { VITALS_ROLES } from "@/auth/roles";
 import { AddStaffScreen } from "@/staff/AddStaffScreen";
 import { EditStaffScreen } from "@/staff/EditStaffScreen";
 import { StaffListPage } from "@/staff/StaffListPage";
@@ -178,7 +179,14 @@ export function AppRouter() {
         <Route path="patients/:id" element={<PatientDetailPage />} />
         <Route path="queue" element={<QueuePage />} />
         <Route path="appointments" element={<AppointmentsPage />} />
-        <Route path="vitals" element={<VitalsIntakePage />} />
+        <Route
+          path="vitals"
+          element={
+            <RequireRole roles={[...VITALS_ROLES]}>
+              <VitalsIntakePage />
+            </RequireRole>
+          }
+        />
         <Route
           path="pharmacy"
           element={
