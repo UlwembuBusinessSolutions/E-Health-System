@@ -17,7 +17,7 @@ const SIZE_CLASSES: Record<ModalSize, string> = {
 // Below `sm` the dialog becomes a full-screen sheet: a floating card leaves
 // too little room for forms on a 360 px phone.
 const PANEL_BASE =
-  "m-auto h-dvh w-full sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl";
+  "m-auto h-dvh w-full sm:h-fit sm:max-h-[calc(100dvh-3rem)] sm:rounded-2xl";
 
 export function Modal({ open, size = "md", ...content }: ModalProps) {
   if (!open) return null;
