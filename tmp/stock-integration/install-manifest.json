@@ -1,0 +1,32 @@
+[
+    {
+        "source":  "src/pharmacy/stock/StockListPage.tsx",
+        "destination":  "src/pharmacy/stock/StockListPage.tsx",
+        "expectedHash":  "C739A6262CF2243CEDB9D221F598D6FF34F9BF845B3FCA146A57F422C61B566C"
+    },
+    {
+        "source":  "src/pharmacy/stock/ReceiveStockScreen.tsx",
+        "destination":  "src/pharmacy/stock/ReceiveStockScreen.tsx",
+        "expectedHash":  "CFF062D312CF15F49799A3BE6B0367EAFB9E0CAA2F2C709F1AE8BECDFF6B8E5C"
+    },
+    {
+        "source":  "src/pharmacy/PharmacyQueuePage.tsx",
+        "destination":  "src/pharmacy/PharmacyQueuePage.tsx",
+        "expectedHash":  "D6B28C98BA5CBC2DCB9E51EEA6157CFBE34494F74487ABA44CD8E36189068564"
+    },
+    {
+        "source":  "src/pharmacy/PrescriptionPrintPage.tsx",
+        "destination":  "src/pharmacy/PrescriptionPrintPage.tsx",
+        "expectedHash":  "639BACA4FB9EB8C5BE28721C863EC7B292BE66CDB40B0B5CCA13286666BC6DC3"
+    },
+    {
+        "source":  "src/patient/PatientDetailPage.tsx",
+        "destination":  "src/patient/PatientDetailPage.tsx",
+        "expectedHash":  "C39D0AC8116BE86296253CC4100AEC3B31F71C4BD67A79D78A659CEF932EFF69"
+    },
+    {
+        "source":  "stock-control.smoke.mjs",
+        "destination":  "tests/stock-control.smoke.mjs",
+        "expectedHash":  null
+    }
+]

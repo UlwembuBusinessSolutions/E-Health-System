@@ -1,0 +1,27 @@
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+/*
+  Scoped to the platform console (.platform-shell, applied once in
+  PlatformRoot) — the clinic-facing app keeps index.css's system-font stack,
+  chosen there for legibility under fluorescent lighting on kiosk hardware.
+  IBM Plex was designed for enterprise software UI, which is what this
+  console actually is: the internal control plane for onboarding clients
+  and platform staff, not a clinical workflow screen.
+
+  --font-sans and --font-mono are index.css's own Tailwind v4 theme tokens
+  (@theme block) — every existing font-sans/font-mono utility resolves
+  `var(--font-sans)`/`var(--font-mono)` at the point of use, so redefining
+  them as plain custom properties on this one ancestor class is enough for
+  everything beneath it to pick up the new faces. No new utility classes,
+  no per-component overrides.
+*/
+.platform-shell {
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  font-family: var(--font-sans);
+}

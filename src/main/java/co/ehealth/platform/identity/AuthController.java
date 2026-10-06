@@ -1,0 +1,129 @@
+package co.ehealth.platform.identity;
+
+import co.ehealth.platform.core.security.AuthenticatedPrincipal;
+import co.ehealth.platform.core.security.JwtService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.CacheControl;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
+import java.time.Instant;
+
+@RestController
+@RequestMapping("/api/v1/auth")
+public class AuthController {
+
+    private final AuthService authService;
+    private final PasswordResetService passwordResetService;
+    private final UserRepository userRepository;
+
+    public AuthController(AuthService authService, PasswordResetService passwordResetService,
+                           UserRepository userRepository) {
+        this.authService = authService;
+        this.passwordResetService = passwordResetService;
+        this.userRepository = userRepository;
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        JwtService.IssuedToken issued = authService.login(request.email(), request.password());
+        User user = userRepository.findByEmail(request.email()).orElseThrow();
+        return ResponseEntity.ok(new LoginResponse(issued.token(), issued.expiresAt().toString(),
+                new UserSummary(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName())));
+    }
+
+    // The frontend's own AuthContext (AuthProvider) starts every fresh page
+    // load with no user in memory, even when a valid tenant token is still
+    // sitting in sessionStorage — window.open()'ing a print ticket, or
+    // simply reloading any /app page, is a genuinely new page load with an
+    // empty React tree. This is what that rehydration path calls: given a
+    // still-valid Authorization header, hand back the same identity
+    // login() already returns, so the app can reconstruct its user state
+    // instead of bouncing a legitimately signed-in person back to the
+    // login screen.
+    @GetMapping("/me")
+    public ResponseEntity<UserSummary> me(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
+        User user = userRepository.findById(principal.userId()).orElseThrow();
+        return ResponseEntity.ok(new UserSummary(user.getId(), user.getEmail(), user.getFirstName(),
+                user.getLastName()));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                      @RequestAttribute("jwtExpiresAt") Instant expiresAt) {
+        authService.logout(principal.jti(), expiresAt);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/session")
+    public ResponseEntity<AuthService.SessionStatus> session(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                                            @RequestAttribute("jwtExpiresAt") Instant expiresAt) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(authService.session(principal.jti(), expiresAt));
+    }
+
+    @PostMapping("/session/activity")
+    public ResponseEntity<AuthService.SessionStatus> activity(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                                             @RequestAttribute("jwtExpiresAt") Instant expiresAt) {
+        // IdleLockFilter records this explicit interaction only after checking
+        // that the session has not already timed out.
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(authService.session(principal.jti(), expiresAt));
+    }
+
+    @PostMapping("/session/continue")
+    public ResponseEntity<AuthService.ContinuedSession> continueSession(
+            @AuthenticationPrincipal AuthenticatedPrincipal principal,
+            @RequestAttribute("jwtExpiresAt") Instant expiresAt,
+            @RequestAttribute("jwtTokenVersion") int tokenVersion) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
+                authService.continueSession(principal.userId(), principal.jti(), expiresAt, tokenVersion));
+    }
+
+    @PostMapping("/unlock")
+    public ResponseEntity<Void> unlock(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+                                        @Valid @RequestBody UnlockRequest request) {
+        authService.unlock(principal.userId(), principal.jti(), request.password());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/password-reset/request")
+    public ResponseEntity<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequestBody request,
+                                                       HttpServletRequest httpRequest) {
+        passwordResetService.requestReset(request.email(), httpRequest.getRemoteAddr());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/password-reset/confirm")
+    public ResponseEntity<Void> confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmBody request) {
+        passwordResetService.confirmReset(request.email(), request.code(), request.newPassword());
+        return ResponseEntity.noContent().build();
+    }
+
+    public record LoginRequest(@NotBlank @Email String email, @NotBlank String password) {
+    }
+
+    public record LoginResponse(String accessToken, String expiresAt, UserSummary user) {
+    }
+
+    public record UserSummary(UUID id, String email, String firstName, String lastName) {
+    }
+
+    public record UnlockRequest(@NotBlank String password) {
+    }
+
+    public record PasswordResetRequestBody(@NotBlank @Email String email) {
+    }
+
+    public record PasswordResetConfirmBody(
+            @NotBlank @Email String email, @NotBlank String code, @NotBlank String newPassword) {
+    }
+}
