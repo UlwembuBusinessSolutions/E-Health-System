@@ -44,8 +44,11 @@ public class ConsultationController {
 
     @PostMapping("/api/v1/visits/{visitId}/consultations")
     public ResponseEntity<ConsultationResponse> createDraft(@PathVariable UUID visitId,
+                                                              @RequestBody(required = false) StartConsultationRequest request,
                                                               @AuthenticationPrincipal AuthenticatedPrincipal staff) {
-        Consultation consultation = consultationService.createDraft(visitId, staff.userId());
+        VitalsBypassReason reason = request == null ? null : request.vitalsBypassReason();
+        String note = request == null ? null : request.vitalsBypassNote();
+        Consultation consultation = consultationService.createDraft(visitId, staff.userId(), reason, note);
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(consultation));
     }
 
@@ -179,6 +182,11 @@ public class ConsultationController {
                                               String treatmentPlan) {
     }
 
+    // Both optional: only needed when the visit has no vitals on record.
+    public record StartConsultationRequest(VitalsBypassReason vitalsBypassReason,
+                                           @Size(max = 300) String vitalsBypassNote) {
+    }
+
     public record DiagnosisRequest(@NotBlank String diagnosisText, boolean isPrimary,
                                     DiagnosisCertainty certainty) {
     }
@@ -240,7 +248,8 @@ public class ConsultationController {
                                         AllergyStatus allergyStatus, String allergyDetail, String examinationNotes,
                                         String investigationsNotes, String treatmentPlan,
                                         ConsultationOutcome outcome, String outcomeNotes, Instant createdAt,
-                                        Instant updatedAt, List<DiagnosisResponse> diagnoses) {
+                                        Instant updatedAt, List<DiagnosisResponse> diagnoses,
+                                        VitalsBypassReason vitalsBypassReason, String vitalsBypassNote) {
         static ConsultationResponse from(Consultation c, List<DiagnosisResponse> diagnoses, String authorName,
                                           String signedByName) {
             return new ConsultationResponse(c.getId(), c.getVisitId(), c.getStatus(),
@@ -248,7 +257,8 @@ public class ConsultationController {
                     c.getSignedByUserId(), signedByName, c.getSignedAt(), c.getRelevantHistory(),
                     c.getCurrentMedications(), c.getAllergyStatus(), c.getAllergyDetail(), c.getExaminationNotes(),
                     c.getInvestigationsNotes(), c.getTreatmentPlan(), c.getOutcome(), c.getOutcomeNotes(),
-                    c.getCreatedAt(), c.getUpdatedAt(), diagnoses);
+                    c.getCreatedAt(), c.getUpdatedAt(), diagnoses, c.getVitalsBypassReason(),
+                    c.getVitalsBypassNote());
         }
     }
 }
