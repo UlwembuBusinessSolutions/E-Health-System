@@ -11,8 +11,7 @@ import java.util.UUID;
 // One prescription line as the pharmacy screens see it. The first ten
 // fields are the original shape; the rest describe the stock behind the line.
 //
-// productId is the confirmed product, or the remembered-name suggestion while
-// mappingStatus is SUGGESTED (stock is only deducted after confirmation).
+// productId is the product the prescriber chose (null for a legacy free-text line).
 // dispensingProductId differs from productId only when the prescriber
 // approved a substitute; every lot and stock figure below refers to
 // dispensingProductId. Stock fields are empty/null once the line is fully

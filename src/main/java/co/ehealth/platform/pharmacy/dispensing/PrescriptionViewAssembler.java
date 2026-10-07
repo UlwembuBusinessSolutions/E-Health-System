@@ -121,8 +121,7 @@ public class PrescriptionViewAssembler {
         DispensingRecord dispensing = facts.dispensingRecords().get(item.getId());
         PrescriptionOutOfStockRecord outOfStock = facts.outOfStockRecords().get(item.getId());
         PrescriptionSubstitution substitution = facts.latestSubstitutions().get(item.getId());
-        UUID productId = item.getProductId() != null ? item.getProductId()
-                : facts.suggestedProductIds().get(item.getId());
+        UUID productId = item.getProductId();
         UUID dispensingProductId = facts.dispensingProductId(item);
         StockFigures stock = stockFigures(prescription, item, facts);
         DrugSchedule schedule = dispensingProductId == null ? null : facts.schedules().get(dispensingProductId);

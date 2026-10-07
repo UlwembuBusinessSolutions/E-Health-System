@@ -17,8 +17,6 @@ import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService.Dispens
 import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService.DispenseRequest;
 import co.ehealth.platform.pharmacy.dispensing.DispensingActor;
 import co.ehealth.platform.pharmacy.dispensing.DispensingGuard;
-import co.ehealth.platform.pharmacy.dispensing.DrugMappingService;
-import co.ehealth.platform.pharmacy.dispensing.ItemLock;
 import co.ehealth.platform.pharmacy.dispensing.PrescriptionRollup;
 import co.ehealth.platform.visit.Visit;
 import co.ehealth.platform.visit.VisitService;
@@ -50,9 +48,7 @@ public class PrescriptionService {
     private final PermissionService permissionService;
     private final DispensingGuard dispensingGuard;
     private final DispenseAllocationService dispenseAllocationService;
-    private final DrugMappingService drugMappingService;
     private final PrescriptionRollup prescriptionRollup;
-    private final ItemLock itemLock;
     private final PrescriptionPurchaseItemRepository purchaseItemRepository;
     private final PrescribingStockService prescribingStock;
 
@@ -64,8 +60,8 @@ public class PrescriptionService {
                                 OrganizationRepository organizationRepository, EmailService emailService,
                                 AuditLogService auditLogService, Clock clock, PermissionService permissionService,
                                 DispensingGuard dispensingGuard, DispenseAllocationService dispenseAllocationService,
-                                DrugMappingService drugMappingService, PrescriptionRollup prescriptionRollup,
-                                ItemLock itemLock, PrescriptionPurchaseItemRepository purchaseItemRepository,
+                                PrescriptionRollup prescriptionRollup,
+                                PrescriptionPurchaseItemRepository purchaseItemRepository,
                                 PrescribingStockService prescribingStock) {
         this.purchaseItemRepository = purchaseItemRepository;
         this.prescribingStock = prescribingStock;
@@ -83,9 +79,7 @@ public class PrescriptionService {
         this.permissionService = permissionService;
         this.dispensingGuard = dispensingGuard;
         this.dispenseAllocationService = dispenseAllocationService;
-        this.drugMappingService = drugMappingService;
         this.prescriptionRollup = prescriptionRollup;
-        this.itemLock = itemLock;
     }
 
     // PHRM-US-018 + PHRM-US-009 — patientId/facilityId come from the visit,
@@ -206,20 +200,6 @@ public class PrescriptionService {
         DispenseOutcome outcome = dispenseAllocationService.dispense(prescription, itemId, request, actor);
         prescriptionRollup.refresh(prescription);
         return outcome;
-    }
-
-    // A pharmacist confirms (or overrides) which stock product backs this
-    // line; the choice is remembered for the same drug name next time.
-    @Transactional
-    public Prescription confirmProduct(UUID prescriptionId, UUID itemId, UUID productId, UUID staffId) {
-        DispensingActor actor = dispensingGuard.requireManager(staffId);
-        Prescription prescription = dispensingGuard.loadPrescription(prescriptionId);
-        PrescriptionItem item = itemLock.lockOwnedItem(prescription, itemId);
-        if (item.getStatus() == PrescriptionStatus.DISPENSED) {
-            throw new PrescriptionAlreadyDispensedException();
-        }
-        drugMappingService.confirmProduct(prescription, item, productId, actor.userId());
-        return prescription;
     }
 
     // The other outcome for a PENDING item — the pharmacy doesn't have the

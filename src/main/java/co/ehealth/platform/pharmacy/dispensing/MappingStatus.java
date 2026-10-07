@@ -1,7 +1,8 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
-// CONFIRMED: a pharmacist chose the product for this item. SUGGESTED: the
-// drug name matches a mapping remembered from earlier, awaiting confirmation.
+// CONFIRMED: the prescriber chose the stock product for this item. UNMAPPED: an
+// older line written as free text. Only a prescriber chooses medicines, so the
+// pharmacy cannot dispense an UNMAPPED line until the prescriber corrects it.
 public enum MappingStatus {
-    CONFIRMED, SUGGESTED, UNMAPPED
+    CONFIRMED, UNMAPPED
 }
