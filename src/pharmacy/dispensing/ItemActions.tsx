@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { CheckCircle2, ChevronDown, PackageX, PackagePlus, Undo2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, PackageX, Undo2 } from "lucide-react";
 import clsx from "clsx";
 import type { DispenseLot, PrescriptionItem } from "@/shared/api/pharmacy";
 import { Button } from "@/shared/components/Button";
-import { canDispenseWhole, hasUsableStock, isFullyDispensed, returnableQuantity } from "./itemState";
+import { canDispenseWhole, isFullyDispensed, returnableQuantity } from "./itemState";
 
 export type ItemPanel = "outOfStock" | "part" | "lot" | "substitute" | "return";
 
@@ -16,10 +15,6 @@ interface ItemActionsProps {
   onDispense: () => void;
   onOpenPanel: (panel: ItemPanel) => void;
 }
-
-// Router <Link> dressed like a secondary Button: it navigates, so it must be a link.
-const LINK_BUTTON_CLASSES =
-  "inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface-raised px-4 text-[14px] font-semibold text-text-primary hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400";
 
 interface MoreOption {
   panel: ItemPanel;
@@ -73,12 +68,6 @@ export function ItemActions({ item, lot, dispensing, activePanel, onDispense, on
           >
             Out of stock
           </Button>
-        )}
-        {!done && !hasUsableStock(item) && (
-          <Link to="/app/pharmacy/receive" className={LINK_BUTTON_CLASSES}>
-            <PackagePlus className="size-4" aria-hidden />
-            Receive stock
-          </Link>
         )}
         {done && returnableQuantity(item) > 0 && (
           <Button
