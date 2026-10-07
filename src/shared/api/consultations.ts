@@ -54,12 +54,26 @@ export interface Consultation {
   createdAt: string;
   updatedAt: string;
   diagnoses: ConsultationDiagnosis[];
+  // Set when the consultation was started with no vitals on the visit.
+  vitalsBypassReason: VitalsBypassReason | null;
+  vitalsBypassNote: string | null;
 }
 
 // Get-or-create — a second call against a visit that already has a draft
 // returns that same draft rather than creating a sibling.
-export async function createConsultationDraft(visitId: string): Promise<Consultation> {
-  return apiClient.post<Consultation>(`/api/v1/visits/${visitId}/consultations`, undefined, {
+/** Why a consultation was started for a visit with no vitals on record. */
+export type VitalsBypassReason = "EMERGENCY" | "FOLLOW_UP_NO_CHANGE" | "OTHER";
+
+export interface VitalsBypass {
+  reason: VitalsBypassReason;
+  /** Required (3+ characters) for OTHER. */
+  note?: string;
+}
+
+// A visit without vitals needs a bypass reason; the server refuses to start without one.
+export async function createConsultationDraft(visitId: string, bypass?: VitalsBypass): Promise<Consultation> {
+  const body = bypass ? { vitalsBypassReason: bypass.reason, vitalsBypassNote: bypass.note } : undefined;
+  return apiClient.post<Consultation>(`/api/v1/visits/${visitId}/consultations`, body, {
     headers: tenantAuthHeaders(),
   });
 }

@@ -1,3 +1,4 @@
+import { StartConsultationPanel } from "./StartConsultationPanel";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -27,6 +28,7 @@ import {
   type DiagnosisCertainty,
   type PharmacyItemPayload,
   type PurchaseItemPayload,
+  type VitalsBypass,
 } from "@/shared/api/consultations";
 import { PrescriptionBuilder } from "@/prescribing/PrescriptionBuilder";
 import { EMPTY_DRAFT, draftProblems, toPayload, type PrescriptionDraft } from "@/prescribing/prescriptionDraft";
@@ -94,7 +96,7 @@ export function PatientConsultationTab({ visitId }: { visitId: string | null }) 
 
   const [startError, setStartError] = useState<string | null>(null);
   const startConsultation = useMutation({
-    mutationFn: () => createConsultationDraft(visitId as string),
+    mutationFn: (bypass?: VitalsBypass) => createConsultationDraft(visitId as string, bypass),
     onSuccess: () => {
       setStartError(null);
       queryClient.invalidateQueries({ queryKey: ["consultation-current", visitId] });
@@ -140,33 +142,22 @@ export function PatientConsultationTab({ visitId }: { visitId: string | null }) 
       {currentQuery.isLoading ? (
         <p className="text-[13.5px] text-text-secondary">Loading…</p>
       ) : !current ? (
-        <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
-          <p className="text-[13.5px] text-text-secondary">
-            No consultation recorded yet for this visit.
-          </p>
-          {startError && (
-            <p role="alert" className="mt-2 text-[13px] text-danger-600">
-              {startError}
-            </p>
-          )}
-          <Button
-            className="mt-3"
-            variant="secondary"
-            size="md"
-            icon={<Stethoscope className="size-3.5" aria-hidden />}
-            loading={startConsultation.isPending}
-            onClick={() => startConsultation.mutate()}
-          >
-            Start consultation
-          </Button>
-        </div>
-      ) : (
-        <ConsultationRecord
-          key={current.id}
-          consultation={current}
-          presentingComplaint={triageQuery.data?.presentingComplaint ?? null}
-          onChanged={invalidate}
+        <StartConsultationPanel
+          vitalsMissing={triageQuery.isSuccess && triageQuery.data === null}
+          loading={startConsultation.isPending}
+          error={startError}
+          onStart={(bypass) => startConsultation.mutate(bypass)}
         />
+      ) : (
+        <>
+          {current.vitalsBypassReason && <VitalsSkippedNote consultation={current} />}
+          <ConsultationRecord
+            key={current.id}
+            consultation={current}
+            presentingComplaint={triageQuery.data?.presentingComplaint ?? null}
+            onChanged={invalidate}
+          />
+        </>
       )}
 
       {history.length > 0 && <ConsultationHistorySection entries={history} />}
@@ -187,6 +178,26 @@ function ConsultationRecord({
     return <DraftView consultation={consultation} presentingComplaint={presentingComplaint} onChanged={onChanged} />;
   }
   return <SignedView consultation={consultation} presentingComplaint={presentingComplaint} onChanged={onChanged} />;
+}
+
+const BYPASS_LABELS: Record<NonNullable<Consultation["vitalsBypassReason"]>, string> = {
+  EMERGENCY: "Emergency",
+  FOLLOW_UP_NO_CHANGE: "Follow-up, nothing has changed",
+  OTHER: "Another reason",
+};
+
+// Stays on the record even if vitals are taken later: it says the consultation began without them.
+function VitalsSkippedNote({ consultation }: { consultation: Consultation }) {
+  if (!consultation.vitalsBypassReason) return null;
+  return (
+    <div role="note" className="mb-4 rounded-lg border border-amber-500/40 bg-amber-50 px-3.5 py-2.5">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-amber-600">Started without vitals</p>
+      <p className="mt-0.5 text-[13.5px] text-text-primary">
+        {BYPASS_LABELS[consultation.vitalsBypassReason]}
+        {consultation.vitalsBypassNote ? `: ${consultation.vitalsBypassNote}` : ""}
+      </p>
+    </div>
+  );
 }
 
 function PresentingComplaint({ value }: { value: string | null }) {
