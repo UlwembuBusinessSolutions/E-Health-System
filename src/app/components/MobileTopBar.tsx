@@ -35,6 +35,7 @@ export function MobileTopBar() {
     { to: "/app", label: "Dashboard", icon: Gauge, end: true },
     { to: "/app/patients", label: "Patients", icon: UserRound, end: false },
     { to: "/app/queue", label: "Queue", icon: Ticket, end: false },
+    { to: "/app/sync", label: "Sync", icon: RefreshCw, end: false }, // OFFLINE
     ...(user?.role && APPOINTMENT_ROLES.has(user.role)
       ? [{ to: "/app/appointments", label: "Appointments", icon: CalendarDays, end: false }]
       : []),
