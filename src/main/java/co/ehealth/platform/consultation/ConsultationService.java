@@ -1,5 +1,6 @@
 package co.ehealth.platform.consultation;
 
+import co.ehealth.platform.core.audit.AuditDetails;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.facility.Facility;
@@ -11,6 +12,7 @@ import co.ehealth.platform.patient.PatientArchivedException;
 import co.ehealth.platform.patient.PatientService;
 import co.ehealth.platform.pharmacy.PrescriptionService;
 import co.ehealth.platform.visit.QueueService;
+import co.ehealth.platform.triage.TriageAssessmentRepository;
 import co.ehealth.platform.visit.Visit;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import co.ehealth.platform.visit.VisitRepository;
@@ -43,6 +45,7 @@ public class ConsultationService {
     // consultation without a real service-scope matrix, which this slice
     // doesn't build. Doctor and Clinician are the initial signing-eligible
     // roles; nursing can draft but not sign in this version.
+    private static final int MIN_BYPASS_NOTE_LENGTH = 3;
     private static final Set<String> SIGNING_ROLES = Set.of("Doctor", "Clinician");
 
     private static final String NOT_CLINICAL_ROLE_MESSAGE =
@@ -59,6 +62,7 @@ public class ConsultationService {
     private final QueueService queueService;
     private final FacilityService facilityService;
     private final PrescriptionService prescriptionService;
+    private final TriageAssessmentRepository triageRepository;
     private final Clock clock;
     private final ObjectMapper objectMapper;
 
@@ -67,7 +71,9 @@ public class ConsultationService {
                                 VisitRepository visitRepository, PatientService patientService,
                                 AuditLogService auditLogService, PermissionService permissionService,
                                 QueueService queueService, FacilityService facilityService,
-                                PrescriptionService prescriptionService, Clock clock, ObjectMapper objectMapper) {
+                                PrescriptionService prescriptionService, TriageAssessmentRepository triageRepository,
+                                Clock clock, ObjectMapper objectMapper) {
+        this.triageRepository = triageRepository;
         this.consultationRepository = consultationRepository;
         this.consultationDiagnosisRepository = consultationDiagnosisRepository;
         this.visitRepository = visitRepository;
@@ -104,6 +110,15 @@ public class ConsultationService {
     // draft rather than creating a sibling.
     @Transactional
     public Consultation createDraft(UUID visitId, UUID staffUserId) {
+        return createDraft(visitId, staffUserId, null, null);
+    }
+
+    // A visit normally has vitals before the doctor sees the patient. Starting without
+    // them is allowed (an emergency, a follow-up with nothing changed) but only with a
+    // reason, which is saved on the consultation and in the audit trail.
+    @Transactional
+    public Consultation createDraft(UUID visitId, UUID staffUserId, VitalsBypassReason bypassReason,
+                                    String bypassNote) {
         requireDraftAccess();
         Visit visit = visitRepository.findById(visitId).orElseThrow(VisitNotFoundException::new);
         Patient patient = patientService.get(visit.getPatientId());
@@ -117,10 +132,27 @@ public class ConsultationService {
             return existingDraft.get();
         }
 
+        boolean hasVitals = !triageRepository.findActiveOrderByObservedAtDesc(visitId).isEmpty();
+        String note = bypassNote == null ? null : bypassNote.trim();
+        if (!hasVitals) {
+            if (bypassReason == null) {
+                throw new InvalidConsultationException(
+                        "No vitals have been taken for this visit. Take vitals first, or say why they are being skipped.");
+            }
+            if (bypassReason == VitalsBypassReason.OTHER && (note == null || note.length() < MIN_BYPASS_NOTE_LENGTH)) {
+                throw new InvalidConsultationException("Explain why vitals are being skipped (at least "
+                        + MIN_BYPASS_NOTE_LENGTH + " characters).");
+            }
+        }
+
         Consultation consultation = new Consultation(visitId, staffUserId, clock.instant());
+        if (!hasVitals) {
+            consultation.recordVitalsBypass(bypassReason, note == null || note.isEmpty() ? null : note);
+        }
         consultationRepository.save(consultation);
         auditLogService.append(staffUserId, visit.getFacilityId(), "CONSULTATION_DRAFT_CREATED", "Consultation",
-                consultation.getId().toString(), null, null);
+                consultation.getId().toString(), null, hasVitals ? null
+                        : AuditDetails.of("vitalsBypassReason", bypassReason.name(), "vitalsBypassNote", note));
         return consultation;
     }
 

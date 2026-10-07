@@ -99,6 +99,14 @@ public class Consultation {
 
     // A fresh draft — everything past the author/timestamps starts empty
     // and is filled in via updateFields()/addDiagnosis() while still DRAFT.
+    // Set only when the consultation was started with no vitals on the visit.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "vitals_bypass_reason", length = 30)
+    private VitalsBypassReason vitalsBypassReason;
+
+    @Column(name = "vitals_bypass_note", length = 300)
+    private String vitalsBypassNote;
+
     public Consultation(UUID visitId, UUID authorUserId, Instant now) {
         this.visitId = visitId;
         this.status = ConsultationStatus.DRAFT;
@@ -173,6 +181,19 @@ public class Consultation {
 
     public String getAmendmentReason() {
         return amendmentReason;
+    }
+
+    public VitalsBypassReason getVitalsBypassReason() {
+        return vitalsBypassReason;
+    }
+
+    public String getVitalsBypassNote() {
+        return vitalsBypassNote;
+    }
+
+    public void recordVitalsBypass(VitalsBypassReason reason, String note) {
+        this.vitalsBypassReason = reason;
+        this.vitalsBypassNote = note;
     }
 
     public UUID getAuthorUserId() {
