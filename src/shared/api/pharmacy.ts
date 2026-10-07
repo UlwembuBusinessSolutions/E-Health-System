@@ -11,9 +11,9 @@ import type { DrugSchedule } from "./pharmacyStock";
 export type PrescriptionStatus = "PENDING" | "DISPENSED" | "OUT_OF_STOCK" | "PARTIALLY_DISPENSED";
 
 export type ItemStockStatus = "IN_STOCK" | "LOW" | "NONE";
-// SUGGESTED: the drug name matches a mapping remembered from earlier, and
-// `productId` holds that guess until a pharmacist confirms it.
-export type MappingStatus = "CONFIRMED" | "SUGGESTED" | "UNMAPPED";
+// CONFIRMED: the prescriber chose the stock product. UNMAPPED: an older free-text
+// line, which cannot be dispensed until the prescriber corrects it.
+export type MappingStatus = "CONFIRMED" | "UNMAPPED";
 // Absent (null) means nobody has asked about a substitute for this item.
 export type SubstitutionStatus = "REQUESTED" | "APPROVED" | "REJECTED";
 
@@ -46,7 +46,7 @@ export interface PrescriptionItem {
   markedOutOfStockAt: string | null;
   outOfStockNote: string | null;
   // The stock product this line is filled from, or the remembered guess when
-  // `mappingStatus` is SUGGESTED. Stock is only deducted once CONFIRMED.
+  // `mappingStatus` is UNMAPPED. Stock is only deducted from a CONFIRMED product.
   productId: string | null;
   mappingStatus: MappingStatus;
   mappedProductName: string | null;
@@ -314,19 +314,6 @@ export async function searchMappableProducts(query: string): Promise<ProductRef[
     { headers: tenantAuthHeaders() },
   );
   return response.items.map((product) => ({ id: product.id, name: product.displayName }));
-}
-
-// Confirms or overrides which stock product an item is filled from; the server
-// remembers the choice so the same drug name is pre-selected next time.
-// Answers with the whole prescription, but the screen refetches it anyway.
-export async function setPrescriptionItemProduct(
-  prescriptionId: string,
-  itemId: string,
-  productId: string,
-): Promise<void> {
-  await apiClient.put<Prescription>(`/api/v1/prescriptions/${prescriptionId}/items/${itemId}/product`, { productId }, {
-    headers: tenantAuthHeaders(),
-  });
 }
 
 // ---- Collection (hand-over) ----
