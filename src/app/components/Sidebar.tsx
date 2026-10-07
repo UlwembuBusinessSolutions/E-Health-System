@@ -6,10 +6,31 @@ import { useAuth } from "@/auth/AuthContext";
 import { canTakeVitals } from "@/auth/roles";
 import { getTenantSlug } from "@/shared/api/auth";
 import { getOrganizationSelf } from "@/shared/api/organization";
+import { CalendarDays } from "lucide-react";
 
 function initials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
+
+// Mirrors V12__role_permissions.sql's APPT:VIEW/APPT:MANAGE grants exactly
+// — every seeded role except Pharmacist and Social Worker holds one or the
+// other. Same "don't hand out an entry point to a flow that will just 403"
+// reasoning as CLINICAL_ROLES above; found missing entirely (every role saw
+// this link, including the two with zero APPT permission) while verifying
+// the appointment notes/clinical-dropdown/email feature.
+const APPOINTMENT_ROLES = new Set([
+  "ORG_ADMIN",
+  "Facility Manager",
+  "Admin Staff",
+  "Doctor",
+  "Professional Nurse",
+  "Clinician",
+  "Queue Marshall",
+  "Compliance Officer",
+  "Reporting Analyst",
+  "Billing Administrator",
+  "Occupational Health Practitioner",
+]);
 
 // The tenant app's own rail — light surface-raised against the app's
 // surface canvas, brand-500 accent, deliberately the opposite register from
@@ -27,7 +48,9 @@ export function Sidebar() {
     { to: "/app", label: "Dashboard", icon: Gauge, end: true },
     { to: "/app/patients", label: "Patients", icon: UserRound, end: false },
     { to: "/app/queue", label: "Queue", icon: Ticket, end: false },
-    { to: "/app/sync", label: "Sync", icon: RefreshCw, end: false }, // OFFLINE
+    ...(user?.role && APPOINTMENT_ROLES.has(user.role)
+      ? [{ to: "/app/appointments", label: "Appointments", icon: CalendarDays, end: false }]
+      : []),
     ...(canTakeVitals(user?.role)
       ? [{ to: "/app/vitals", label: "Take Vitals", icon: HeartPulse, end: false }]
       : []),

@@ -7,6 +7,7 @@ import { RequireAuth } from "@/auth/RequireAuth";
 import { RequireRole } from "@/auth/RequireRole";
 import { VITALS_ROLES } from "@/auth/roles";
 import { AddStaffScreen } from "@/staff/AddStaffScreen";
+import { EditStaffScreen } from "@/staff/EditStaffScreen";
 import { StaffListPage } from "@/staff/StaffListPage";
 import { PatientSearchPage } from "@/patient/PatientSearchPage";
 import { RegisterPatientScreen } from "@/patient/RegisterPatientScreen";
@@ -15,23 +16,31 @@ import { QueuePage } from "@/queue/QueuePage";
 import { VitalsIntakePage } from "@/queue/VitalsIntakePage";
 import { TicketPrintPage } from "@/queue/TicketPrintPage";
 import { VitalsPrintPage } from "@/patient/VitalsPrintPage";
-import { PharmacyQueuePage } from "@/pharmacy/PharmacyQueuePage";
-import { PrescriptionPrintPage } from "@/pharmacy/PrescriptionPrintPage";
-import { PharmacyLayout } from "@/pharmacy/PharmacyLayout";
-import { ProductListPage } from "@/pharmacy/products/ProductListPage";
-import { AddProductScreen } from "@/pharmacy/products/AddProductScreen";
-import { ProductDetailPage } from "@/pharmacy/products/ProductDetailPage";
-import { StockListPage } from "@/pharmacy/stock/StockListPage";
-import { ReceiveStockScreen } from "@/pharmacy/stock/ReceiveStockScreen";
-import { LedgerPage } from "@/pharmacy/ledger/LedgerPage";
 import { OrganizationSettingsPage } from "@/settings/OrganizationSettingsPage";
 import { AuditTrailPage } from "@/audit/AuditTrailPage";
+import { AppointmentsPage } from "@/appointments/AppointmentsPage";
 import { PatientLoginScreen } from "@/patient-portal/PatientLoginScreen";
 import { PatientRegisterScreen } from "@/patient-portal/PatientRegisterScreen";
 import { PatientPortalPage } from "@/patient-portal/PatientPortalPage";
 import { RequirePatientPortalAuth } from "@/patient-portal/RequirePatientPortalAuth";
 import { TenantHomePage } from "@/tenant-site/TenantHomePage";
 import { AppShell } from "./AppShell";
+import {
+  AddProductPage,
+  DispensingQueuePage,
+  LedgerPage,
+  ImportPage,
+  OpeningStockPage,
+  PharmacyLayout,
+  PrescriptionPrintPage,
+  ReceiveStockPage,
+  ReorderPage,
+  ScheduleRegisterPage,
+  StockCountPage,
+  StockPage,
+  SuppliersPage,
+  WithPageLoading,
+} from "./pharmacyPages";
 import { DashboardPage } from "./DashboardPage";
 import { PlatformRoot } from "@/platform/PlatformRoot";
 import { PlatformLoginScreen } from "@/platform/PlatformLoginScreen";
@@ -96,7 +105,9 @@ export function AppRouter() {
         path="/print/prescription/:prescriptionId"
         element={
           <RequireAuth>
-            <PrescriptionPrintPage />
+            <WithPageLoading>
+              <PrescriptionPrintPage />
+            </WithPageLoading>
           </RequireAuth>
         }
       />
@@ -126,6 +137,14 @@ export function AppRouter() {
             </RequireRole>
           }
         />
+        <Route
+          path="staff/:staffId/edit"
+          element={
+            <RequireRole role="ORG_ADMIN">
+              <EditStaffScreen />
+            </RequireRole>
+          }
+        />
         {/* No RequireRole — registering and finding a patient is front-line
             reception/clinical work, not admin territory. */}
         <Route path="patients" element={<PatientSearchPage />} />
@@ -135,6 +154,7 @@ export function AppRouter() {
         {/* OFFLINE: pending records on this device + conflicts needing a decision.
             No RequireRole — resolving a conflict is admin-only on the server. */}
         <Route path="sync" element={<SyncCenterPage />} />
+        <Route path="appointments" element={<AppointmentsPage />} />
         <Route
           path="vitals"
           element={
@@ -143,14 +163,25 @@ export function AppRouter() {
             </RequireRole>
           }
         />
-        <Route path="pharmacy" element={<PharmacyLayout />}>
-          <Route index element={<PharmacyQueuePage />} />
-          <Route path="stock" element={<StockListPage />} />
-          <Route path="stock/receive" element={<ReceiveStockScreen />} />
-          <Route path="products" element={<ProductListPage />} />
-          <Route path="products/new" element={<AddProductScreen />} />
-          <Route path="products/:productId" element={<ProductDetailPage />} />
+        <Route
+          path="pharmacy"
+          element={
+            <WithPageLoading>
+              <PharmacyLayout />
+            </WithPageLoading>
+          }
+        >
+          <Route index element={<DispensingQueuePage />} />
+          <Route path="stock" element={<StockPage />} />
+          <Route path="products/new" element={<AddProductPage />} />
+          <Route path="receive" element={<ReceiveStockPage />} />
+          <Route path="suppliers" element={<SuppliersPage />} />
+          <Route path="reorder" element={<ReorderPage />} />
           <Route path="ledger" element={<LedgerPage />} />
+          <Route path="counts" element={<StockCountPage />} />
+          <Route path="register" element={<ScheduleRegisterPage />} />
+          <Route path="import" element={<ImportPage />} />
+          <Route path="opening-stock" element={<OpeningStockPage />} />
         </Route>
         <Route
           path="settings"

@@ -1,4 +1,4 @@
-import type { Gender } from "./types";
+import type { Gender, PagedResult } from "./types";
 import { apiClient, apiOrigin, ApiError } from "./client";
 
 // Real backend calls — api/'s /platform/** endpoints (api-reference.html,
@@ -477,14 +477,6 @@ export interface ListPlatformAuditParams {
 
 // Bounded, unlike the previous unlimited response this replaced — page/size
 // mirror PlatformAuditService's own contract (default 50, capped at 100).
-export interface PagedResult<T> {
-  items: T[];
-  page: number;
-  size: number;
-  totalItems: number;
-  hasMore: boolean;
-}
-
 export async function listPlatformAudit(
   params: ListPlatformAuditParams = {},
 ): Promise<PagedResult<PlatformAuditEntry>> {
