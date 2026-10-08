@@ -78,6 +78,18 @@ public class ConsultationController {
         return ResponseEntity.ok(body);
     }
 
+    // The signed-in clinician's unsigned consultations, for picking up where they left off.
+    @GetMapping("/api/v1/consultations/in-progress")
+    public ResponseEntity<Map<String, Object>> inProgress(@AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        var items = consultationService.getInProgress(staff.userId()).stream()
+                .map(e -> new InProgressConsultationResponse(e.consultation().getId(), e.visit().getId(),
+                        e.patient().getId(), e.patient().getFirstName() + " " + e.patient().getLastName(),
+                        e.patient().getMpiNumber(), e.facilityName(), e.visit().getVisitDateTime(),
+                        e.consultation().getCreatedAt(), e.consultation().getUpdatedAt()))
+                .toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
     // The patient's consultations across all their visits, newest first, each with the visit it belongs to.
     @GetMapping("/api/v1/patients/{patientId}/consultations")
     public ResponseEntity<Map<String, Object>> patientConsultations(@PathVariable UUID patientId) {
@@ -284,6 +296,11 @@ public class ConsultationController {
     // authorUserId/signedByUserId to real names — "who consulted this
     // patient," same reasoning PrescriptionResponse already applies to
     // prescriberName/dispensedByName.
+    public record InProgressConsultationResponse(UUID consultationId, UUID visitId, UUID patientId,
+                                                  String patientName, String patientMpi, String facilityName,
+                                                  Instant visitDateTime, Instant startedAt, Instant updatedAt) {
+    }
+
     public record PatientConsultationResponse(ConsultationResponse consultation, Instant visitDateTime,
                                                String facilityName) {
     }

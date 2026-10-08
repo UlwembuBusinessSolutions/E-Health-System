@@ -11,6 +11,7 @@ import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.patient.Patient;
 import co.ehealth.platform.patient.PatientArchivedException;
+import co.ehealth.platform.patient.PatientRepository;
 import co.ehealth.platform.patient.PatientService;
 import co.ehealth.platform.pharmacy.PrescriptionService;
 import co.ehealth.platform.visit.QueueService;
@@ -64,6 +65,7 @@ public class ConsultationService {
     private final ConsultationDiagnosisRepository consultationDiagnosisRepository;
     private final VisitRepository visitRepository;
     private final PatientService patientService;
+    private final PatientRepository patientRepository;
     private final AuditLogService auditLogService;
     private final PermissionService permissionService;
     private final QueueService queueService;
@@ -77,6 +79,7 @@ public class ConsultationService {
     public ConsultationService(ConsultationRepository consultationRepository,
                                 ConsultationDiagnosisRepository consultationDiagnosisRepository,
                                 VisitRepository visitRepository, PatientService patientService,
+                                PatientRepository patientRepository,
                                 AuditLogService auditLogService, PermissionService permissionService,
                                 QueueService queueService, FacilityService facilityService,
                                 PrescriptionService prescriptionService, TriageAssessmentRepository triageRepository,
@@ -87,6 +90,7 @@ public class ConsultationService {
         this.consultationDiagnosisRepository = consultationDiagnosisRepository;
         this.visitRepository = visitRepository;
         this.patientService = patientService;
+        this.patientRepository = patientRepository;
         this.auditLogService = auditLogService;
         this.permissionService = permissionService;
         this.queueService = queueService;
@@ -485,6 +489,35 @@ public class ConsultationService {
         return consultationRepository.findFirstByVisitIdAndStatusOrderByCreatedAtDesc(visitId,
                 ConsultationStatus.SIGNED);
     }
+
+    /**
+     * The clinician's own consultations that are not signed yet, most recently saved first, so they can pick up
+     * where they left off after closing a patient's record. At most {@value #MAX_IN_PROGRESS}.
+     */
+    public List<InProgressConsultation> getInProgress(UUID staffUserId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        List<Consultation> drafts = consultationRepository.findByStatusAndAuthorUserIdOrderByUpdatedAtDesc(
+                ConsultationStatus.DRAFT, staffUserId, PageRequest.of(0, MAX_IN_PROGRESS));
+        Map<UUID, Visit> visits = visitRepository
+                .findAllById(drafts.stream().map(Consultation::getVisitId).collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(Visit::getId, Function.identity()));
+        Map<UUID, Patient> patients = patientRepository
+                .findAllById(visits.values().stream().map(Visit::getPatientId).collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(Patient::getId, Function.identity()));
+        Map<UUID, String> facilityNames = new HashMap<>();
+        return drafts.stream().map(c -> {
+            Visit visit = visits.get(c.getVisitId());
+            String facilityName = facilityNames.computeIfAbsent(visit.getFacilityId(),
+                    id -> facilityService.get(id).getName());
+            return new InProgressConsultation(c, visit, patients.get(visit.getPatientId()), facilityName);
+        }).toList();
+    }
+
+    public record InProgressConsultation(Consultation consultation, Visit visit, Patient patient,
+                                         String facilityName) {
+    }
+
+    private static final int MAX_IN_PROGRESS = 50;
 
     /**
      * The patient's consultations across every visit, newest first: the ones in progress and the signed ones

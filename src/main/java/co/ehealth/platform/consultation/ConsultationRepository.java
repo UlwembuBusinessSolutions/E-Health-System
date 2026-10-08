@@ -23,6 +23,10 @@ public interface ConsultationRepository extends JpaRepository<Consultation, UUID
     // latest SIGNED one, else none at all.
     Optional<Consultation> findFirstByVisitIdAndStatusOrderByCreatedAtDesc(UUID visitId, ConsultationStatus status);
 
+    // A clinician's unsigned consultations, the one saved most recently first.
+    List<Consultation> findByStatusAndAuthorUserIdOrderByUpdatedAtDesc(ConsultationStatus status, UUID authorUserId,
+                                                                       Pageable page);
+
     // Every consultation of a patient across all their visits, newest first.
     @Query("select c from Consultation c where c.status in :statuses "
             + "and c.visitId in (select v.id from Visit v where v.patientId = :patientId) order by c.createdAt desc")
