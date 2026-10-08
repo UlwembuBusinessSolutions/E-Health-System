@@ -59,12 +59,12 @@ public class PrescriptionController {
         List<ItemRequest> requested = request.items() == null ? List.of() : request.items();
         var items = requested.stream()
                 .map(i -> new PrescriptionService.PrescriptionItemInput(i.drugName(), i.dosage(), i.quantity(),
-                        i.productId()))
+                        i.productId(), i.directions()))
                 .toList();
         List<PrescriptionService.PrescriptionPurchaseItemInput> purchaseItems = request.purchaseItems() == null
                 ? List.of()
                 : request.purchaseItems().stream().map(i -> new PrescriptionService.PrescriptionPurchaseItemInput(
-                        i.drugName(), i.dosage(), i.quantity(), i.productId(), i.note())).toList();
+                        i.drugName(), i.dosage(), i.quantity(), i.productId(), i.note(), i.directions())).toList();
         var command = new PrescriptionService.CreatePrescriptionCommand(request.visitId(), items,
                 request.consultationId(), purchaseItems);
         Prescription prescription = prescriptionService.create(command, staff.userId());
@@ -177,13 +177,14 @@ public class PrescriptionController {
 
     // productId is set when the prescriber chose the medicine from the pharmacy's
     // stock list; the quantity is then checked against the shelf.
-    public record ItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity,
-                              UUID productId) {
+    public record ItemRequest(@NotBlank String drugName, @NotBlank @Size(max = 300) String dosage,
+                              @Positive int quantity, UUID productId, @Valid MedicineDirections directions) {
     }
 
     // A medicine the patient buys instead of receiving it from the pharmacy.
-    public record PurchaseItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity,
-                                      UUID productId, @Size(max = 300) String note) {
+    public record PurchaseItemRequest(@NotBlank String drugName, @NotBlank @Size(max = 300) String dosage,
+                                      @Positive int quantity, UUID productId, @Size(max = 300) String note,
+                                      @Valid MedicineDirections directions) {
     }
 
     // Both fields optional: quantity defaults to everything remaining

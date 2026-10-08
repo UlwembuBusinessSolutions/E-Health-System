@@ -123,6 +123,7 @@ public class PrescriptionService {
                 // pharmacist never has to match the name to a product by hand.
                 saved.mapToProduct(item.productId());
             }
+            saved.applyDirections(item.directions());
             prescriptionItemRepository.save(saved);
         }
         Map<UUID, Integer> dispensedByProduct = cmd.items().stream().filter(item -> item.productId() != null)
@@ -130,11 +131,13 @@ public class PrescriptionService {
                         Collectors.summingInt(PrescriptionItemInput::quantity)));
         for (PrescriptionPurchaseItemInput item : purchaseInputs) {
             int alreadyDispensed = item.productId() == null ? 0 : dispensedByProduct.getOrDefault(item.productId(), 0);
-            purchaseItemRepository.save(new PrescriptionPurchaseItem(prescription.getId(), item.drugName(),
+            PrescriptionPurchaseItem purchase = new PrescriptionPurchaseItem(prescription.getId(), item.drugName(),
                     item.dosage(), item.quantity(), item.productId(),
                     prescribingStock.classifyPurchase(visit.getFacilityId(), item.productId(), item.quantity(),
                             alreadyDispensed),
-                    item.note()));
+                    item.note());
+            purchase.applyDirections(item.directions());
+            purchaseItemRepository.save(purchase);
         }
 
         auditLogService.append(prescriberId, visit.getFacilityId(), "PRESCRIPTION_CREATED", "Prescription",
@@ -297,15 +300,25 @@ public class PrescriptionService {
 
     // productId is set when the prescriber chose the medicine from the pharmacy's
     // stock list; null for a typed name the pharmacist will match later.
-    public record PrescriptionItemInput(String drugName, String dosage, int quantity, UUID productId) {
+    public record PrescriptionItemInput(String drugName, String dosage, int quantity, UUID productId,
+                                        MedicineDirections directions) {
+
+        public PrescriptionItemInput(String drugName, String dosage, int quantity, UUID productId) {
+            this(drugName, dosage, quantity, productId, null);
+        }
 
         public PrescriptionItemInput(String drugName, String dosage, int quantity) {
-            this(drugName, dosage, quantity, null);
+            this(drugName, dosage, quantity, null, null);
         }
     }
 
     // A medicine the patient should buy rather than receive from the pharmacy.
     public record PrescriptionPurchaseItemInput(String drugName, String dosage, int quantity, UUID productId,
-                                                String note) {
+                                                String note, MedicineDirections directions) {
+
+        public PrescriptionPurchaseItemInput(String drugName, String dosage, int quantity, UUID productId,
+                                             String note) {
+            this(drugName, dosage, quantity, productId, note, null);
+        }
     }
 }
