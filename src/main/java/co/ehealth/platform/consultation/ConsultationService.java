@@ -20,16 +20,21 @@ import co.ehealth.platform.visit.VisitNotFoundException;
 import co.ehealth.platform.visit.VisitRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class ConsultationService {
@@ -480,6 +485,33 @@ public class ConsultationService {
         return consultationRepository.findFirstByVisitIdAndStatusOrderByCreatedAtDesc(visitId,
                 ConsultationStatus.SIGNED);
     }
+
+    /**
+     * The patient's consultations across every visit, newest first: the ones in progress and the signed ones
+     * (an amended consultation appears as its latest version; the earlier versions stay in that visit's own
+     * history). At most {@value #MAX_PATIENT_CONSULTATIONS}.
+     */
+    public List<PatientConsultation> getPatientConsultations(UUID patientId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        List<Consultation> consultations = consultationRepository.findForPatient(patientId,
+                List.of(ConsultationStatus.DRAFT, ConsultationStatus.SIGNED),
+                PageRequest.of(0, MAX_PATIENT_CONSULTATIONS));
+        Map<UUID, Visit> visits = visitRepository
+                .findAllById(consultations.stream().map(Consultation::getVisitId).collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(Visit::getId, Function.identity()));
+        Map<UUID, String> facilityNames = new HashMap<>();
+        return consultations.stream().map(c -> {
+            Visit visit = visits.get(c.getVisitId());
+            String facilityName = facilityNames.computeIfAbsent(visit.getFacilityId(),
+                    id -> facilityService.get(id).getName());
+            return new PatientConsultation(c, visit.getVisitDateTime(), facilityName);
+        }).toList();
+    }
+
+    public record PatientConsultation(Consultation consultation, Instant visitDateTime, String facilityName) {
+    }
+
+    private static final int MAX_PATIENT_CONSULTATIONS = 100;
 
     // Full timeline, oldest first — DRAFT/SIGNED and SUPERSEDED/
     // ENTERED_IN_ERROR entries alike, so a reviewer can see both what's
