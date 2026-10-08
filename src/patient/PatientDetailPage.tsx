@@ -1317,11 +1317,6 @@ export function PatientDetailPage() {
                   <>
                     {latestVitals ? (
                       <div className="flex flex-col gap-3">
-                        {latestVitals.scoringVersion.includes("DRAFT") && (
-                          <div role="alert" className="rounded-lg border border-warning-500/30 bg-warning-50 px-3 py-2 text-[12.5px] text-text-primary">
-                            Draft SATS scoring table — for development only. Clinical validation is required before production use.
-                          </div>
-                        )}
                         <VitalsOverview assessment={latestVitals} />
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                           <Field label="TEWS score" value={latestVitals.tewsScore == null ? "Not calculated" : String(latestVitals.tewsScore)} />
