@@ -1,5 +1,6 @@
 package co.ehealth.platform.consultation;
 
+import co.ehealth.platform.diagnosis.Diagnosis;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -56,6 +57,10 @@ public class ConsultationDiagnosis {
     @Column(name = "display_text")
     private String displayText;
 
+    // The catalogue entry this diagnosis is, so the same condition can be counted across consultations.
+    @Column(name = "diagnosis_id")
+    private UUID diagnosisId;
+
     protected ConsultationDiagnosis() {
     }
 
@@ -66,6 +71,18 @@ public class ConsultationDiagnosis {
         this.primary = primary;
         this.certainty = certainty;
         this.sortOrder = sortOrder;
+    }
+
+    public void applyCatalogueEntry(Diagnosis entry) {
+        this.diagnosisId = entry.getId();
+        this.code = entry.getCode();
+        this.codingSystem = Diagnosis.SOURCE_ICD10.equals(entry.getSource()) ? "ICD-10" : "CUSTOM";
+        this.catalogueVersion = entry.getCatalogueVersion();
+        this.displayText = entry.getName();
+    }
+
+    public UUID getDiagnosisId() {
+        return diagnosisId;
     }
 
     // ConsultationService.addDiagnosis()'s "marking this one primary

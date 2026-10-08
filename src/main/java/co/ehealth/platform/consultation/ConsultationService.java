@@ -1,6 +1,8 @@
 package co.ehealth.platform.consultation;
 
 import co.ehealth.platform.core.audit.AuditDetails;
+import co.ehealth.platform.diagnosis.Diagnosis;
+import co.ehealth.platform.diagnosis.DiagnosisCatalogueService;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.facility.Facility;
@@ -63,6 +65,7 @@ public class ConsultationService {
     private final FacilityService facilityService;
     private final PrescriptionService prescriptionService;
     private final TriageAssessmentRepository triageRepository;
+    private final DiagnosisCatalogueService diagnosisCatalogue;
     private final Clock clock;
     private final ObjectMapper objectMapper;
 
@@ -72,8 +75,9 @@ public class ConsultationService {
                                 AuditLogService auditLogService, PermissionService permissionService,
                                 QueueService queueService, FacilityService facilityService,
                                 PrescriptionService prescriptionService, TriageAssessmentRepository triageRepository,
-                                Clock clock, ObjectMapper objectMapper) {
+                                DiagnosisCatalogueService diagnosisCatalogue, Clock clock, ObjectMapper objectMapper) {
         this.triageRepository = triageRepository;
+        this.diagnosisCatalogue = diagnosisCatalogue;
         this.consultationRepository = consultationRepository;
         this.consultationDiagnosisRepository = consultationDiagnosisRepository;
         this.visitRepository = visitRepository;
@@ -180,26 +184,48 @@ public class ConsultationService {
     @Transactional
     public ConsultationDiagnosis addDiagnosis(UUID consultationId, String diagnosisText, boolean isPrimary,
                                                DiagnosisCertainty certainty, UUID staffUserId) {
+        return addDiagnosis(consultationId, null, diagnosisText, isPrimary, certainty, staffUserId);
+    }
+
+    // The diagnosis is either picked from the catalogue (diagnosisId) or typed by name. A name that is not
+    // in the catalogue yet is added to it, so every diagnosis recorded can be counted later.
+    @Transactional
+    public ConsultationDiagnosis addDiagnosis(UUID consultationId, UUID diagnosisId, String diagnosisText,
+                                               boolean isPrimary, DiagnosisCertainty certainty, UUID staffUserId) {
         requireDraftAccess();
         Consultation consultation = findConsultation(consultationId);
         requireDraft(consultation);
-        if (!StringUtils.hasText(diagnosisText)) {
-            throw new InvalidConsultationException("Diagnosis text is required.");
-        }
+        Diagnosis entry = catalogueEntryFor(diagnosisId, diagnosisText, staffUserId);
         if (isPrimary) {
             clearExistingPrimary(consultationId);
         }
         int sortOrder = consultationDiagnosisRepository.countByConsultationId(consultationId);
-        ConsultationDiagnosis diagnosis = new ConsultationDiagnosis(consultationId, diagnosisText, isPrimary,
+        ConsultationDiagnosis diagnosis = new ConsultationDiagnosis(consultationId, entry.getName(), isPrimary,
                 certainty == null ? DiagnosisCertainty.PROVISIONAL : certainty, sortOrder);
+        diagnosis.applyCatalogueEntry(entry);
         consultationDiagnosisRepository.save(diagnosis);
         consultation.touchUpdatedAt(clock.instant());
         consultationRepository.save(consultation);
 
         Visit visit = visitRepository.findById(consultation.getVisitId()).orElseThrow(VisitNotFoundException::new);
         auditLogService.append(staffUserId, visit.getFacilityId(), "CONSULTATION_DIAGNOSIS_ADDED",
-                "ConsultationDiagnosis", diagnosis.getId().toString(), null, serializeText(diagnosisText));
+                "ConsultationDiagnosis", diagnosis.getId().toString(), null, serializeText(entry.getName()));
         return diagnosis;
+    }
+
+    private Diagnosis catalogueEntryFor(UUID diagnosisId, String diagnosisText, UUID staffUserId) {
+        if (diagnosisId != null) {
+            return diagnosisCatalogue.find(diagnosisId)
+                    .orElseThrow(() -> new InvalidConsultationException("Unknown diagnosis."));
+        }
+        if (!StringUtils.hasText(diagnosisText)) {
+            throw new InvalidConsultationException("Diagnosis text is required.");
+        }
+        if (diagnosisText.trim().length() > Diagnosis.MAX_NAME_LENGTH) {
+            throw new InvalidConsultationException("A diagnosis can be at most " + Diagnosis.MAX_NAME_LENGTH
+                    + " characters.");
+        }
+        return diagnosisCatalogue.findOrAdd(diagnosisText, staffUserId);
     }
 
     @Transactional
@@ -282,9 +308,12 @@ public class ConsultationService {
 
         int sortOrder = 0;
         for (DiagnosisInput input : cmd.diagnoses()) {
-            consultationDiagnosisRepository.save(new ConsultationDiagnosis(amendment.getId(), input.diagnosisText(),
+            Diagnosis entry = catalogueEntryFor(input.diagnosisId(), input.diagnosisText(), staffUserId);
+            ConsultationDiagnosis copy = new ConsultationDiagnosis(amendment.getId(), entry.getName(),
                     input.isPrimary(), input.certainty() == null ? DiagnosisCertainty.PROVISIONAL : input.certainty(),
-                    sortOrder++));
+                    sortOrder++);
+            copy.applyCatalogueEntry(entry);
+            consultationDiagnosisRepository.save(copy);
         }
 
         amendment.sign(cmd.outcome(), cmd.outcomeNotes(), staffUserId, now);
@@ -476,7 +505,12 @@ public class ConsultationService {
         }
     }
 
-    public record DiagnosisInput(String diagnosisText, boolean isPrimary, DiagnosisCertainty certainty) {
+    public record DiagnosisInput(String diagnosisText, boolean isPrimary, DiagnosisCertainty certainty,
+                                 UUID diagnosisId) {
+
+        public DiagnosisInput(String diagnosisText, boolean isPrimary, DiagnosisCertainty certainty) {
+            this(diagnosisText, isPrimary, certainty, null);
+        }
     }
 
     public record AmendConsultationCommand(String relevantHistory, String currentMedications,
