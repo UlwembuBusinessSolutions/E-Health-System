@@ -1,5 +1,5 @@
 import { StartConsultationPanel } from "./StartConsultationPanel";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -16,6 +16,7 @@ import {
   addConsultationDiagnosis,
   amendConsultation,
   createConsultationDraft,
+  getContinuableConsultation,
   getConsultationHistory,
   getCurrentConsultation,
   markConsultationEnteredInError,
@@ -27,10 +28,12 @@ import {
   type ConsultationDiagnosis,
   type ConsultationOutcome,
   type DiagnosisCertainty,
+  type EarlierConsultation,
   type PharmacyItemPayload,
   type PurchaseItemPayload,
   type VitalsBypass,
 } from "@/shared/api/consultations";
+import { ContinuedFromNote, ContinueConsultation } from "./ContinueConsultation";
 import { DiagnosisSearchInput, type DiagnosisChoice } from "./DiagnosisSearchInput";
 import { PrescriptionWorkspace } from "@/prescribing/PrescriptionWorkspace";
 import {
@@ -103,13 +106,29 @@ export function PatientConsultationTab({ visitId, onTakeVitals }: { visitId: str
     enabled: !!visitId,
   });
 
+  const noConsultationYet = currentQuery.isSuccess && currentQuery.data === null;
+  const continuableQuery = useQuery({
+    queryKey: ["consultation-continuable", visitId],
+    queryFn: () => getContinuableConsultation(visitId as string),
+    enabled: !!visitId && noConsultationYet,
+  });
+  // A consultation that carries on from an earlier one shows the vitals taken on the earlier visit.
+  const carriedVitalsVisitId = currentQuery.data?.continuedFrom?.vitalsVisitId ?? null;
+  const carriedVitalsQuery = useQuery({
+    queryKey: ["triage-latest", carriedVitalsVisitId],
+    queryFn: () => getLatestTriage(carriedVitalsVisitId as string),
+    enabled: !!carriedVitalsVisitId && carriedVitalsVisitId !== visitId,
+  });
+
   const [startError, setStartError] = useState<string | null>(null);
   const startConsultation = useMutation({
-    mutationFn: (bypass?: VitalsBypass) => createConsultationDraft(visitId as string, bypass),
+    mutationFn: ({ bypass, continueFrom }: { bypass?: VitalsBypass; continueFrom?: string }) =>
+      createConsultationDraft(visitId as string, bypass, continueFrom),
     onSuccess: () => {
       setStartError(null);
       queryClient.invalidateQueries({ queryKey: ["consultation-current", visitId] });
       queryClient.invalidateQueries({ queryKey: ["consultation-history", visitId] });
+      queryClient.invalidateQueries({ queryKey: ["consultation-continuable", visitId] });
     },
     onError: (error) => {
       setStartError(error instanceof ApiError ? error.message : "Couldn't start a consultation. Try again.");
@@ -151,20 +170,35 @@ export function PatientConsultationTab({ visitId, onTakeVitals }: { visitId: str
       {currentQuery.isLoading ? (
         <p className="text-[13.5px] text-text-secondary">Loading…</p>
       ) : !current ? (
-        <StartConsultationPanel
-          vitalsMissing={triageQuery.isSuccess && triageQuery.data === null}
-          loading={startConsultation.isPending}
-          error={startError}
-          onStart={(bypass) => startConsultation.mutate(bypass)}
-          onTakeVitals={onTakeVitals}
-        />
+        continuableQuery.isLoading ? (
+          <p className="text-[13.5px] text-text-secondary">Loading…</p>
+        ) : (
+          <ConsultationStart
+            earlier={continuableQuery.data ?? null}
+            panel={
+              <StartConsultationPanel
+                vitalsMissing={triageQuery.isSuccess && triageQuery.data === null}
+                loading={startConsultation.isPending}
+                error={startError}
+                onStart={(bypass) => startConsultation.mutate({ bypass })}
+                onTakeVitals={onTakeVitals}
+              />
+            }
+            loading={startConsultation.isPending}
+            error={startError}
+            onContinue={(continueFrom) => startConsultation.mutate({ continueFrom })}
+          />
+        )
       ) : (
         <>
           {current.vitalsBypassReason && <VitalsSkippedNote consultation={current} />}
+          {current.continuedFrom && (
+            <ContinuedFromNote earlier={current.continuedFrom} vitals={carriedVitalsQuery.data ?? triageQuery.data ?? null} />
+          )}
           <ConsultationRecord
             key={current.id}
             consultation={current}
-            presentingComplaint={triageQuery.data?.presentingComplaint ?? null}
+            presentingComplaint={triageQuery.data?.presentingComplaint ?? carriedVitalsQuery.data?.presentingComplaint ?? null}
             onChanged={invalidate}
           />
         </>
@@ -173,6 +207,25 @@ export function PatientConsultationTab({ visitId, onTakeVitals }: { visitId: str
       {history.length > 0 && <ConsultationHistorySection entries={history} />}
     </Card>
   );
+}
+
+// Where a consultation starts. When the patient was seen earlier for the same episode, the doctor first chooses
+// between carrying on from that consultation and a new problem.
+function ConsultationStart({
+  earlier,
+  panel,
+  loading,
+  error,
+  onContinue,
+}: {
+  earlier: EarlierConsultation | null;
+  panel: ReactNode;
+  loading: boolean;
+  error: string | null;
+  onContinue: (consultationId: string) => void;
+}) {
+  if (!earlier) return <>{panel}</>;
+  return <ContinueConsultation earlier={earlier} newProblem={panel} loading={loading} error={error} onContinue={onContinue} />;
 }
 
 function ConsultationRecord({

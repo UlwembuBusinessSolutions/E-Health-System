@@ -29,6 +29,19 @@ export interface ConsultationDiagnosis {
   diagnosisId: string | null;
 }
 
+/** An earlier signed consultation of the same episode of care, for example before the patient was sent elsewhere and came back. */
+export interface EarlierConsultation {
+  consultationId: string;
+  visitId: string;
+  facilityName: string;
+  signedAt: string | null;
+  signedByName: string | null;
+  outcome: ConsultationOutcome | null;
+  diagnoses: ConsultationDiagnosis[];
+  /** The nearest visit, this one first, with vitals on record; null when no visit has any. */
+  vitalsVisitId: string | null;
+}
+
 export interface Consultation {
   id: string;
   visitId: string;
@@ -61,6 +74,8 @@ export interface Consultation {
   vitalsBypassNote: string | null;
   // The doctor's unsigned prescription as JSON; null when none was saved.
   prescriptionDraft: string | null;
+  /** Set when this consultation carries on from an earlier one. */
+  continuedFrom: EarlierConsultation | null;
 }
 
 // Get-or-create — a second call against a visit that already has a draft
@@ -74,12 +89,30 @@ export interface VitalsBypass {
   note?: string;
 }
 
-// A visit without vitals needs a bypass reason; the server refuses to start without one.
-export async function createConsultationDraft(visitId: string, bypass?: VitalsBypass): Promise<Consultation> {
-  const body = bypass ? { vitalsBypassReason: bypass.reason, vitalsBypassNote: bypass.note } : undefined;
+// A visit without vitals needs a bypass reason; the server refuses to start without one. Carrying on from an
+// earlier consultation (see getContinuableConsultation) copies its notes and diagnoses and needs no reason,
+// because the vitals from the earlier visit count.
+export async function createConsultationDraft(
+  visitId: string,
+  bypass?: VitalsBypass,
+  continueFromConsultationId?: string,
+): Promise<Consultation> {
+  const body =
+    bypass || continueFromConsultationId
+      ? { vitalsBypassReason: bypass?.reason, vitalsBypassNote: bypass?.note, continueFromConsultationId }
+      : undefined;
   return apiClient.post<Consultation>(`/api/v1/visits/${visitId}/consultations`, body, {
     headers: tenantAuthHeaders(),
   });
+}
+
+/** The earlier consultation this visit can carry on from, or null when there is none. */
+export async function getContinuableConsultation(visitId: string): Promise<EarlierConsultation | null> {
+  const response = await apiClient.get<{ item: EarlierConsultation | null }>(
+    `/api/v1/visits/${visitId}/consultations/continuable`,
+    { headers: tenantAuthHeaders() },
+  );
+  return response.item;
 }
 
 // Full history, oldest first — DRAFT/SIGNED and SUPERSEDED/ENTERED_IN_ERROR
