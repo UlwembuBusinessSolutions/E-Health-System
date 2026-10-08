@@ -1,4 +1,3 @@
-
 ﻿import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -75,4 +74,3 @@ function FacilityForm({ facility, onCancel, onSaved }: { facility?: FacilityDeta
     </form>
   </Card>;
 }
-

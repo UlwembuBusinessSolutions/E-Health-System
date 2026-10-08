@@ -1,4 +1,3 @@
-
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
 import type { QueueToken } from "./queue";
@@ -58,4 +57,3 @@ export async function getPatientVisitHistory(patientId: string): Promise<Patient
   });
   return response.items;
 }
-

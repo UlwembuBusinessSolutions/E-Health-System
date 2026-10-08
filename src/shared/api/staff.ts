@@ -1,4 +1,3 @@
-
 import type { Gender } from "./types";
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
@@ -145,10 +144,81 @@ export async function offboardStaff(staffId: string, employmentEndDate: string):
   });
 }
 
+// The reverse of offboardStaff() above — clears employmentEndDate and
+// re-enables login in one call (StaffService.reboardStaff()'s own why-note
+// on why this isn't just setStaffEnabled(true, ...)).
+export async function reboardStaff(staffId: string): Promise<void> {
+  await apiClient.post<void>(`/api/v1/admin/staff/${staffId}/reboard`, undefined, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
 // "Their contract type changed while they're still here" — never touches
 // status or employmentEndDate either way (StaffService.updateEmploymentType()).
 export async function updateStaffEmploymentType(staffId: string, employmentType: EmploymentType): Promise<void> {
   await apiClient.post<void>(`/api/v1/admin/staff/${staffId}/employment-type`, { employmentType }, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+// The edit-details form's own read/write pair — matches StaffController.
+// StaffDetailResponse field-for-field. Deliberately excludes email
+// (login identifier), facility/role, employmentType, status/
+// employmentEndDate and password: each already has its own dedicated
+// endpoint above, same "one lever per real-world fact" reasoning as
+// offboardStaff() vs setStaffEnabled().
+export interface StaffDetail {
+  id: string;
+  employeeNumber: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  contactNumber: string;
+  idNumber: string | null;
+  department: string | null;
+  designation: string | null;
+  managerId: string | null;
+  dateOfBirth: string | null;
+  sancNumber: string | null;
+  sancExpiryDate: string | null;
+  hpcsaNumber: string | null;
+  hpcsaExpiryDate: string | null;
+  sapcNumber: string | null;
+  sapcExpiryDate: string | null;
+  emergencyContactName: string | null;
+  emergencyContactRelationship: string | null;
+  emergencyContactPhone: string | null;
+  facilityId: string | null;
+  status: StaffStatus;
+  profilePhotoUrl: string | null;
+}
+
+export async function getStaffDetail(staffId: string): Promise<StaffDetail> {
+  return apiClient.get<StaffDetail>(`/api/v1/admin/staff/${staffId}`, { headers: tenantAuthHeaders() });
+}
+
+export interface UpdateStaffDetailsPayload {
+  firstName: string;
+  lastName: string;
+  contactNumber: string;
+  idNumber?: string;
+  department?: string;
+  designation?: string;
+  managerId?: string;
+  dateOfBirth?: string;
+  sancNumber?: string;
+  sancExpiryDate?: string;
+  hpcsaNumber?: string;
+  hpcsaExpiryDate?: string;
+  sapcNumber?: string;
+  sapcExpiryDate?: string;
+  emergencyContactName?: string;
+  emergencyContactRelationship?: string;
+  emergencyContactPhone?: string;
+}
+
+export async function updateStaffDetails(staffId: string, payload: UpdateStaffDetailsPayload): Promise<StaffSummary> {
+  return apiClient.post<StaffSummary>(`/api/v1/admin/staff/${staffId}/details`, payload, {
     headers: tenantAuthHeaders(),
   });
 }
@@ -184,3 +254,92 @@ export async function uploadStaffPhoto(staffId: string, file: File): Promise<Pho
   });
 }
 
+// Matches StaffDocumentType field-for-field — qualification certificates,
+// professional registration proof, ID copies, contracts and other HR
+// paperwork, same upload/list/download-url/delete shape as
+// shared/api/patients.ts's own PatientDocument, just against a staff
+// member instead of a patient (and with a delete path patient documents
+// deliberately don't have — StaffDocumentService.delete()'s own why-note).
+export type StaffDocumentType =
+  | "QUALIFICATION_CERTIFICATE"
+  | "PROFESSIONAL_REGISTRATION_CERTIFICATE"
+  | "ID_COPY"
+  | "CONTRACT"
+  | "OTHER";
+
+export const STAFF_DOCUMENT_TYPE_OPTIONS: { value: StaffDocumentType; label: string }[] = [
+  { value: "QUALIFICATION_CERTIFICATE", label: "Qualification certificate" },
+  { value: "PROFESSIONAL_REGISTRATION_CERTIFICATE", label: "Professional registration certificate" },
+  { value: "ID_COPY", label: "ID copy" },
+  { value: "CONTRACT", label: "Contract" },
+  { value: "OTHER", label: "Other" },
+];
+
+// Mirrors patients.ts's own validateDocumentFile()/ALLOWED_DOCUMENT_CONTENT_TYPES
+// — same 5MB/PDF-JPEG-PNG-WebP limits StaffDocumentService.ALLOWED_CONTENT_TYPES
+// and application.yml's multipart limit enforce server-side; this just
+// catches the same rejection before a round trip. Kept as its own small
+// copy rather than importing patients.ts's version — same "duplicate a
+// three-line pure function rather than reach across an unrelated feature
+// module" convention this codebase already follows elsewhere.
+export const ALLOWED_STAFF_DOCUMENT_CONTENT_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as const;
+export const MAX_STAFF_DOCUMENT_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+
+export function validateStaffDocumentFile(file: File): string | null {
+  if (!ALLOWED_STAFF_DOCUMENT_CONTENT_TYPES.includes(file.type as (typeof ALLOWED_STAFF_DOCUMENT_CONTENT_TYPES)[number])) {
+    return "Only PDF, JPEG, PNG, or WebP files are allowed.";
+  }
+  if (file.size > MAX_STAFF_DOCUMENT_FILE_SIZE_BYTES) {
+    return "File is too large. Maximum size is 5MB.";
+  }
+  return null;
+}
+
+// s3Key is never part of this shape — StaffController.StaffDocumentSummary's
+// own why-note. getStaffDocumentDownloadUrl() below is the only way to
+// actually reach the file.
+export interface StaffDocument {
+  id: string;
+  documentType: StaffDocumentType;
+  originalFilename: string;
+  contentType: string;
+  fileSize: number;
+  uploadedAt: string;
+}
+
+export async function uploadStaffDocument(
+  staffId: string,
+  documentType: StaffDocumentType,
+  file: File,
+): Promise<StaffDocument> {
+  const form = new FormData();
+  form.append("file", file);
+  const search = new URLSearchParams({ documentType });
+  return apiClient.post<StaffDocument>(`/api/v1/admin/staff/${staffId}/documents?${search.toString()}`, form, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export async function listStaffDocuments(staffId: string): Promise<StaffDocument[]> {
+  const response = await apiClient.get<{ items: StaffDocument[] }>(`/api/v1/admin/staff/${staffId}/documents`, {
+    headers: tenantAuthHeaders(),
+  });
+  return response.items;
+}
+
+// A fresh, short-lived URL every call (StaffDocumentService.getDownloadUrl()'s
+// own why-note) — callers fetch this right before navigating to it, never
+// cache it past that one use.
+export async function getStaffDocumentDownloadUrl(staffId: string, documentId: string): Promise<string> {
+  const response = await apiClient.get<{ url: string }>(
+    `/api/v1/admin/staff/${staffId}/documents/${documentId}/download-url`,
+    { headers: tenantAuthHeaders() },
+  );
+  return response.url;
+}
+
+export async function deleteStaffDocument(staffId: string, documentId: string): Promise<void> {
+  await apiClient.delete<void>(`/api/v1/admin/staff/${staffId}/documents/${documentId}`, {
+    headers: tenantAuthHeaders(),
+  });
+}

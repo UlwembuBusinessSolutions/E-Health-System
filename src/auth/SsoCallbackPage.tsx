@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { HeartPulse } from "lucide-react";
@@ -45,4 +44,3 @@ export function SsoCallbackPage() {
     </div>
   );
 }
-

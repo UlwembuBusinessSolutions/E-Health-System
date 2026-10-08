@@ -1,4 +1,3 @@
-
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
@@ -6,6 +5,7 @@ import { AuthProvider } from "@/auth/AuthContext";
 import { PlatformAuthProvider } from "@/platform/PlatformAuthContext";
 import { PatientAuthProvider } from "@/patient-portal/PatientAuthContext";
 import { ToastProvider } from "@/shared/components/toast/ToastProvider";
+import { OfflineProvider } from "@/offline/OfflineContext"; // OFFLINE
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,7 +23,10 @@ export function AppProviders({ children }: { children: ReactNode }) {
         <AuthProvider>
           <PlatformAuthProvider>
             <PatientAuthProvider>
-              <ToastProvider>{children}</ToastProvider>
+              <ToastProvider>
+                {/* OFFLINE: must sit inside AuthProvider and ToastProvider */}
+                <OfflineProvider>{children}</OfflineProvider>
+              </ToastProvider>
             </PatientAuthProvider>
           </PlatformAuthProvider>
         </AuthProvider>
@@ -31,4 +34,3 @@ export function AppProviders({ children }: { children: ReactNode }) {
     </BrowserRouter>
   );
 }
-

@@ -1,4 +1,3 @@
-
 import { z } from "zod";
 
 // Mirrors PlatformController.AdminRequest field-for-field — one admin's
@@ -108,4 +107,3 @@ export const createOperatorSchema = z.object({
 });
 
 export type CreateOperatorValues = z.infer<typeof createOperatorSchema>;
-

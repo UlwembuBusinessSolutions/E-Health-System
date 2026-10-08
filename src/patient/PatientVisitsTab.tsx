@@ -1,4 +1,3 @@
-
 import { useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRightLeft, Building2, CalendarDays, ChevronLeft, ChevronRight, Clock3, Search, History } from "lucide-react";
@@ -85,4 +84,3 @@ export function PatientVisitsTab({ patientId }: { patientId: string }) {
     </Card>
   );
 }
-

@@ -1,4 +1,3 @@
-
 import { apiClient } from "./client";
 
 // The patient portal's own auth module — mirrors shared/api/auth.ts
@@ -116,4 +115,3 @@ export async function getCurrentPatientAccount(): Promise<PatientAccountSummary>
 export async function patientLogout(): Promise<void> {
   await apiClient.post<void>("/api/v1/patient/auth/logout", undefined, { headers: patientAuthHeaders() });
 }
-

@@ -1,4 +1,3 @@
-
 import { Navigate, Route, Routes } from "react-router-dom";
 import { FindOrganizationScreen } from "@/auth/FindOrganizationScreen";
 import { LoginScreen } from "@/auth/LoginScreen";
@@ -8,6 +7,7 @@ import { RequireAuth } from "@/auth/RequireAuth";
 import { RequireRole } from "@/auth/RequireRole";
 import { VITALS_ROLES } from "@/auth/roles";
 import { AddStaffScreen } from "@/staff/AddStaffScreen";
+import { EditStaffScreen } from "@/staff/EditStaffScreen";
 import { StaffListPage } from "@/staff/StaffListPage";
 import { PatientSearchPage } from "@/patient/PatientSearchPage";
 import { RegisterPatientScreen } from "@/patient/RegisterPatientScreen";
@@ -16,28 +16,37 @@ import { QueuePage } from "@/queue/QueuePage";
 import { VitalsIntakePage } from "@/queue/VitalsIntakePage";
 import { TicketPrintPage } from "@/queue/TicketPrintPage";
 import { VitalsPrintPage } from "@/patient/VitalsPrintPage";
-import { PharmacyQueuePage } from "@/pharmacy/PharmacyQueuePage";
-import { PrescriptionPrintPage } from "@/pharmacy/PrescriptionPrintPage";
-import { PharmacyLayout } from "@/pharmacy/PharmacyLayout";
-import { ProductListPage } from "@/pharmacy/products/ProductListPage";
-import { AddProductScreen } from "@/pharmacy/products/AddProductScreen";
-import { ProductDetailPage } from "@/pharmacy/products/ProductDetailPage";
-import { StockListPage } from "@/pharmacy/stock/StockListPage";
-import { ReceiveStockScreen } from "@/pharmacy/stock/ReceiveStockScreen";
-import { LedgerPage } from "@/pharmacy/ledger/LedgerPage";
 import { OrganizationSettingsPage } from "@/settings/OrganizationSettingsPage";
 import { AuditTrailPage } from "@/audit/AuditTrailPage";
+import { AppointmentsPage } from "@/appointments/AppointmentsPage";
 import { PatientLoginScreen } from "@/patient-portal/PatientLoginScreen";
 import { PatientRegisterScreen } from "@/patient-portal/PatientRegisterScreen";
 import { PatientPortalPage } from "@/patient-portal/PatientPortalPage";
 import { RequirePatientPortalAuth } from "@/patient-portal/RequirePatientPortalAuth";
 import { TenantHomePage } from "@/tenant-site/TenantHomePage";
 import { AppShell } from "./AppShell";
+import {
+  AddProductPage,
+  DispensingQueuePage,
+  LedgerPage,
+  ImportPage,
+  OpeningStockPage,
+  PharmacyLayout,
+  PrescriptionPrintPage,
+  ReceiveStockPage,
+  ReorderPage,
+  ScheduleRegisterPage,
+  StockCountPage,
+  StockPage,
+  SuppliersPage,
+  WithPageLoading,
+} from "./pharmacyPages";
 import { DashboardPage } from "./DashboardPage";
 import { PlatformRoot } from "@/platform/PlatformRoot";
 import { PlatformLoginScreen } from "@/platform/PlatformLoginScreen";
 import { RequirePlatformAuth } from "@/platform/RequirePlatformAuth";
 import { PlatformShell } from "@/platform/components/PlatformShell";
+import { OverviewPage } from "@/platform/OverviewPage";
 import { OrganizationsPage } from "@/platform/OrganizationsPage";
 import { OrganizationDetailPage } from "@/platform/OrganizationDetailPage";
 import { ProvisionOrganizationScreen } from "@/platform/ProvisionOrganizationScreen";
@@ -47,6 +56,7 @@ import { UsersPage } from "@/platform/UsersPage";
 import { CreateOperatorScreen } from "@/platform/CreateOperatorScreen";
 import { AuditPage } from "@/platform/AuditPage";
 import { ModuleEntitlementMatrixPage } from "@/platform/ModuleEntitlementMatrixPage";
+import { SyncCenterPage } from "@/offline/SyncCenterPage"; // OFFLINE
 
 export function AppRouter() {
   return (
@@ -57,23 +67,13 @@ export function AppRouter() {
           on this route. */}
       <Route path="/login" element={<FindOrganizationScreen />} />
       {/* The tenant's public front door — logo/description/contact info
-          from PublicOrganizationController, no session required. Links out
-          to both the patient portal (below) and, from its own "Sign in"
-          if a staff member lands here by mistake, nothing special — staff
-          still go straight to /login as always. */}
+          from PublicOrganizationController, no session required. */}
       <Route path="/org/:tenantSlug" element={<TenantHomePage />} />
       <Route path="/org/:tenantSlug/login" element={<LoginScreen />} />
-      {/* Where a completed Microsoft sign-in lands (MicrosoftSsoService.
-          frontendSuccessRedirect()'s own why-note) — a full-page redirect
-          carrying a real token as a query param, not a fetch response, so
-          this needs its own route rather than living inside LoginScreen. */}
+      {/* Where a completed Microsoft sign-in lands. */}
       <Route path="/org/:tenantSlug/sso/callback" element={<SsoCallbackPage />} />
       <Route path="/org/:tenantSlug/forgot-password" element={<ForgotPasswordScreen />} />
-      {/* The patient portal's own identity space — a separate login/register
-          pair from staff's /org/:tenantSlug/login above, backed by
-          PatientAuthContext rather than AuthContext. Auth scaffolding +
-          a minimal portal shell only for now (see PatientPortalPage's own
-          why-note); no public marketing pages yet. */}
+      {/* The patient portal's own identity space. */}
       <Route path="/org/:tenantSlug/patient/login" element={<PatientLoginScreen />} />
       <Route path="/org/:tenantSlug/patient/register" element={<PatientRegisterScreen />} />
       <Route
@@ -84,12 +84,7 @@ export function AppRouter() {
           </RequirePatientPortalAuth>
         }
       />
-      {/* Deliberately outside AppShell — this is a print target, opened in
-          its own small popup window (QueuePage/PatientDetailPage's
-          "Print"/"Print ticket" actions), and must render nothing but the
-          ticket: no sidebar, no top bar, nothing else the print stylesheet
-          would otherwise have to fight to hide. Still behind RequireAuth —
-          a queue token carries a patient name and MPI. */}
+      {/* Deliberately outside AppShell — print targets. */}
       <Route
         path="/print/ticket/:tokenId"
         element={
@@ -98,36 +93,25 @@ export function AppRouter() {
           </RequireAuth>
         }
       />
-      {/* Same reasoning as /print/ticket above — VitalsDetailModal's print
-          button opens this in its own popup window. Still behind
-          RequireAuth — a vitals reading carries clinical detail. */}
       <Route
         path="/print/vitals/:assessmentId"
         element={
           <RequireAuth>
-            <RequireRole roles={[...VITALS_ROLES]}>
-              <VitalsPrintPage />
-            </RequireRole>
+            <VitalsPrintPage />
           </RequireAuth>
         }
       />
-      {/* Same reasoning as /print/vitals above — PharmacyQueuePage's print
-          button opens this in its own popup window. Still behind
-          RequireAuth — a prescription carries clinical detail. */}
       <Route
         path="/print/prescription/:prescriptionId"
         element={
           <RequireAuth>
-            <PrescriptionPrintPage />
+            <WithPageLoading>
+              <PrescriptionPrintPage />
+            </WithPageLoading>
           </RequireAuth>
         }
       />
-      {/* The tenant app shell — Dashboard, Staff, and staff creation all
-          render inside AppShell's sidebar/top-bar frame (AppShell.tsx's own
-          why-note). RequireAuth wraps the shell itself, not each route
-          individually, same nesting PlatformShell/RequirePlatformAuth use
-          below; RequireRole on the two admin-only routes nests one level
-          deeper, same pattern platform's users/new already establishes. */}
+      {/* The tenant app shell. */}
       <Route
         path="/app"
         element={
@@ -136,7 +120,7 @@ export function AppRouter() {
           </RequireAuth>
         }
       >
-        <Route index element={<RequireRole role="ORG_ADMIN" redirectTo="/app/queue"><DashboardPage /></RequireRole>} />
+        <Route index element={<DashboardPage />} />
         <Route
           path="staff"
           element={
@@ -153,14 +137,24 @@ export function AppRouter() {
             </RequireRole>
           }
         />
+        <Route
+          path="staff/:staffId/edit"
+          element={
+            <RequireRole role="ORG_ADMIN">
+              <EditStaffScreen />
+            </RequireRole>
+          }
+        />
         {/* No RequireRole — registering and finding a patient is front-line
-            reception/clinical work, not admin territory, same gating as the
-            backend's own PatientController (falls through to
-            .anyRequest().authenticated(), not /api/v1/admin/**). */}
+            reception/clinical work, not admin territory. */}
         <Route path="patients" element={<PatientSearchPage />} />
         <Route path="patients/new" element={<RegisterPatientScreen />} />
         <Route path="patients/:id" element={<PatientDetailPage />} />
         <Route path="queue" element={<QueuePage />} />
+        {/* OFFLINE: pending records on this device + conflicts needing a decision.
+            No RequireRole — resolving a conflict is admin-only on the server. */}
+        <Route path="sync" element={<SyncCenterPage />} />
+        <Route path="appointments" element={<AppointmentsPage />} />
         <Route
           path="vitals"
           element={
@@ -169,14 +163,25 @@ export function AppRouter() {
             </RequireRole>
           }
         />
-        <Route path="pharmacy" element={<PharmacyLayout />}>
-          <Route index element={<PharmacyQueuePage />} />
-          <Route path="stock" element={<StockListPage />} />
-          <Route path="stock/receive" element={<ReceiveStockScreen />} />
-          <Route path="products" element={<ProductListPage />} />
-          <Route path="products/new" element={<AddProductScreen />} />
-          <Route path="products/:productId" element={<ProductDetailPage />} />
+        <Route
+          path="pharmacy"
+          element={
+            <WithPageLoading>
+              <PharmacyLayout />
+            </WithPageLoading>
+          }
+        >
+          <Route index element={<DispensingQueuePage />} />
+          <Route path="stock" element={<StockPage />} />
+          <Route path="products/new" element={<AddProductPage />} />
+          <Route path="receive" element={<ReceiveStockPage />} />
+          <Route path="suppliers" element={<SuppliersPage />} />
+          <Route path="reorder" element={<ReorderPage />} />
           <Route path="ledger" element={<LedgerPage />} />
+          <Route path="counts" element={<StockCountPage />} />
+          <Route path="register" element={<ScheduleRegisterPage />} />
+          <Route path="import" element={<ImportPage />} />
+          <Route path="opening-stock" element={<OpeningStockPage />} />
         </Route>
         <Route
           path="settings"
@@ -195,14 +200,7 @@ export function AppRouter() {
           }
         />
       </Route>
-      {/* Deliberately not RequireAuth/RequireRole — a platform operator
-          isn't a staff/org-admin login (backend-auth-guide.html Section 1),
-          it's a completely separate identity space with its own login
-          screen. PlatformRoot applies the console's scoped typography to
-          both login and the authenticated subtree; RequirePlatformAuth +
-          PlatformShell (sidebar chrome) wrap only the latter, so a
-          signed-out visitor at /platform/login never sees nav for pages
-          they can't reach yet. */}
+      {/* Platform console — a completely separate identity space. */}
       <Route path="/platform" element={<PlatformRoot />}>
         <Route path="login" element={<PlatformLoginScreen />} />
         <Route
@@ -212,7 +210,7 @@ export function AppRouter() {
             </RequirePlatformAuth>
           }
         >
-          <Route index element={<Navigate to="/platform/organizations" replace />} />
+          <Route index element={<OverviewPage />} />
           <Route path="organizations" element={<OrganizationsPage />} />
           <Route path="organizations/new" element={<ProvisionOrganizationScreen />} />
           <Route path="organizations/:id" element={<OrganizationDetailPage />} />
@@ -229,4 +227,3 @@ export function AppRouter() {
     </Routes>
   );
 }
-

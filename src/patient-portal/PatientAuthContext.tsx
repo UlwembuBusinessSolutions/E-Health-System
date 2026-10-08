@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   clearPatientAuth,
@@ -67,4 +66,3 @@ export function usePatientAuth(): PatientAuthContextValue {
   if (!ctx) throw new Error("usePatientAuth must be used within PatientAuthProvider");
   return ctx;
 }
-

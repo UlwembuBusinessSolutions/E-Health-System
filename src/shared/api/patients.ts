@@ -1,4 +1,3 @@
-
 import type { Gender } from "./types";
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
@@ -415,4 +414,3 @@ export async function getMigrationDestinationDocumentDownloadUrl(id: string, doc
   );
   return response.url;
 }
-

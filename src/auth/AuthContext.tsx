@@ -1,7 +1,9 @@
-
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { AuthenticatedUser } from "@/shared/api/types";
-import { clearTenantAuth, getCurrentUser, getTenantToken } from "@/shared/api/auth";
+import { clearTenantAuth, getCurrentUser, getTenantSlug, getTenantToken } from "@/shared/api/auth";
+// OFFLINE: network failures must not sign a person out; see the rehydration effect below.
+import { ApiError } from "@/shared/api/client";
+import { clearOfflineIdentity, loadOfflineIdentity, saveOfflineIdentity } from "@/offline/identity";
 
 // Auth state is client state — a dedicated context, not React Query — kept
 // separate from the idle-lock timer, which is its own local clock so a
@@ -35,18 +37,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     if (!getTenantToken()) {
+      // OFFLINE: no token. If we're offline and this device has a previous
+      // sign-in, come up with that identity so offline registration still
+      // works. It grants nothing by itself (see offline/identity.ts).
+      const cached = !navigator.onLine ? loadOfflineIdentity() : null;
+      if (cached) setUser(cached.user);
       setIsInitializing(false);
       return;
     }
     getCurrentUser()
       .then((rehydrated) => {
-        if (!cancelled) setUser(rehydrated);
+        if (cancelled) return;
+        setUser(rehydrated);
+        saveOfflineIdentity(rehydrated, getTenantSlug()); // OFFLINE
       })
-      .catch(() => {
-        // Expired or invalid — clear it so nothing keeps retrying against a
-        // session that's already gone; falls through to RequireAuth's
-        // normal signed-out redirect.
-        clearTenantAuth();
+      .catch((error) => {
+        if (error instanceof ApiError) {
+          // Expired or invalid — clear it so nothing keeps retrying against a
+          // session that's already gone; falls through to RequireAuth's
+          // normal signed-out redirect.
+          clearTenantAuth();
+        } else {
+          // OFFLINE: a network failure is not a rejected token. Keep the
+          // session usable offline with the cached, non-secret identity.
+          const cached = loadOfflineIdentity();
+          if (cached && !cancelled) setUser(cached.user);
+        }
       })
       .finally(() => {
         if (!cancelled) setIsInitializing(false);
@@ -60,9 +76,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       isInitializing,
-      setUser,
+      setUser: (next: AuthenticatedUser | null) => {
+        setUser(next);
+        if (next) saveOfflineIdentity(next, getTenantSlug()); // OFFLINE
+      },
       logout: () => {
         clearTenantAuth();
+        clearOfflineIdentity(); // OFFLINE
         setUser(null);
       },
     }),
@@ -77,4 +97,3 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
-

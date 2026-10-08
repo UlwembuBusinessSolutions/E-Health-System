@@ -1,4 +1,3 @@
-
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { MobileTopBar } from "./MobileTopBar";
@@ -14,11 +13,10 @@ export function PlatformShell() {
       <Sidebar />
       <MobileTopBar />
       <main className="min-w-0 flex-1">
-        <div className="mx-auto w-full max-w-screen-2xl px-4 py-8 sm:px-8 sm:py-10">
+        <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
           <Outlet />
         </div>
       </main>
     </div>
   );
 }
-

@@ -1,4 +1,3 @@
-
 import { useId, useState, type ReactNode } from "react";
 import { ChevronDown, type LucideIcon } from "lucide-react";
 import { Card } from "@/shared/components/Card";
@@ -43,4 +42,3 @@ export function SettingsSection({ title, description, icon: Icon, children, defa
     </Card>
   );
 }
-

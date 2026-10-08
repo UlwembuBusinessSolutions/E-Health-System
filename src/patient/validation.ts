@@ -1,4 +1,3 @@
-
 import { z } from "zod";
 
 // Mirrors PatientController.RegisterPatientRequest field-for-field. Only
@@ -32,4 +31,3 @@ export const registerPatientSchema = z.object({
 });
 
 export type RegisterPatientValues = z.infer<typeof registerPatientSchema>;
-

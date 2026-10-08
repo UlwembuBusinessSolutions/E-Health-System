@@ -1,4 +1,4 @@
-
+import type { ReactNode } from "react";
 import clsx from "clsx";
 
 export type PillTone = "success" | "danger" | "warning" | "neutral";
@@ -16,7 +16,10 @@ const TONE_CLASSES: Record<PillTone, string> = {
 // between the Platform Console and the tenant app rather than duplicated —
 // both need the exact same "state of a record" affordance (an organization,
 // a platform operator, a staff member).
-export function StatusPill({ tone, children }: { tone: PillTone; children: string }) {
+//
+// `icon` replaces the default dot where status must be readable without
+// colour (stock states), so the shape carries the meaning too.
+export function StatusPill({ tone, icon, children }: { tone: PillTone; icon?: ReactNode; children: string }) {
   return (
     <span
       className={clsx(
@@ -24,9 +27,8 @@ export function StatusPill({ tone, children }: { tone: PillTone; children: strin
         TONE_CLASSES[tone],
       )}
     >
-      <span className="size-1.5 rounded-full bg-current" aria-hidden />
+      {icon ?? <span className="size-1.5 rounded-full bg-current" aria-hidden />}
       {children}
     </span>
   );
 }
-

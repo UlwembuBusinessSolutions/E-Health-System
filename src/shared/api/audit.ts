@@ -1,4 +1,3 @@
-
 import { apiClient, apiOrigin, ApiError } from "./client";
 import { tenantAuthHeaders } from "./auth";
 
@@ -87,4 +86,3 @@ export async function exportTenantAudit(params: ExportTenantAuditParams = {}): P
   link.remove();
   URL.revokeObjectURL(url);
 }
-

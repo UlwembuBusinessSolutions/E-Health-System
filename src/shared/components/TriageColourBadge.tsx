@@ -1,4 +1,3 @@
-
 import type { TriageColour } from "@/shared/api/triage";
 
 // A dedicated badge rather than reusing StatusPill's success/warning/
@@ -37,4 +36,3 @@ export function TriageColourBadge({ colour }: { colour: TriageColour }) {
     </span>
   );
 }
-

@@ -1,4 +1,3 @@
-
 // A generated EKG waveform, not hand-authored path data — one "blip" unit
 // (flat → small bump → sharp spike → sharp drop → flat) tiled across the
 // width. Decorative background texture for PlatformLoginScreen: a
@@ -45,4 +44,3 @@ export function PulseLine({ className, repeats = 12 }: { className?: string; rep
     </svg>
   );
 }
-

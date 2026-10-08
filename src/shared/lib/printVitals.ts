@@ -1,4 +1,3 @@
-
 // Opens a single vitals reading's print-friendly page (VitalsPrintPage) in
 // its own small window — same shape as printTicket.ts's printQueueTicket(),
 // including its own why-note on window sizing/opener handling, which this
@@ -16,4 +15,3 @@ export function printVitalsReading(assessmentId: string): void {
   const tab = window.open(`/print/vitals/${assessmentId}`, "vitals-print", "width=680,height=860");
   if (tab) tab.opener = null;
 }
-

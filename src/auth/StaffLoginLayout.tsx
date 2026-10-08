@@ -1,4 +1,3 @@
-
 ﻿import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -269,4 +268,3 @@ function CareIllustration() {
     </div>
   );
 }
-

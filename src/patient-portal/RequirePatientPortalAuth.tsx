@@ -1,4 +1,3 @@
-
 import type { ReactNode } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { usePatientAuth } from "./PatientAuthContext";
@@ -16,4 +15,3 @@ export function RequirePatientPortalAuth({ children }: { children: ReactNode }) 
   }
   return <>{children}</>;
 }
-

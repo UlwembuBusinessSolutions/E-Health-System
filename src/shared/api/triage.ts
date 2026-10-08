@@ -1,4 +1,3 @@
-
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
 
@@ -206,4 +205,3 @@ export async function overrideTriageColour(
     { headers: tenantAuthHeaders() },
   );
 }
-

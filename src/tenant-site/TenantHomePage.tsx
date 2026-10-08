@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -47,4 +46,3 @@ export function TenantHomePage() {
     <footer className="th-footer"><div className="th-wrap"><div className="th-footer-top"><Link className="th-brand" to={base}>{identity}</Link><div className="th-footer-links"><Link to={`${base}/patient/login`}>Patient sign in</Link><Link to={`${base}/login`}>Staff sign in</Link>{externalLinks.map(link => <a key={link.label} href={link.href!} target="_blank" rel="noopener noreferrer">{link.label} <ArrowUpRight size={13} aria-hidden /></a>)}</div></div><div className="th-footer-bottom"><span>© {new Date().getFullYear()} {org.displayName}</span><span>Powered by Ulwembu eHealth</span></div></div></footer>
   </div>;
 }
-

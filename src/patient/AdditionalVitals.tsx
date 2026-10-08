@@ -1,4 +1,3 @@
-
 import { Bandage, Droplets, FlaskConical, Ruler, Scale, TestTube, type LucideIcon } from "lucide-react";
 import { useId } from "react";
 import type { AdditionalObservations } from "@/shared/api/triage";
@@ -82,4 +81,3 @@ export function AdditionalVitalsSummary({ value }: { value?: AdditionalObservati
     </div>
   </section>;
 }
-

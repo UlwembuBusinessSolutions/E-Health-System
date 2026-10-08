@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -102,4 +101,3 @@ export function PatientLoginScreen() {
 }
 
 function UserIcon() { return <LockKeyhole size={25} aria-hidden />; }
-

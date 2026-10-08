@@ -1,4 +1,3 @@
-
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
 
@@ -129,7 +128,20 @@ export interface PharmacyItemPayload {
   drugName: string;
   dosage: string;
   quantity: number;
-  schedule?: number | null;
+  // Set when the prescriber picked the medicine from the pharmacy's stock
+  // list; the pharmacist then needs no matching step, and the server refuses
+  // a quantity the shelf cannot cover.
+  productId?: string;
+}
+
+// A medicine the patient should buy instead of receiving it from the
+// pharmacy (out of stock, short, or not stocked there).
+export interface PurchaseItemPayload {
+  drugName: string;
+  dosage: string;
+  quantity: number;
+  productId?: string;
+  note?: string;
 }
 
 export interface SignConsultationPayload {
@@ -140,6 +152,9 @@ export interface SignConsultationPayload {
   // dispensing queue; the queue-token transfer alone doesn't put anything
   // there for pharmacy staff to act on.
   pharmacyItems?: PharmacyItemPayload[];
+  // Medicines for the patient to buy; with SEND_TO_PHARMACY, either list may be
+  // empty but not both.
+  purchaseItems?: PurchaseItemPayload[];
   // Required only when outcome is REFER_OR_TRANSFER — the org's own
   // facility the clinician picked, not a hardcoded destination. Unlike
   // SEND_TO_PHARMACY (always the one org-wide pharmacy), a referral has no
@@ -166,6 +181,7 @@ export interface AmendConsultationPayload {
   outcomeNotes?: string;
   amendmentReason: string;
   pharmacyItems?: PharmacyItemPayload[];
+  purchaseItems?: PurchaseItemPayload[];
   destinationFacilityId?: string;
 }
 
@@ -184,4 +200,3 @@ export async function markConsultationEnteredInError(id: string, reason: string)
     { headers: tenantAuthHeaders() },
   );
 }
-

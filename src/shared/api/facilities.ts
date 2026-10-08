@@ -1,4 +1,3 @@
-
 import type { Facility } from "./types";
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
@@ -40,4 +39,3 @@ export async function getFacilities(): Promise<Facility[]> {
   });
   return response.items;
 }
-

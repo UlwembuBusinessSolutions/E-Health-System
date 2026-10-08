@@ -1,7 +1,15 @@
-
 export interface Facility {
   id: string;
   name: string;
+}
+
+/** The `{items, page, size, totalItems, hasMore}` envelope paged list endpoints return. */
+export interface PagedResult<T> {
+  items: T[];
+  page: number;
+  size: number;
+  totalItems: number;
+  hasMore: boolean;
 }
 
 export interface Role {
@@ -21,4 +29,3 @@ export interface AuthenticatedUser {
   // names pass through unused until staff-facing screens exist.
   role: string;
 }
-

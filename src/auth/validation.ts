@@ -1,4 +1,3 @@
-
 import { z } from "zod";
 
 // tenantSlug is no longer part of this form — LoginScreen now reaches it as
@@ -50,4 +49,3 @@ export const resetPasswordSchema = z
   });
 
 export type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
-

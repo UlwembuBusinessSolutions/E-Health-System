@@ -1,4 +1,3 @@
-
 // RECQ-US-003 — opens a queue ticket's print-friendly page (TicketPrintPage)
 // in its own small window. Shared by the queue page's "Print" action and
 // the "Visit started" success screen, both of which need the exact same
@@ -22,4 +21,3 @@ export function printQueueTicket(tokenId: string): void {
   const tab = window.open(`/print/ticket/${tokenId}`, "ticket-print", "width=380,height=640");
   if (tab) tab.opener = null;
 }
-

@@ -1,4 +1,3 @@
-
 import { forwardRef, useId, type SelectHTMLAttributes } from "react";
 import clsx from "clsx";
 import { ChevronDown } from "lucide-react";
@@ -83,4 +82,3 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     </div>
   );
 });
-

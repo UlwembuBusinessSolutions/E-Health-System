@@ -1,4 +1,3 @@
-
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { usePlatformAuth } from "./PlatformAuthContext";
@@ -12,4 +11,3 @@ export function RequirePlatformAuth({ children }: { children: ReactNode }) {
   if (!operator) return <Navigate to="/platform/login" replace />;
   return <>{children}</>;
 }
-

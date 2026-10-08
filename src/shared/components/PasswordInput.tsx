@@ -1,4 +1,3 @@
-
 import { forwardRef, useId, useState, type InputHTMLAttributes } from "react";
 import clsx from "clsx";
 import { Eye, EyeOff, Lock } from "lucide-react";
@@ -66,4 +65,3 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(fu
     </div>
   );
 });
-

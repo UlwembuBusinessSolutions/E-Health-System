@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getOrganizationModules, toggleOrganizationModule, type ModulePhase } from "@/shared/api/organization";
@@ -103,4 +102,3 @@ export function ModulesSettingsSection() {
     </div>
   );
 }
-

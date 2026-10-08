@@ -1,4 +1,3 @@
-
 // Opens a single prescription's print-friendly page (PrescriptionPrintPage)
 // in its own small window — same shape as printVitals.ts's
 // printVitalsReading(), including its own why-note on window sizing/opener
@@ -11,4 +10,3 @@ export function printPrescription(prescriptionId: string): void {
   const tab = window.open(`/print/prescription/${prescriptionId}`, "prescription-print", "width=680,height=860");
   if (tab) tab.opener = null;
 }
-

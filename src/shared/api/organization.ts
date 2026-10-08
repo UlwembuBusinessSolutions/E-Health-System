@@ -1,4 +1,3 @@
-
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
 
@@ -181,4 +180,3 @@ export async function updateOrganizationSsoSettings(
     headers: tenantAuthHeaders(),
   });
 }
-

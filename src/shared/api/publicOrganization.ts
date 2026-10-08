@@ -1,4 +1,3 @@
-
 import { apiClient } from "./client";
 
 // Backs PublicOrganizationController — the one organization surface
@@ -34,4 +33,3 @@ export async function getPublicOrganization(tenantSlug: string): Promise<PublicO
     headers: { "X-Tenant-ID": tenantSlug },
   });
 }
-

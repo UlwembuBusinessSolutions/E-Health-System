@@ -1,4 +1,3 @@
-
 import { Activity, Droplets, Gauge, HeartPulse, Thermometer, Wind } from "lucide-react";
 import type { TriageAssessment } from "@/shared/api/triage";
 
@@ -19,4 +18,3 @@ export function VitalsOverview({ assessment: a }: { assessment: TriageAssessment
     </div>)}
   </div>;
 }
-

@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Eraser } from "lucide-react";
 
@@ -106,4 +105,3 @@ export function SignaturePad({ onChange, disabled }: SignaturePadProps) {
     </div>
   );
 }
-

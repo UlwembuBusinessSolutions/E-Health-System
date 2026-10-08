@@ -1,4 +1,3 @@
-
 import { forwardRef, useId, type InputHTMLAttributes, type ReactNode } from "react";
 import clsx from "clsx";
 
@@ -58,4 +57,3 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     </div>
   );
 });
-

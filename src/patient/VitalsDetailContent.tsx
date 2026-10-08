@@ -1,4 +1,3 @@
-
 import { AdditionalVitalsSummary } from "./AdditionalVitals";
 import type { ComponentType, ReactNode } from "react";
 import {
@@ -333,4 +332,3 @@ export function VitalsDetailContent({
     </div>
   );
 }
-

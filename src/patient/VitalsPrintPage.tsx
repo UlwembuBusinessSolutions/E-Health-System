@@ -1,4 +1,3 @@
-
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -82,4 +81,3 @@ export function VitalsPrintPage() {
     </div>
   );
 }
-

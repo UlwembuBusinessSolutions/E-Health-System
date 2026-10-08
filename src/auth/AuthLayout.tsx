@@ -1,4 +1,3 @@
-
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -102,4 +101,3 @@ export function AuthLayout({ title, subtitle, children, footer, tenantSlug }: Au
     </div>
   );
 }
-

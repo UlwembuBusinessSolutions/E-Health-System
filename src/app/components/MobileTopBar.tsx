@@ -1,11 +1,26 @@
-
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Gauge, LogOut, Pill, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
+import { Gauge, LogOut, Pill, RefreshCw, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 import { getTenantSlug } from "@/shared/api/auth";
 import { getOrganizationSelf } from "@/shared/api/organization";
+import { CalendarDays, Settings } from "lucide-react";
+
+// Mirrors Sidebar.tsx's own APPOINTMENT_ROLES exactly — see its why-note.
+const APPOINTMENT_ROLES = new Set([
+  "ORG_ADMIN",
+  "Facility Manager",
+  "Admin Staff",
+  "Doctor",
+  "Professional Nurse",
+  "Clinician",
+  "Queue Marshall",
+  "Compliance Officer",
+  "Reporting Analyst",
+  "Billing Administrator",
+  "Occupational Health Practitioner",
+]);
 
 // Sidebar.tsx's own nav, laid out horizontally — under lg the permanent
 // rail hides entirely, same split as the Platform Console's equivalent.
@@ -20,8 +35,13 @@ export function MobileTopBar() {
     { to: "/app", label: "Dashboard", icon: Gauge, end: true },
     { to: "/app/patients", label: "Patients", icon: UserRound, end: false },
     { to: "/app/queue", label: "Queue", icon: Ticket, end: false },
+    { to: "/app/sync", label: "Sync", icon: RefreshCw, end: false }, // OFFLINE
+    ...(user?.role && APPOINTMENT_ROLES.has(user.role)
+      ? [{ to: "/app/appointments", label: "Appointments", icon: CalendarDays, end: false }]
+      : []),
     { to: "/app/pharmacy", label: "Pharmacy", icon: Pill, end: false },
     ...(user?.role === "ORG_ADMIN" ? [{ to: "/app/staff", label: "Staff", icon: UsersIcon, end: false }] : []),
+    ...(user?.role === "ORG_ADMIN" ? [{ to: "/app/settings", label: "Settings", icon: Settings, end: false }] : []),
   ];
 
   // navigate() before logout() — see Sidebar.tsx's own why-note on why the
@@ -75,4 +95,3 @@ export function MobileTopBar() {
     </div>
   );
 }
-

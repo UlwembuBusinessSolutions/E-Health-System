@@ -1,9 +1,8 @@
-
 import { useRef, useState, type ComponentType } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom"; // OFFLINE: useLocation
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import {
@@ -12,6 +11,7 @@ import {
   Baby,
   BookUser,
   CheckCircle2,
+  CloudOff, // OFFLINE
   CreditCard,
   FileText,
   Hash,
@@ -37,6 +37,7 @@ import {
   type GuardianRelationship,
   type Patient,
   type PatientDocumentType,
+  type RegisterPatientPayload, // OFFLINE
 } from "@/shared/api/patients";
 import { ApiError } from "@/shared/api/client";
 import { Input } from "@/shared/components/Input";
@@ -47,6 +48,8 @@ import { Select } from "@/shared/components/Select";
 import { Switch } from "@/shared/components/Switch";
 import { SignaturePad } from "@/shared/components/SignaturePad";
 import { PhotoCapture } from "@/shared/components/PhotoCapture";
+import { useOffline } from "@/offline/OfflineContext"; // OFFLINE
+import { generateUUID } from "@/utils/uuid"; // OFFLINE
 
 const MAX_GUARDIANS = 5;
 
@@ -71,7 +74,7 @@ interface StagedGuardian {
 
 function emptyGuardian(): StagedGuardian {
   return {
-    key: crypto.randomUUID(),
+    key: generateUUID(), // OFFLINE: crypto.randomUUID is undefined on insecure origins
     firstName: "",
     lastName: "",
     relationship: "",
@@ -111,11 +114,7 @@ function fileTypeIcon(type: string): ComponentType<{ className?: string; "aria-h
 
 // Stages a file locally (nothing uploads yet — the patient this would
 // attach to doesn't exist until the form actually submits), as a dropzone
-// that turns into a compact filled row once a file lands — same visual
-// language as PatientDetailPage's own Documents card, just without a
-// "View" (there's nothing uploaded to view yet) or upload progress (that
-// only starts after the patient itself is created, in RegisterPatientScreen's
-// own mutation.onSuccess).
+// that turns into a compact filled row once a file lands.
 function DocumentPickerField({
   label,
   icon: LabelIcon,
@@ -134,10 +133,8 @@ function DocumentPickerField({
   const FileIcon = file ? fileTypeIcon(file.type) : null;
 
   // Same checks PatientDocumentService.upload() and the global multipart
-  // limit enforce server-side — validateDocumentFile()'s own why-note on
-  // why this doesn't replace that, just catches the same rejection before
-  // a round trip (and, unlike the <input accept>, actually covers a
-  // dropped file too).
+  // limit enforce server-side, caught before a round trip (and, unlike the
+  // <input accept>, actually covers a dropped file too).
   const pick = (candidate: File) => {
     const message = validateDocumentFile(candidate);
     setError(message);
@@ -226,7 +223,7 @@ function DocumentPickerField({
 // One repeatable entry — RegisterPatientScreen renders one per staged
 // guardian, up to MAX_GUARDIANS. The signature is entirely optional and
 // entirely local until the patient (and then this guardian) actually
-// exists server-side; see mutation.onSuccess below for when it uploads.
+// exists server-side.
 function GuardianEntry({
   index,
   guardian,
@@ -321,12 +318,23 @@ function GuardianEntry({
 // the registration form with all mandatory fields, Then an EPR is created
 // and a unique MPI number is generated." dateOfBirth/gender/citizenship
 // aren't form fields at all — PatientController derives all three from
-// idNumber alone (SouthAfricanIdNumber.parse()'s own why-note), so this
-// form only ever asks for what a receptionist can actually read off an ID
-// document: the number itself, not a birthdate the person has to state
-// separately and that could disagree with it.
+// idNumber alone.
+//
+// OFFLINE: when the device is offline (or the request never gets an answer),
+// the demographics are saved to the encrypted on-device outbox instead and
+// synced later via POST /api/v1/patients/sync. Photo, documents and
+// guardians can't be queued, so they're skipped offline and added from the
+// patient's record after sync.
 export function RegisterPatientScreen() {
   const navigate = useNavigate();
+  // OFFLINE
+  const offline = useOffline();
+  const location = useLocation();
+  const resend = (
+    location.state as { resend?: { clientRecordId: string; values: RegisterPatientPayload } } | null
+  )?.resend;
+  const [savedOffline, setSavedOffline] = useState<{ name: string; skipped: boolean } | null>(null);
+
   const [formError, setFormError] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [idCopyFile, setIdCopyFile] = useState<File | null>(null);
@@ -351,22 +359,61 @@ export function RegisterPatientScreen() {
   const {
     register,
     handleSubmit,
+    reset, // OFFLINE
     formState: { errors, isSubmitting },
   } = useForm<RegisterPatientValues>({
     resolver: zodResolver(registerPatientSchema),
+    // OFFLINE: a "Correct & resend" from the Sync page prefills the form.
     defaultValues: {
-      firstName: "",
-      lastName: "",
-      idNumber: "",
-      address: "",
-      contactNumber: "",
-      email: "",
-      medicalAidProvider: "",
-      medicalAidNumber: "",
-      passportNumber: "",
-      passportExpiry: "",
+      firstName: resend?.values.firstName ?? "",
+      lastName: resend?.values.lastName ?? "",
+      idNumber: resend?.values.idNumber ?? "",
+      address: resend?.values.address ?? "",
+      contactNumber: resend?.values.contactNumber ?? "",
+      email: resend?.values.email ?? "",
+      medicalAidProvider: resend?.values.medicalAidProvider ?? "",
+      medicalAidNumber: resend?.values.medicalAidNumber ?? "",
+      passportNumber: resend?.values.passportNumber ?? "",
+      passportExpiry: resend?.values.passportExpiry ?? "",
     },
   });
+
+  // OFFLINE: form values -> API payload (same mapping the online mutation uses).
+  const toPayload = (v: RegisterPatientValues): RegisterPatientPayload => ({
+    firstName: v.firstName,
+    lastName: v.lastName,
+    idNumber: v.idNumber,
+    address: v.address,
+    contactNumber: v.contactNumber,
+    email: v.email || undefined,
+    medicalAidProvider: v.medicalAidProvider || undefined,
+    medicalAidNumber: v.medicalAidNumber || undefined,
+    passportNumber: v.passportNumber || undefined,
+    passportExpiry: v.passportExpiry || undefined,
+  });
+
+  // OFFLINE: encrypt + store on the device. Needs the vault unlocked; asks
+  // for the password if it isn't.
+  const saveToOutbox = async (values: RegisterPatientValues) => {
+    const ok = await offline.requestUnlock();
+    if (!ok) {
+      setFormError("Unlock offline storage to save this registration on the device.");
+      return;
+    }
+    try {
+      await offline.saveOffline(toPayload(values), resend?.clientRecordId);
+      const skipped = !!(
+        photoFile ||
+        idCopyFile ||
+        birthCertificateFile ||
+        medicalAidCardFile ||
+        (guardiansEnabled && guardians.some(isGuardianStarted))
+      );
+      setSavedOffline({ name: `${values.firstName} ${values.lastName}`, skipped });
+    } catch {
+      setFormError("Couldn't save this registration on the device. Try again.");
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: (values: RegisterPatientValues) =>
@@ -439,12 +486,19 @@ export function RegisterPatientScreen() {
         })();
       }
     },
-    onError: (error) => {
-      setFormError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
+    // OFFLINE: an ApiError means the server answered (show its message). Any
+    // other failure means the request never got a usable answer (connection
+    // dropped mid-submit), so keep the record on the device instead of losing it.
+    onError: (error, values) => {
+      if (error instanceof ApiError) {
+        setFormError(error.message);
+      } else {
+        void saveToOutbox(values);
+      }
     },
   });
 
-  const onSubmit = (values: RegisterPatientValues) => {
+  const onSubmit = async (values: RegisterPatientValues) => {
     setFormError(null);
     if (guardiansEnabled) {
       const message = validateGuardians(guardians);
@@ -452,6 +506,12 @@ export function RegisterPatientScreen() {
         setFormError(message);
         return;
       }
+    }
+    // OFFLINE: offline, or re-sending a corrected record -> straight to the outbox.
+    if (!offline.isOnline || resend) {
+      await saveToOutbox(values);
+      if (resend) navigate("/app/sync");
+      return;
     }
     mutation.mutate(values);
   };
@@ -552,6 +612,47 @@ export function RegisterPatientScreen() {
             </div>
           </motion.div>
         </Card>
+      ) : savedOffline ? (
+        // OFFLINE: shown instead of the online success card
+        <Card className="p-8">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="flex flex-col items-center gap-3 text-center"
+          >
+            <span className="flex size-11 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+              <CloudOff className="size-6" aria-hidden />
+            </span>
+            <h3 className="text-[16px] font-semibold text-text-primary">Saved on this device</h3>
+            <p className="max-w-sm text-[14px] text-text-secondary">
+              {savedOffline.name} is <strong>pending sync</strong>. No MPI number is issued until it syncs. It will
+              sync automatically when you're back online.
+            </p>
+            {savedOffline.skipped && (
+              <p className="flex items-center gap-1.5 text-[13px] text-amber-600">
+                <AlertCircle className="size-3.5 shrink-0" aria-hidden />
+                The photo, documents and guardians weren't included. Add them from the patient's record after syncing.
+              </p>
+            )}
+            <div className="mt-2 flex w-full flex-col gap-2">
+              <Button size="lg" className="w-full" onClick={() => navigate("/app/sync")}>
+                View pending records
+              </Button>
+              <Button
+                variant="secondary"
+                size="lg"
+                className="w-full"
+                onClick={() => {
+                  setSavedOffline(null);
+                  reset();
+                }}
+              >
+                Register another patient
+              </Button>
+            </div>
+          </motion.div>
+        </Card>
       ) : (
         <Card className="p-6 sm:p-8">
           <div className="mb-6">
@@ -562,6 +663,21 @@ export function RegisterPatientScreen() {
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+            {/* OFFLINE: banner */}
+            {!offline.isOnline && (
+              <div
+                role="status"
+                className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-50 px-3.5 py-2.5 text-[13.5px] text-amber-600"
+              >
+                <CloudOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>
+                  You're offline. The registration will be saved on this device and synced automatically. Photo,
+                  documents and guardians can't be attached until it has synced. Add them from the patient's record
+                  afterwards.
+                </span>
+              </div>
+            )}
+
             {formError && (
               <div
                 role="alert"
@@ -754,4 +870,3 @@ export function RegisterPatientScreen() {
     </div>
   );
 }
-

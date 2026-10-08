@@ -1,4 +1,3 @@
-
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { Building2, ClipboardList, Gauge, KeyRound, LogOut, Users as UsersIcon } from "lucide-react";
@@ -62,4 +61,3 @@ export function MobileTopBar() {
     </div>
   );
 }
-

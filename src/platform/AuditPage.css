@@ -1,4 +1,3 @@
-
 ﻿.audit-workspace {
   --audit-accent: var(--text-accent);
   color: var(--text-primary);
@@ -879,4 +878,3 @@
     animation: none !important;
   }
 }
-

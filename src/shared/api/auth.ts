@@ -1,4 +1,3 @@
-
 import type { AuthenticatedUser } from "./types";
 import { apiClient } from "./client";
 
@@ -15,6 +14,11 @@ export function getTenantToken(): string | null {
 
 function setTenantToken(token: string): void {
   sessionStorage.setItem(TENANT_TOKEN_KEY, token);
+}
+
+// A successful server-side continuation replaces the signed token in this tab.
+export function replaceTenantToken(token: string): void {
+  setTenantToken(token);
 }
 
 export function getTenantSlug(): string | null {
@@ -183,4 +187,3 @@ export async function resetPassword(payload: ResetPasswordPayload): Promise<void
     { headers: { "X-Tenant-ID": payload.tenantSlug } },
   );
 }
-

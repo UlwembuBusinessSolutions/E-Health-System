@@ -1,34 +1,3 @@
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-
-# Test results
 test-results/
-
-# Environment files
-.env
-.env.*
-!.env.example
-
-# Maven / Java
-.m2/
-.tools/
-target/
-
-# IDE
-.idea/
-.vscode/
-*.iml
-
-# OS
-.DS_Store
-
-# Application logs
-.run/
-*.log
-
-# Local data
-data/
-debug-key.mjs
+node_modules/
+dist/

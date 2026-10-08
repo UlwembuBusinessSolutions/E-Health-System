@@ -1,4 +1,3 @@
-
 ﻿import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
@@ -719,4 +718,3 @@ function EmptyState({
     </div>
   );
 }
-

@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -27,14 +26,21 @@ import {
   type ConsultationOutcome,
   type DiagnosisCertainty,
   type PharmacyItemPayload,
+  type PurchaseItemPayload,
 } from "@/shared/api/consultations";
+import { PrescriptionBuilder } from "@/prescribing/PrescriptionBuilder";
+import { EMPTY_DRAFT, draftProblems, toPayload, type PrescriptionDraft } from "@/prescribing/prescriptionDraft";
 
 const CERTAINTY_OPTIONS: { value: DiagnosisCertainty; label: string }[] = [
   { value: "PROVISIONAL", label: "Provisional" },
   { value: "CONFIRMED", label: "Confirmed" },
 ];
 
-const EMPTY_PHARMACY_ITEM: PharmacyItemPayload = { drugName: "", dosage: "", quantity: 1, schedule: null };
+// What "send to pharmacy" carries: medicines the pharmacy hands over, and ones the patient buys.
+interface PrescribedMedicines {
+  pharmacyItems: PharmacyItemPayload[];
+  purchaseItems: PurchaseItemPayload[];
+}
 
 const OUTCOME_CHOICES: { value: ConsultationOutcome; label: string; description: string; icon: typeof Pill }[] = [
   {
@@ -346,7 +352,7 @@ function OutcomePicker({
 }: {
   outcomeNotes: string;
   onChangeNotes: (v: string) => void;
-  onChoose: (outcome: ConsultationOutcome, pharmacyItems?: PharmacyItemPayload[], destinationFacilityId?: string) => void;
+  onChoose: (outcome: ConsultationOutcome, medicines?: PrescribedMedicines, destinationFacilityId?: string) => void;
   loading: boolean;
   onCancel: () => void;
 }) {
@@ -355,8 +361,8 @@ function OutcomePicker({
   // pharmacy facility's dispensing queue; the queue-token transfer alone
   // moves the patient's ticket but leaves nothing there to dispense.
   const [expandPharmacy, setExpandPharmacy] = useState(false);
-  const [pharmacyItems, setPharmacyItems] = useState<PharmacyItemPayload[]>([{ ...EMPTY_PHARMACY_ITEM }]);
-  const pharmacyItemsValid = pharmacyItems.every((item) => item.drugName.trim() && item.dosage.trim());
+  const [draft, setDraft] = useState<PrescriptionDraft>(EMPTY_DRAFT);
+  const prescriptionReady = draftProblems(draft).length === 0;
 
   // Refer/transfer is the other outcome that needs more than a click — a
   // real destination facility, picked from whatever this org has actually
@@ -371,10 +377,6 @@ function OutcomePicker({
     enabled: expandTransfer,
   });
   const facilityOptions = (facilitiesQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }));
-
-  const updatePharmacyItem = (index: number, patch: Partial<PharmacyItemPayload>) => {
-    setPharmacyItems((items) => items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
-  };
 
   return (
     <div className="rounded-xl border border-brand-500 bg-brand-50 p-4">
@@ -401,62 +403,13 @@ function OutcomePicker({
 
               {isPharmacy && expandPharmacy ? (
                 <div className="flex flex-col gap-2">
-                  {pharmacyItems.map((item, index) => (
-                    <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_2fr_1fr_1fr_auto]">
-                      <Input
-                        label="Drug name"
-                        required={index === 0}
-                        placeholder="Amoxicillin"
-                        value={item.drugName}
-                        onChange={(e) => updatePharmacyItem(index, { drugName: e.target.value })}
-                      />
-                      <Input
-                        label="Dosage"
-                        required={index === 0}
-                        placeholder="500mg TDS"
-                        value={item.dosage}
-                        onChange={(e) => updatePharmacyItem(index, { dosage: e.target.value })}
-                      />
-                      <Input
-                        label="Quantity"
-                        type="number"
-                        min={1}
-                        value={item.quantity}
-                        onChange={(e) => updatePharmacyItem(index, { quantity: Number(e.target.value) || 1 })}
-                      />
-                      <Select
-                        label="Schedule"
-                        value={item.schedule ? String(item.schedule) : "0"}
-                        onChange={(e) => updatePharmacyItem(index, { schedule: Number(e.target.value) || null })}
-                        options={[{ value: "0", label: "Not specified" }, ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ value: String(n), label: `Schedule ${n}` }))]}
-                      />
-                      <div className="flex items-end">
-                        <button
-                          type="button"
-                          disabled={pharmacyItems.length === 1}
-                          onClick={() => setPharmacyItems((items) => items.filter((_, i) => i !== index))}
-                          className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label="Remove item"
-                        >
-                          <Trash2 className="size-4" aria-hidden />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setPharmacyItems((items) => [...items, { ...EMPTY_PHARMACY_ITEM }])}
-                    className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-600 hover:text-brand-700"
-                  >
-                    <Plus className="size-3.5" aria-hidden />
-                    Add another item
-                  </button>
+                  <PrescriptionBuilder draft={draft} onChange={setDraft} />
                   <div className="mt-1 flex gap-2">
                     <Button
                       size="md"
                       loading={loading}
-                      disabled={!pharmacyItemsValid}
-                      onClick={() => onChoose("SEND_TO_PHARMACY", pharmacyItems)}
+                      disabled={!prescriptionReady}
+                      onClick={() => onChoose("SEND_TO_PHARMACY", toPayload(draft))}
                     >
                       Confirm & send to pharmacy
                     </Button>
@@ -601,11 +554,11 @@ function DraftView({
     // save step the UI never actually demanded.
     mutationFn: async ({
       outcome,
-      pharmacyItems,
+      medicines,
       destinationFacilityId,
     }: {
       outcome: ConsultationOutcome;
-      pharmacyItems?: PharmacyItemPayload[];
+      medicines?: PrescribedMedicines;
       destinationFacilityId?: string;
     }) => {
       await updateConsultationDraft(consultation.id, {
@@ -627,7 +580,8 @@ function DraftView({
       return signConsultation(consultation.id, {
         outcome,
         outcomeNotes: outcomeNotes.trim() || undefined,
-        pharmacyItems,
+        pharmacyItems: medicines?.pharmacyItems,
+        purchaseItems: medicines?.purchaseItems,
         destinationFacilityId,
       });
     },
@@ -769,8 +723,8 @@ function DraftView({
           outcomeNotes={outcomeNotes}
           onChangeNotes={setOutcomeNotes}
           loading={sign.isPending}
-          onChoose={(outcome, pharmacyItems, destinationFacilityId) =>
-            sign.mutate({ outcome, pharmacyItems, destinationFacilityId })
+          onChoose={(outcome, medicines, destinationFacilityId) =>
+            sign.mutate({ outcome, medicines, destinationFacilityId })
           }
           onCancel={() => setShowOutcomePicker(false)}
         />
@@ -924,11 +878,11 @@ function AmendForm({
   const amend = useMutation({
     mutationFn: ({
       outcome,
-      pharmacyItems,
+      medicines,
       destinationFacilityId,
     }: {
       outcome: ConsultationOutcome;
-      pharmacyItems?: PharmacyItemPayload[];
+      medicines?: PrescribedMedicines;
       destinationFacilityId?: string;
     }) =>
       amendConsultation(consultation.id, {
@@ -943,7 +897,8 @@ function AmendForm({
         outcome,
         outcomeNotes: outcomeNotes.trim() || undefined,
         amendmentReason: amendmentReason.trim(),
-        pharmacyItems,
+        pharmacyItems: medicines?.pharmacyItems,
+        purchaseItems: medicines?.purchaseItems,
         destinationFacilityId,
       }),
     onSuccess: onChanged,
@@ -1041,8 +996,8 @@ function AmendForm({
           outcomeNotes={outcomeNotes}
           onChangeNotes={setOutcomeNotes}
           loading={amend.isPending}
-          onChoose={(outcome, pharmacyItems, destinationFacilityId) =>
-            amend.mutate({ outcome, pharmacyItems, destinationFacilityId })
+          onChoose={(outcome, medicines, destinationFacilityId) =>
+            amend.mutate({ outcome, medicines, destinationFacilityId })
           }
           onCancel={() => setShowOutcomePicker(false)}
         />
@@ -1108,4 +1063,3 @@ function ConsultationHistorySection({ entries }: { entries: Consultation[] }) {
     </div>
   );
 }
-

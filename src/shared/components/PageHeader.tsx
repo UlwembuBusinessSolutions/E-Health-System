@@ -1,4 +1,3 @@
-
 import type { ReactNode } from "react";
 
 interface PageHeaderProps {
@@ -23,4 +22,3 @@ export function PageHeader({ title, description, action }: PageHeaderProps) {
     </div>
   );
 }
-

@@ -1,4 +1,3 @@
-
 import type { ComponentType } from "react";
 import { Card } from "@/shared/components/Card";
 
@@ -30,4 +29,3 @@ export function StatCard({ label, value, icon: Icon, hint }: StatCardProps) {
     </Card>
   );
 }
-

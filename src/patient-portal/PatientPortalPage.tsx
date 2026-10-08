@@ -1,4 +1,3 @@
-
 import { useNavigate, useParams } from "react-router-dom";
 import { LogOut, Sparkles } from "lucide-react";
 import { usePatientAuth } from "./PatientAuthContext";
@@ -56,4 +55,3 @@ export function PatientPortalPage() {
     </div>
   );
 }
-

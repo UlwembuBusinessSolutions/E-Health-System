@@ -1,8 +1,7 @@
-
-import type { Gender } from "./types";
+import type { Gender, PagedResult } from "./types";
 import { apiClient, apiOrigin, ApiError } from "./client";
 
-// Real backend calls â€” api/'s /platform/** endpoints (api-reference.html,
+// Real backend calls — api/'s /platform/** endpoints (api-reference.html,
 // Platform organizations module). No more MOCK_ORGANIZATIONS/delay(): this
 // module was the first one wired up for real, to test the actual
 // provision-org-and-assign-admins process end to end through the UI
@@ -10,7 +9,7 @@ import { apiClient, apiOrigin, ApiError } from "./client";
 
 const PLATFORM_TOKEN_KEY = "ulwembu.platformToken";
 
-// sessionStorage, not localStorage â€” clears when the tab closes rather
+// sessionStorage, not localStorage — clears when the tab closes rather
 // than sitting around indefinitely. PlatformAuthContext's own operator
 // state already doesn't survive a refresh either (plain React state), so
 // this doesn't change that; it just gives the actual API calls something
@@ -49,7 +48,7 @@ export interface OrganizationSummary {
   totalModuleCount: number;
 }
 
-// One admin's details â€” matches PlatformController.AdminRequest field-for-field.
+// One admin's details — matches PlatformController.AdminRequest field-for-field.
 export interface AdminInput {
   firstName: string;
   lastName: string;
@@ -141,7 +140,7 @@ export interface UpdateOrganizationPayload {
   sector: OrganizationSector;
 }
 
-// Slug is deliberately not part of this payload â€” it's permanent, see the
+// Slug is deliberately not part of this payload — it's permanent, see the
 // backend's own why-note (Organization.rename()) on why: it's what the
 // tenant's schema name and every login URL are built from.
 export async function updateOrganization(
@@ -152,7 +151,7 @@ export async function updateOrganization(
 }
 
 // The fix for "client's only admin is locked out / left / wants a second
-// admin added by us" â€” see OrganizationProvisioningService.addAdmins()
+// admin added by us" — see OrganizationProvisioningService.addAdmins()
 // (api-reference.html, Platform organizations module).
 export async function addOrganizationAdmins(
   organizationId: string,
@@ -165,7 +164,7 @@ export async function addOrganizationAdmins(
   );
 }
 
-// No real endpoint for this â€” provisioning was never given a dedicated
+// No real endpoint for this — provisioning was never given a dedicated
 // "check slug availability" route, only the create call itself, which
 // 409s on a real collision. Always true so the on-blur check never blocks
 // submission; ProvisionOrganizationScreen's mutation error handling
@@ -182,7 +181,7 @@ export async function reactivateOrganization(id: string): Promise<void> {
   await apiClient.post<void>(`/platform/organizations/${id}/reactivate`, undefined, { headers: authHeaders() });
 }
 
-// A follow-up call, not part of provisioning â€” an org has no id for a file
+// A follow-up call, not part of provisioning — an org has no id for a file
 // to attach to until the create call above returns. FormData, same as
 // uploadStaffPhoto: apiClient.post skips the JSON Content-Type for a
 // FormData body so the browser can set the multipart boundary itself.
@@ -198,7 +197,7 @@ export async function uploadOrganizationLogo(organizationId: string, file: File)
 }
 
 // The platform-side counterpart to shared/api/organization.ts's own
-// getOrganizationMailSettings()/updateOrganizationMailSettings() â€” lets a
+// getOrganizationMailSettings()/updateOrganizationMailSettings() — lets a
 // platform operator configure a tenant's outbound-email (SMTP) account on
 // its behalf, same reasoning as uploadOrganizationLogo() above being the
 // platform-side counterpart to the tenant's own logo upload. password is
@@ -237,7 +236,7 @@ export async function updateOrganizationMailSettings(
   );
 }
 
-// SADM-US-010. Matches ModuleCode field-for-field â€” all 20 codes always
+// SADM-US-010. Matches ModuleCode field-for-field — all 20 codes always
 // come back, not just the ones this org has an opinion about (see
 // OrganizationProvisioningService.listModuleEntitlements()'s own why-note).
 export type ModulePhase = "FOUNDATION" | "MVP0" | "PHASE_2" | "PHASE_3" | "PHASE_4";
@@ -258,7 +257,7 @@ export async function listOrganizationModules(organizationId: string): Promise<M
   return response.items;
 }
 
-// Foundation modules (SADM/AUDT/IAM) 409 if targeted â€” the caller is
+// Foundation modules (SADM/AUDT/IAM) 409 if targeted — the caller is
 // expected to never offer the toggle for one in the first place, same as
 // the backend never expecting a request for one to be well-formed.
 export async function toggleOrganizationModule(
@@ -305,7 +304,7 @@ export async function listOrganizationFacilities(organizationId: string): Promis
 }
 
 // A platform operator adding a clinic to a tenant it doesn't have a
-// session for â€” see OrganizationProvisioningService.addClinic()'s own
+// session for — see OrganizationProvisioningService.addClinic()'s own
 // why-note on why this is a separate route from the tenant-side
 // /api/v1/facilities an ORG_ADMIN uses for the same underlying entity.
 export async function addOrganizationFacility(
@@ -322,7 +321,7 @@ export async function addOrganizationFacility(
 // Matches identity.UserStatus field-for-field.
 export type StaffStatus = "ACTIVE" | "LOCKED" | "DISABLED";
 
-// One admin already assigned to an organization â€” matches
+// One admin already assigned to an organization — matches
 // StaffService.AdminSummary field-for-field (PlatformController.listAdmins()
 // returns these directly, no separate DTO on the backend).
 export interface OrgAdmin {
@@ -340,7 +339,7 @@ export async function listOrganizationAdmins(organizationId: string): Promise<Or
   return response.items;
 }
 
-// Revokes ORG_ADMIN only â€” the account itself keeps existing, same as the
+// Revokes ORG_ADMIN only — the account itself keeps existing, same as the
 // backend's own removeAdmin()/revokeOrgAdminRole(). Refuses (409) an org's
 // last remaining admin.
 export async function removeOrganizationAdmin(organizationId: string, userId: string): Promise<void> {
@@ -350,7 +349,7 @@ export async function removeOrganizationAdmin(organizationId: string, userId: st
 }
 
 // The platform-side fix for "an admin is locked out and there's nobody left
-// inside the org who could reset it for them" â€” OrganizationProvisioningService.resetAdminPassword()'s
+// inside the org who could reset it for them" — OrganizationProvisioningService.resetAdminPassword()'s
 // own why-note. temporaryPassword returned exactly once.
 export interface ResetPasswordResponse {
   temporaryPassword: string;
@@ -367,7 +366,7 @@ export async function resetOrganizationAdminPassword(
   );
 }
 
-// Refuses (409) to disable an organization's last remaining admin â€” same
+// Refuses (409) to disable an organization's last remaining admin — same
 // guard as removeOrganizationAdmin(), enforced inside StaffService.setEnabled()
 // itself.
 export async function setOrganizationAdminEnabled(
@@ -385,7 +384,7 @@ export async function setOrganizationAdminEnabled(
 // Matches PlatformOperatorStatus field-for-field.
 export type PlatformOperatorStatus = "ACTIVE" | "LOCKED" | "DISABLED";
 
-// The full roster â€” matches PlatformOperatorService.OperatorSummary
+// The full roster — matches PlatformOperatorService.OperatorSummary
 // field-for-field. Never a password or password hash; the platform login
 // endpoint's own response (the `PlatformOperator` interface above) is a
 // separate, narrower shape for "who am I signed in as," not this list.
@@ -413,7 +412,7 @@ export interface CreatePlatformOperatorPayload {
 }
 
 // temporaryPassword is returned exactly once, same discipline as
-// ProvisionedAdmin above â€” the caller's success state is the only place
+// ProvisionedAdmin above — the caller's success state is the only place
 // it's ever shown.
 export interface CreatedPlatformOperator {
   id: string;
@@ -429,7 +428,7 @@ export async function createPlatformOperator(
   return apiClient.post<CreatedPlatformOperator>("/platform/operators", payload, { headers: authHeaders() });
 }
 
-// Admin-triggered â€” platform operators have no self-service reset flow at
+// Admin-triggered — platform operators have no self-service reset flow at
 // all (unlike tenant staff's /api/v1/auth/password-reset/**), so "another
 // operator generates and hands over a new one" is the only recovery lever.
 // temporaryPassword returned exactly once.
@@ -439,7 +438,7 @@ export async function resetOperatorPassword(operatorId: string): Promise<ResetPa
   });
 }
 
-// Refuses (409) to disable the last active platform operator â€”
+// Refuses (409) to disable the last active platform operator —
 // PlatformOperatorService.setEnabled()'s own guard.
 export async function setOperatorEnabled(operatorId: string, enabled: boolean): Promise<void> {
   await apiClient.post<void>(`/platform/operators/${operatorId}/${enabled ? "enable" : "disable"}`, undefined, {
@@ -447,8 +446,8 @@ export async function setOperatorEnabled(operatorId: string, enabled: boolean): 
   });
 }
 
-// AUDT-US-005/006. Every platform-level write â€” provisioning, suspend/
-// reactivate, module toggles, detail edits, operator creation â€” lands one
+// AUDT-US-005/006. Every platform-level write — provisioning, suspend/
+// reactivate, module toggles, detail edits, operator creation — lands one
 // of these rows (PlatformAuditService's own why-note on what "platform-level"
 // means here vs. an organization's own tenant-schema trail below).
 export interface PlatformAuditEntry {
@@ -457,7 +456,7 @@ export interface PlatformAuditEntry {
   detail: string | null;
   createdAt: string;
   operatorName: string;
-  // Null for "Unknown actor" rows â€” a login attempt against an email with
+  // Null for "Unknown actor" rows — a login attempt against an email with
   // no matching operator (PlatformAuthService's own why-note); distinct
   // from "Unknown operator" (a real operator id whose row is now gone).
   operatorEmail: string | null;
@@ -476,16 +475,8 @@ export interface ListPlatformAuditParams {
   size?: number;
 }
 
-// Bounded, unlike the previous unlimited response this replaced â€” page/size
+// Bounded, unlike the previous unlimited response this replaced — page/size
 // mirror PlatformAuditService's own contract (default 50, capped at 100).
-export interface PagedResult<T> {
-  items: T[];
-  page: number;
-  size: number;
-  totalItems: number;
-  hasMore: boolean;
-}
-
 export async function listPlatformAudit(
   params: ListPlatformAuditParams = {},
 ): Promise<PagedResult<PlatformAuditEntry>> {
@@ -502,11 +493,11 @@ export async function listPlatformAudit(
 }
 
 // One organization's own trail (its tenant-schema audit_log), viewed by a
-// platform operator â€” OrganizationProvisioningService.listTenantAuditLog()'s
+// platform operator — OrganizationProvisioningService.listTenantAuditLog()'s
 // own why-note on why this stays a separate, filter-free read from the one
 // above.
 // beforeValue/afterValue are raw JSON text, straight from AuditLog's own
-// jsonb columns â€” null for every action that doesn't capture a state
+// jsonb columns — null for every action that doesn't capture a state
 // snapshot, which is still most of them (only LOGIN populates these today,
 // see AuthService.serializeLoginState()'s own why-note).
 export interface TenantAuditEntry {
@@ -533,17 +524,17 @@ export async function listOrganizationAudit(
   );
 }
 
-// Triggers a browser download of a CSV response â€” apiClient always parses
+// Triggers a browser download of a CSV response — apiClient always parses
 // JSON, so this bypasses it for the one response shape that isn't. The
 // filename comes from the server's own Content-Disposition (both export
 // endpoints set one), not guessed here. apiOrigin() prefix is required,
-// not cosmetic â€” a bare relative path only resolves correctly when the
+// not cosmetic — a bare relative path only resolves correctly when the
 // frontend and backend share an origin; in dev (5173 vs 8081) it silently
 // hit the Vite dev server's own SPA fallback instead of the API, which
-// returns a 200 with index.html's HTML instead of a CSV â€” a real bug this
+// returns a 200 with index.html's HTML instead of a CSV — a real bug this
 // exact bare-fetch pattern shipped with, only caught by a real browser
 // actually downloading and reading the file (found via pharmacyStock.ts's
-// own copy of this same helper â€” see its own why-note).
+// own copy of this same helper — see its own why-note).
 async function downloadCsv(path: string): Promise<void> {
   const res = await fetch(`${apiOrigin()}${path}`, { headers: authHeaders() });
   if (!res.ok) {
@@ -564,7 +555,7 @@ async function downloadCsv(path: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-// The entire filtered result, not the current page â€” same filters as
+// The entire filtered result, not the current page — same filters as
 // listPlatformAudit(), no page/size (PlatformAuditController.export()'s own
 // why-note on why export has no pages).
 export async function exportPlatformAudit(params: ListPlatformAuditParams = {}): Promise<void> {
@@ -578,86 +569,4 @@ export async function exportPlatformAudit(params: ListPlatformAuditParams = {}):
 
 export async function exportOrganizationAudit(organizationId: string): Promise<void> {
   await downloadCsv(`/platform/organizations/${organizationId}/audit/export`);
-}
-
-export interface PlatformDashboardTenant {
-  id: string;
-  name: string;
-  slug: string;
-  sector: OrganizationSector;
-  status: OrganizationStatus;
-  clinics: number;
-  activeAdmins: number;
-  modulesEnabled: number;
-  totalModules: number;
-  enabledModuleCodes: string[];
-}
-
-export interface PlatformDashboard {
-  summary: { activeTenants: number; clinics: number; activeOrganizationAdmins: number; modulesEnabled: number; totalModules: number };
-  tenants: PlatformDashboardTenant[];
-  systemHealth: { status: string; services: { name: string; availability: number }[] };
-  recentActivity: { id: string; action: string; detail: string; createdAt: string; organizationId: string | null; organizationName?: string }[];
-}
-
-export async function getPlatformDashboard(): Promise<PlatformDashboard> {
-  // There is no aggregate dashboard route on the current API. Compose the
-  // overview from the platform's existing, authenticated read endpoints.
-  const [organizations, audit] = await Promise.all([
-    listOrganizations({ sort: "newest" }),
-    listPlatformAudit({ page: 0, size: 8 }),
-  ]);
-  const tenants = await Promise.all(organizations.map(async (organization) => {
-    const [facilities, admins, modules] = await Promise.all([
-      listOrganizationFacilities(organization.id),
-      listOrganizationAdmins(organization.id),
-      listOrganizationModules(organization.id),
-    ]);
-    const enabledModuleCodes = modules.filter((module) => module.enabled).map((module) => module.code);
-    return {
-      id: organization.id,
-      name: organization.displayName,
-      slug: organization.slug,
-      sector: organization.sector,
-      status: organization.status,
-      clinics: facilities.filter((facility) => facility.active).length,
-      activeAdmins: admins.filter((admin) => admin.status === "ACTIVE").length,
-      modulesEnabled: enabledModuleCodes.length,
-      totalModules: modules.length,
-      enabledModuleCodes,
-    } satisfies PlatformDashboardTenant;
-  }));
-  const activeTenants = tenants.filter((tenant) => tenant.status === "ACTIVE");
-  const enabledModules = activeTenants.reduce((sum, tenant) => sum + tenant.modulesEnabled, 0);
-  const totalModules = activeTenants.reduce((sum, tenant) => sum + tenant.totalModules, 0);
-
-  return {
-    summary: {
-      activeTenants: activeTenants.length,
-      clinics: activeTenants.reduce((sum, tenant) => sum + tenant.clinics, 0),
-      activeOrganizationAdmins: activeTenants.reduce((sum, tenant) => sum + tenant.activeAdmins, 0),
-      modulesEnabled: activeTenants.length ? Math.round(enabledModules / activeTenants.length) : 0,
-      totalModules: activeTenants.length ? Math.round(totalModules / activeTenants.length) : 0,
-    },
-    tenants,
-    // Until the API exposes live health checks, preserve the prototype
-    // indicators used in the dashboard design.
-    systemHealth: {
-      status: "HEALTHY",
-      services: [
-        { name: "Authentication", availability: 99.9 },
-        { name: "API services", availability: 99.7 },
-        { name: "Database", availability: 99.9 },
-        { name: "Audit pipeline", availability: 100 },
-      ],
-    },
-    recentActivity: audit.items.map((entry) => ({
-      id: entry.id,
-      action: entry.action,
-      detail: entry.detail ?? "",
-      createdAt: entry.createdAt,
-      organizationId: entry.organizationId,
-      organizationName: entry.organizationName ?? undefined,
-    })),
-  };
 }
