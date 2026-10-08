@@ -57,6 +57,8 @@ export interface Consultation {
   // Set when the consultation was started with no vitals on the visit.
   vitalsBypassReason: VitalsBypassReason | null;
   vitalsBypassNote: string | null;
+  // The doctor's unsigned prescription as JSON; null when none was saved.
+  prescriptionDraft: string | null;
 }
 
 // Get-or-create — a second call against a visit that already has a draft
@@ -106,6 +108,8 @@ export interface UpdateConsultationPayload {
   examinationNotes?: string;
   investigationsNotes?: string;
   treatmentPlan?: string;
+  // The unsigned prescription as JSON, saved with the draft. Leave out to keep what is saved.
+  prescriptionDraft?: string;
 }
 
 // DRAFT only — a 409 (ApiError) means the consultation was signed since it
@@ -138,6 +142,17 @@ export async function removeConsultationDiagnosis(id: string, diagnosisId: strin
   });
 }
 
+/** How a medicine is taken, as separate facts. `dosage` stays the readable sentence of the same thing. */
+export interface MedicineDirections {
+  strengthForm?: string;
+  dose?: string;
+  route?: string;
+  frequency?: string;
+  duration?: string;
+  quantityUnit?: string;
+  instructions?: string;
+}
+
 export interface PharmacyItemPayload {
   drugName: string;
   dosage: string;
@@ -146,6 +161,7 @@ export interface PharmacyItemPayload {
   // list; the pharmacist then needs no matching step, and the server refuses
   // a quantity the shelf cannot cover.
   productId?: string;
+  directions?: MedicineDirections;
 }
 
 // A medicine the patient should buy instead of receiving it from the
@@ -156,6 +172,7 @@ export interface PurchaseItemPayload {
   quantity: number;
   productId?: string;
   note?: string;
+  directions?: MedicineDirections;
 }
 
 export interface SignConsultationPayload {

@@ -1,5 +1,6 @@
 import { StartConsultationPanel } from "./StartConsultationPanel";
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { ChevronDown, ClipboardCheck, FlaskConical, Pill, Plus, Stethoscope, Trash2, TriangleAlert } from "lucide-react";
@@ -30,8 +31,15 @@ import {
   type PurchaseItemPayload,
   type VitalsBypass,
 } from "@/shared/api/consultations";
-import { PrescriptionBuilder } from "@/prescribing/PrescriptionBuilder";
-import { EMPTY_DRAFT, draftProblems, toPayload, type PrescriptionDraft } from "@/prescribing/prescriptionDraft";
+import { PrescriptionWorkspace } from "@/prescribing/PrescriptionWorkspace";
+import {
+  EMPTY_PRESCRIPTION,
+  parse as parsePrescription,
+  problemsOf,
+  serialise as serialisePrescription,
+  toPayload,
+  type PrescriptionState,
+} from "@/prescribing/entries";
 
 const CERTAINTY_OPTIONS: { value: DiagnosisCertainty; label: string }[] = [
   { value: "PROVISIONAL", label: "Provisional" },
@@ -360,20 +368,26 @@ function OutcomePicker({
   onChoose,
   loading,
   onCancel,
+  prescription,
 }: {
   outcomeNotes: string;
   onChangeNotes: (v: string) => void;
   onChoose: (outcome: ConsultationOutcome, medicines?: PrescribedMedicines, destinationFacilityId?: string) => void;
   loading: boolean;
   onCancel: () => void;
+  /** The prescription written in the Prescription section above; it travels with "Send to pharmacy". */
+  prescription: PrescriptionState;
 }) {
-  // Send to pharmacy is the one outcome that needs more than a click — a
-  // real prescription (drug/dose/qty) is what actually shows up in the
-  // pharmacy facility's dispensing queue; the queue-token transfer alone
-  // moves the patient's ticket but leaves nothing there to dispense.
-  const [expandPharmacy, setExpandPharmacy] = useState(false);
-  const [draft, setDraft] = useState<PrescriptionDraft>(EMPTY_DRAFT);
-  const prescriptionReady = draftProblems(draft).length === 0;
+  // Send to pharmacy needs a real prescription — that is what shows up in the pharmacy's dispensing
+  // queue; the queue-token transfer alone moves the patient's ticket but leaves nothing to dispense.
+  const prescribed = prescription.prescribe && prescription.entries.length > 0;
+  const prescriptionProblems = problemsOf(prescription);
+  const pharmacyReady = prescribed && prescriptionProblems.length === 0;
+  const pharmacyHint = !prescription.prescribe
+    ? "Switch on Prescribe above and add the medicines first."
+    : prescription.entries.length === 0
+      ? "Add at least one medicine in the Prescription section above."
+      : prescriptionProblems[0] ?? null;
 
   // Refer/transfer is the other outcome that needs more than a click — a
   // real destination facility, picked from whatever this org has actually
@@ -393,6 +407,11 @@ function OutcomePicker({
     <div className="rounded-xl border border-brand-500 bg-brand-50 p-4">
       <p className="mb-3 text-[13.5px] font-semibold text-text-primary">Choose next step</p>
       <TextAreaField label="Notes for this outcome (optional)" value={outcomeNotes} onChange={onChangeNotes} />
+      {prescribed && (
+        <p role="note" className="mt-3 rounded-lg bg-surface-raised px-3.5 py-2.5 text-[12.5px] text-text-secondary">
+          You wrote a prescription. It is only sent when you choose <strong>Send to pharmacy</strong>.
+        </p>
+      )}
       <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {OUTCOME_CHOICES.map((choice) => {
           const Icon = choice.icon;
@@ -403,7 +422,7 @@ function OutcomePicker({
               key={choice.value}
               className={clsx(
                 "flex flex-col gap-2 rounded-lg border border-border-subtle bg-surface-raised p-3.5",
-                ((isPharmacy && expandPharmacy) || (isTransfer && expandTransfer)) && "sm:col-span-2",
+                isTransfer && expandTransfer && "sm:col-span-2",
               )}
             >
               <div className="flex items-center gap-2 text-brand-600">
@@ -412,24 +431,7 @@ function OutcomePicker({
               </div>
               <p className="flex-1 text-[12px] text-text-secondary">{choice.description}</p>
 
-              {isPharmacy && expandPharmacy ? (
-                <div className="flex flex-col gap-2">
-                  <PrescriptionBuilder draft={draft} onChange={setDraft} />
-                  <div className="mt-1 flex gap-2">
-                    <Button
-                      size="md"
-                      loading={loading}
-                      disabled={!prescriptionReady}
-                      onClick={() => onChoose("SEND_TO_PHARMACY", toPayload(draft))}
-                    >
-                      Confirm & send to pharmacy
-                    </Button>
-                    <Button variant="secondary" size="md" onClick={() => setExpandPharmacy(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : isTransfer && expandTransfer ? (
+              {isTransfer && expandTransfer ? (
                 <div className="flex flex-col gap-2">
                   <Select
                     label="Destination facility"
@@ -455,18 +457,22 @@ function OutcomePicker({
                   </div>
                 </div>
               ) : (
-                <Button
-                  variant={isPharmacy ? "primary" : "secondary"}
-                  size="md"
-                  loading={loading}
-                  onClick={() => {
-                    if (isPharmacy) setExpandPharmacy(true);
-                    else if (isTransfer) setExpandTransfer(true);
-                    else onChoose(choice.value);
-                  }}
-                >
-                  {choice.label}
-                </Button>
+                <>
+                  <Button
+                    variant={isPharmacy ? "primary" : "secondary"}
+                    size="md"
+                    loading={loading}
+                    disabled={isPharmacy && !pharmacyReady}
+                    onClick={() => {
+                      if (isPharmacy) onChoose("SEND_TO_PHARMACY", toPayload(prescription));
+                      else if (isTransfer) setExpandTransfer(true);
+                      else onChoose(choice.value);
+                    }}
+                  >
+                    {choice.label}
+                  </Button>
+                  {isPharmacy && !pharmacyReady && pharmacyHint && <p className="text-[12px] text-text-secondary">{pharmacyHint}</p>}
+                </>
               )}
             </div>
           );
@@ -481,6 +487,15 @@ function OutcomePicker({
       </button>
     </div>
   );
+}
+
+// How long after the last change the draft is saved by itself.
+const AUTOSAVE_DELAY_MS = 1500;
+
+/** One line about a recorded allergy for the prescribing area, or null when none is recorded. */
+function allergyNoteOf(fields: { allergyStatus: AllergyStatus; allergyDetail: string }): string | null {
+  if (fields.allergyStatus !== "KNOWN") return null;
+  return fields.allergyDetail.trim() ? `Allergy recorded: ${fields.allergyDetail.trim()}.` : "An allergy is recorded.";
 }
 
 interface ConsultationFieldsState {
@@ -514,12 +529,16 @@ function DraftView({
   presentingComplaint: string | null;
   onChanged: () => void;
 }) {
+  const navigate = useNavigate();
   const [fields, setFields] = useState<ConsultationFieldsState>(() => toFieldsState(consultation));
+  const [prescription, setPrescription] = useState<PrescriptionState>(() => parsePrescription(consultation.prescriptionDraft));
   const [showOutcomePicker, setShowOutcomePicker] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [savedNote, setSavedNote] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const saveErrorRef = useRef<HTMLParagraphElement>(null);
+  // Set by any edit, so autosave only runs after the doctor changed something.
+  const unsaved = useRef(false);
 
   // The error banner renders at the top of a long form, but a sign failure
   // (e.g. "no pharmacy facility configured yet") happens while the doctor
@@ -531,28 +550,46 @@ function DraftView({
 
   const set = <K extends keyof ConsultationFieldsState>(key: K, value: ConsultationFieldsState[K]) => {
     setFields((f) => ({ ...f, [key]: value }));
-    setSavedNote(false);
+    unsaved.current = true;
   };
 
+  const changePrescription = (next: PrescriptionState) => {
+    setPrescription(next);
+    unsaved.current = true;
+  };
+
+  // Everything the doctor has written, notes and prescription together, so one save keeps it all.
+  const draftPayload = () => ({
+    relevantHistory: fields.relevantHistory || undefined,
+    currentMedications: fields.currentMedications || undefined,
+    allergyStatus: fields.allergyStatus,
+    allergyDetail: fields.allergyStatus === "KNOWN" ? fields.allergyDetail || undefined : undefined,
+    examinationNotes: fields.examinationNotes || undefined,
+    investigationsNotes: fields.investigationsNotes || undefined,
+    treatmentPlan: fields.treatmentPlan || undefined,
+    prescriptionDraft: serialisePrescription(prescription),
+  });
+
   const saveDraft = useMutation({
-    mutationFn: () =>
-      updateConsultationDraft(consultation.id, {
-        relevantHistory: fields.relevantHistory || undefined,
-        currentMedications: fields.currentMedications || undefined,
-        allergyStatus: fields.allergyStatus,
-        allergyDetail: fields.allergyStatus === "KNOWN" ? fields.allergyDetail || undefined : undefined,
-        examinationNotes: fields.examinationNotes || undefined,
-        investigationsNotes: fields.investigationsNotes || undefined,
-        treatmentPlan: fields.treatmentPlan || undefined,
-      }),
+    mutationFn: () => updateConsultationDraft(consultation.id, draftPayload()),
     onSuccess: () => {
+      unsaved.current = false;
       setSaveError(null);
-      setSavedNote(true);
+      setSavedAt(new Date());
     },
     onError: (error) => {
       setSaveError(error instanceof ApiError ? error.message : "Couldn't save this draft. Try again.");
     },
   });
+
+  // Autosave: a moment after the doctor stops typing, the draft is saved, so closing the record
+  // never loses work.
+  useEffect(() => {
+    if (!unsaved.current) return;
+    const timer = window.setTimeout(() => saveDraft.mutate(), AUTOSAVE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fields, prescription]);
 
   const sign = useMutation({
     // Signing must not silently drop whatever's currently in the form —
@@ -572,15 +609,7 @@ function DraftView({
       medicines?: PrescribedMedicines;
       destinationFacilityId?: string;
     }) => {
-      await updateConsultationDraft(consultation.id, {
-        relevantHistory: fields.relevantHistory || undefined,
-        currentMedications: fields.currentMedications || undefined,
-        allergyStatus: fields.allergyStatus,
-        allergyDetail: fields.allergyStatus === "KNOWN" ? fields.allergyDetail || undefined : undefined,
-        examinationNotes: fields.examinationNotes || undefined,
-        investigationsNotes: fields.investigationsNotes || undefined,
-        treatmentPlan: fields.treatmentPlan || undefined,
-      });
+      await updateConsultationDraft(consultation.id, draftPayload());
       if (newDiagnosisText.trim()) {
         await addConsultationDiagnosis(consultation.id, {
           diagnosisText: newDiagnosisText.trim(),
@@ -729,8 +758,16 @@ function DraftView({
         onChange={(v) => set("treatmentPlan", v)}
       />
 
+      <PrescriptionWorkspace
+        state={prescription}
+        onChange={changePrescription}
+        allergyNote={allergyNoteOf(fields)}
+        patientLabel="Prescription for this visit"
+      />
+
       {showOutcomePicker ? (
         <OutcomePicker
+          prescription={prescription}
           outcomeNotes={outcomeNotes}
           onChangeNotes={setOutcomeNotes}
           loading={sign.isPending}
@@ -747,7 +784,16 @@ function DraftView({
           <Button variant="secondary" size="md" loading={saveDraft.isPending} onClick={() => saveDraft.mutate()}>
             Save draft
           </Button>
-          {savedNote && <span className="text-[12.5px] text-success-600">Draft saved</span>}
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => saveDraft.mutate(undefined, { onSuccess: () => navigate("/app/patients") })}
+          >
+            Close and continue later
+          </Button>
+          <span role="status" className="text-[12.5px] text-text-secondary">
+            {saveDraft.isPending ? "Saving…" : savedAt ? `Draft saved at ${savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. It saves as you type.` : "It saves as you type."}
+          </span>
           <div className="ml-auto">
             <EnteredInErrorAction consultationId={consultation.id} onChanged={onChanged} />
           </div>
@@ -870,6 +916,7 @@ function AmendForm({
     () => consultation.diagnoses.map((d) => ({ diagnosisText: d.diagnosisText, isPrimary: d.isPrimary, certainty: d.certainty })),
   );
   const [amendmentReason, setAmendmentReason] = useState("");
+  const [prescription, setPrescription] = useState<PrescriptionState>(EMPTY_PRESCRIPTION);
   const [showOutcomePicker, setShowOutcomePicker] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState(consultation.outcomeNotes ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -1002,8 +1049,16 @@ function AmendForm({
       <TextAreaField label="Investigations" value={fields.investigationsNotes} onChange={(v) => set("investigationsNotes", v)} />
       <TextAreaField label="Treatment plan & patient instructions" value={fields.treatmentPlan} onChange={(v) => set("treatmentPlan", v)} />
 
+      <PrescriptionWorkspace
+        state={prescription}
+        onChange={setPrescription}
+        allergyNote={allergyNoteOf(fields)}
+        patientLabel="Prescription for this amendment"
+      />
+
       {showOutcomePicker ? (
         <OutcomePicker
+          prescription={prescription}
           outcomeNotes={outcomeNotes}
           onChangeNotes={setOutcomeNotes}
           loading={amend.isPending}

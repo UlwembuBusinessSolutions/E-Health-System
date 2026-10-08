@@ -1,3 +1,4 @@
+import type { MedicineDirections } from "./consultations";
 import { apiClient, apiOrigin, ApiError } from "./client";
 import { tenantAuthHeaders } from "./auth";
 import { queryString } from "./queryString";
@@ -67,6 +68,8 @@ export interface PrescriptionItem {
   substitutionStatus: SubstitutionStatus | null;
   substituteProductId: string | null;
   substituteProductName: string | null;
+  // How the prescriber wrote the directions; null for a line written before they were recorded.
+  directions: MedicineDirections | null;
 }
 
 /** Why a medicine is on the "patient buys this" list. Worked out by the server from the shelf at the time. */
@@ -81,6 +84,7 @@ export interface PurchasePrescriptionItem {
   productName: string | null;
   reason: PurchaseReason;
   note: string | null;
+  directions: MedicineDirections | null;
 }
 
 export interface Prescription {
@@ -115,6 +119,7 @@ export interface Prescription {
 }
 
 export interface PrescriptionItemInput {
+  directions?: MedicineDirections;
   drugName: string;
   dosage: string;
   quantity: number;
@@ -124,6 +129,7 @@ export interface PrescriptionItemInput {
 
 /** A medicine the patient buys instead of receiving it from the pharmacy. */
 export interface PurchaseItemInput {
+  directions?: MedicineDirections;
   drugName: string;
   dosage: string;
   quantity: number;

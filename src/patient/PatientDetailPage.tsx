@@ -1,5 +1,5 @@
-import { PrescriptionBuilder } from "@/prescribing/PrescriptionBuilder";
-import { EMPTY_DRAFT, draftProblems, toPayload, type PrescriptionDraft } from "@/prescribing/prescriptionDraft";
+import { PrescriptionWorkspace } from "@/prescribing/PrescriptionWorkspace";
+import { problemsOf, toPayload, type PrescriptionState } from "@/prescribing/entries";
 import { generateUUID } from "../utils/uuid";
 import { PatientVisitsTab } from "./PatientVisitsTab";
 import { createPortal } from "react-dom";
@@ -742,7 +742,7 @@ export function PatientDetailPage() {
   const [visitError, setVisitError] = useState<string | null>(null);
   const [startedVisit, setStartedVisit] = useState<VisitWithToken | null>(null);
   const [isPrescribing, setIsPrescribing] = useState(false);
-  const [prescriptionDraft, setPrescriptionDraft] = useState<PrescriptionDraft>(EMPTY_DRAFT);
+  const [prescriptionDraft, setPrescriptionDraft] = useState<PrescriptionState>({ prescribe: true, entries: [] });
   const [prescriptionError, setPrescriptionError] = useState<string | null>(null);
   const [createdPrescription, setCreatedPrescription] = useState<Prescription | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
@@ -1027,7 +1027,7 @@ export function PatientDetailPage() {
   const handlePrescribe = () => {
     setPrescriptionError(null);
     if (!startedVisit) return;
-    const problems = draftProblems(prescriptionDraft);
+    const problems = problemsOf(prescriptionDraft);
     if (problems.length > 0) {
       setPrescriptionError(problems.join(" "));
       return;
@@ -1833,9 +1833,9 @@ export function PatientDetailPage() {
                       {prescriptionError}
                     </p>
                   )}
-                  <PrescriptionBuilder draft={prescriptionDraft} onChange={setPrescriptionDraft} />
+                  <PrescriptionWorkspace state={prescriptionDraft} onChange={setPrescriptionDraft} allergyNote={null} patientLabel="Prescription" />
                   <div className="mt-4 flex gap-2">
-                    <Button loading={prescribe.isPending} disabled={draftProblems(prescriptionDraft).length > 0} onClick={handlePrescribe}>
+                    <Button loading={prescribe.isPending} disabled={!prescriptionDraft.prescribe || prescriptionDraft.entries.length === 0 || problemsOf(prescriptionDraft).length > 0} onClick={handlePrescribe}>
                       Create prescription
                     </Button>
                     <Button variant="secondary" onClick={() => setIsPrescribing(false)}>
