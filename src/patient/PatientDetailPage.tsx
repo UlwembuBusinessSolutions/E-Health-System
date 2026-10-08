@@ -1,5 +1,3 @@
-import { PrescriptionWorkspace } from "@/prescribing/PrescriptionWorkspace";
-import { problemsOf, toPayload, type PrescriptionState } from "@/prescribing/entries";
 import { generateUUID } from "../utils/uuid";
 import { PatientVisitsTab } from "./PatientVisitsTab";
 import { createPortal } from "react-dom";
@@ -32,7 +30,6 @@ import {
   Loader2,
   Pencil,
   PenLine,
-  Pill,
   Plus,
   Printer,
   Ticket,
@@ -73,9 +70,7 @@ import {
   type VisitWithToken,
 } from "@/shared/api/visits";
 import {
-  createPrescription,
   getPatientPrescriptions,
-  type Prescription,
 } from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
 import { printQueueTicket } from "@/shared/lib/printTicket";
@@ -741,10 +736,6 @@ export function PatientDetailPage() {
   const [serviceStream, setServiceStream] = useState<ServiceStream | "">("");
   const [visitError, setVisitError] = useState<string | null>(null);
   const [startedVisit, setStartedVisit] = useState<VisitWithToken | null>(null);
-  const [isPrescribing, setIsPrescribing] = useState(false);
-  const [prescriptionDraft, setPrescriptionDraft] = useState<PrescriptionState>({ prescribe: true, entries: [] });
-  const [prescriptionError, setPrescriptionError] = useState<string | null>(null);
-  const [createdPrescription, setCreatedPrescription] = useState<Prescription | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [archiveReason, setArchiveReason] = useState("");
   const [archiveDeceasedDate, setArchiveDeceasedDate] = useState("");
@@ -1008,31 +999,6 @@ export function PatientDetailPage() {
         ? form.discriminators.filter((d) => d !== value)
         : [...form.discriminators, value],
     }));
-  };
-
-  const prescribe = useMutation({
-    mutationFn: (visitId: string) => {
-      const { pharmacyItems, purchaseItems } = toPayload(prescriptionDraft);
-      return createPrescription({ visitId, items: pharmacyItems, purchaseItems });
-    },
-    onSuccess: (result) => {
-      setCreatedPrescription(result);
-      setIsPrescribing(false);
-    },
-    onError: (error) => {
-      setPrescriptionError(error instanceof ApiError ? error.message : "Couldn't create that prescription. Try again.");
-    },
-  });
-
-  const handlePrescribe = () => {
-    setPrescriptionError(null);
-    if (!startedVisit) return;
-    const problems = problemsOf(prescriptionDraft);
-    if (problems.length > 0) {
-      setPrescriptionError(problems.join(" "));
-      return;
-    }
-    prescribe.mutate(startedVisit.visit.id);
   };
 
   const patient = patientQuery.data;
@@ -1371,16 +1337,6 @@ export function PatientDetailPage() {
                     >
                       Take vitals
                     </Button>}
-                    {!isPrescribing && !createdPrescription && (
-                      <Button
-                        variant="secondary"
-                        size="md"
-                        icon={<Pill className="size-3.5" aria-hidden />}
-                        onClick={() => setIsPrescribing(true)}
-                      >
-                        Prescribe
-                      </Button>
-                    )}
                     <Button variant="secondary" size="md" onClick={() => setStartedVisit(null)}>
                       Dismiss
                     </Button>
@@ -1799,49 +1755,6 @@ export function PatientDetailPage() {
                       ))}
                     </div>
                   )}
-                </>
-              )}
-            </Card>
-          )}
-
-          {(isPrescribing || createdPrescription) && (
-            <Card className="mb-6 p-6">
-              {createdPrescription ? (
-                <div className="flex flex-col items-center gap-2 text-center">
-                  <span className="flex size-11 items-center justify-center rounded-full bg-success-50 text-success-500">
-                    <Pill className="size-6" aria-hidden />
-                  </span>
-                  <h2 className="text-[16px] font-semibold text-text-primary">Prescription created</h2>
-                  <p className="rounded-lg bg-surface-sunken px-3 py-1.5 font-mono text-[15px] font-semibold text-text-primary">
-                    {createdPrescription.serialNumber}
-                  </p>
-                  <p className="text-[13.5px] text-text-secondary">
-                    Sent to the dispensing queue.{" "}
-                    <Link to="/app/pharmacy" className="font-medium text-brand-600 hover:text-brand-700">
-                      View pharmacy queue
-                    </Link>
-                  </p>
-                  <Button variant="secondary" size="md" className="mt-1" onClick={() => setCreatedPrescription(null)}>
-                    Dismiss
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <h2 className="mb-4 text-[14.5px] font-semibold text-text-primary">Prescribe</h2>
-                  {prescriptionError && (
-                    <p role="alert" className="mb-4 text-[13.5px] text-danger-600">
-                      {prescriptionError}
-                    </p>
-                  )}
-                  <PrescriptionWorkspace state={prescriptionDraft} onChange={setPrescriptionDraft} allergyNote={null} patientLabel="Prescription" />
-                  <div className="mt-4 flex gap-2">
-                    <Button loading={prescribe.isPending} disabled={!prescriptionDraft.prescribe || prescriptionDraft.entries.length === 0 || problemsOf(prescriptionDraft).length > 0} onClick={handlePrescribe}>
-                      Create prescription
-                    </Button>
-                    <Button variant="secondary" onClick={() => setIsPrescribing(false)}>
-                      Cancel
-                    </Button>
-                  </div>
                 </>
               )}
             </Card>
