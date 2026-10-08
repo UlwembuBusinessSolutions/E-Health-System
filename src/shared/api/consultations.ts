@@ -106,6 +106,21 @@ export async function createConsultationDraft(
   });
 }
 
+/** A consultation with the visit it belongs to, as listed on the patient's record. */
+export interface PatientConsultation {
+  consultation: Consultation;
+  visitDateTime: string;
+  facilityName: string;
+}
+
+/** The patient's consultations from every visit, newest first: in progress and signed (amended ones as their latest version). */
+export async function getPatientConsultations(patientId: string): Promise<PatientConsultation[]> {
+  const response = await apiClient.get<{ items: PatientConsultation[] }>(`/api/v1/patients/${patientId}/consultations`, {
+    headers: tenantAuthHeaders(),
+  });
+  return response.items;
+}
+
 /** The earlier consultation this visit can carry on from, or null when there is none. */
 export async function getContinuableConsultation(visitId: string): Promise<EarlierConsultation | null> {
   const response = await apiClient.get<{ item: EarlierConsultation | null }>(

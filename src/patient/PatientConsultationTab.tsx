@@ -33,6 +33,7 @@ import {
   type PurchaseItemPayload,
   type VitalsBypass,
 } from "@/shared/api/consultations";
+import { PatientConsultationList } from "./PatientConsultationList";
 import { ContinuedFromNote, ContinueConsultation } from "./ContinueConsultation";
 import { DiagnosisSearchInput, type DiagnosisChoice } from "./DiagnosisSearchInput";
 import { PrescriptionWorkspace } from "@/prescribing/PrescriptionWorkspace";
@@ -87,30 +88,80 @@ function outcomeLabel(outcome: ConsultationOutcome | null): string {
   return OUTCOME_CHOICES.find((o) => o.value === outcome)?.label ?? "—";
 }
 
-export function PatientConsultationTab({ visitId, onTakeVitals }: { visitId: string | null; onTakeVitals?: () => void }) {
+// The Consultation tab: the consultation of the visit being worked on, and the patient's consultations
+// from every visit below it. Opening one from the list shows it here, with the same editing as the
+// current one: a draft can be carried on, a signed one amended.
+export function PatientConsultationTab({
+  patientId,
+  visitId,
+  onTakeVitals,
+}: {
+  patientId: string;
+  visitId: string | null;
+  onTakeVitals?: () => void;
+}) {
+  // Set when the doctor opens a consultation from another visit.
+  const [openedVisit, setOpenedVisit] = useState<{ visitId: string; label: string } | null>(null);
+  const shownVisitId = openedVisit?.visitId ?? visitId;
+
+  return (
+    <>
+      {openedVisit && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-500/30 bg-brand-50 px-3.5 py-2.5">
+          <p className="text-[13.5px] text-text-primary">
+            Showing the consultation from <strong>{openedVisit.label}</strong>.
+          </p>
+          <Button variant="secondary" size="md" onClick={() => setOpenedVisit(null)}>
+            {visitId ? "Back to this visit" : "Close"}
+          </Button>
+        </div>
+      )}
+      {shownVisitId ? (
+        <VisitConsultation key={shownVisitId} visitId={shownVisitId} onTakeVitals={openedVisit ? undefined : onTakeVitals} />
+      ) : (
+        <Card className="mb-6 p-6">
+          <h2 className="mb-3 text-[14.5px] font-semibold text-text-primary">Consultation</h2>
+          <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
+            <p className="text-[13.5px] text-text-secondary">
+              Start a visit from the Overview tab before beginning a consultation. Earlier consultations are listed below.
+            </p>
+          </div>
+        </Card>
+      )}
+      <PatientConsultationList
+        patientId={patientId}
+        shownVisitId={shownVisitId}
+        onOpen={(entry) => {
+          const label = `${entry.facilityName}, ${new Date(entry.visitDateTime).toLocaleDateString("en-ZA", { day: "2-digit", month: "short", year: "numeric" })}`;
+          setOpenedVisit(entry.consultation.visitId === visitId ? null : { visitId: entry.consultation.visitId, label });
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+      />
+    </>
+  );
+}
+
+function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeVitals?: () => void }) {
   const queryClient = useQueryClient();
 
   const currentQuery = useQuery({
     queryKey: ["consultation-current", visitId],
-    queryFn: () => getCurrentConsultation(visitId as string),
-    enabled: !!visitId,
+    queryFn: () => getCurrentConsultation(visitId),
   });
   const historyQuery = useQuery({
     queryKey: ["consultation-history", visitId],
-    queryFn: () => getConsultationHistory(visitId as string),
-    enabled: !!visitId,
+    queryFn: () => getConsultationHistory(visitId),
   });
   const triageQuery = useQuery({
     queryKey: ["triage-latest", visitId],
-    queryFn: () => getLatestTriage(visitId as string),
-    enabled: !!visitId,
+    queryFn: () => getLatestTriage(visitId),
   });
 
   const noConsultationYet = currentQuery.isSuccess && currentQuery.data === null;
   const continuableQuery = useQuery({
     queryKey: ["consultation-continuable", visitId],
-    queryFn: () => getContinuableConsultation(visitId as string),
-    enabled: !!visitId && noConsultationYet,
+    queryFn: () => getContinuableConsultation(visitId),
+    enabled: noConsultationYet,
   });
   // A consultation that carries on from an earlier one shows the vitals taken on the earlier visit.
   const carriedVitalsVisitId = currentQuery.data?.continuedFrom?.vitalsVisitId ?? null;
@@ -123,12 +174,13 @@ export function PatientConsultationTab({ visitId, onTakeVitals }: { visitId: str
   const [startError, setStartError] = useState<string | null>(null);
   const startConsultation = useMutation({
     mutationFn: ({ bypass, continueFrom }: { bypass?: VitalsBypass; continueFrom?: string }) =>
-      createConsultationDraft(visitId as string, bypass, continueFrom),
+      createConsultationDraft(visitId, bypass, continueFrom),
     onSuccess: () => {
       setStartError(null);
       queryClient.invalidateQueries({ queryKey: ["consultation-current", visitId] });
       queryClient.invalidateQueries({ queryKey: ["consultation-history", visitId] });
       queryClient.invalidateQueries({ queryKey: ["consultation-continuable", visitId] });
+      queryClient.invalidateQueries({ queryKey: ["patient-consultations"] });
     },
     onError: (error) => {
       setStartError(error instanceof ApiError ? error.message : "Couldn't start a consultation. Try again.");
@@ -138,20 +190,8 @@ export function PatientConsultationTab({ visitId, onTakeVitals }: { visitId: str
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["consultation-current", visitId] });
     queryClient.invalidateQueries({ queryKey: ["consultation-history", visitId] });
+    queryClient.invalidateQueries({ queryKey: ["patient-consultations"] });
   };
-
-  if (!visitId) {
-    return (
-      <Card className="mb-6 p-6">
-        <h2 className="mb-3 text-[14.5px] font-semibold text-text-primary">Consultation</h2>
-        <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
-          <p className="text-[13.5px] text-text-secondary">
-            Start a visit from the Overview tab before beginning a consultation.
-          </p>
-        </div>
-      </Card>
-    );
-  }
 
   const current = currentQuery.data ?? null;
   const history = (historyQuery.data ?? []).filter((c) => c.id !== current?.id);
@@ -833,7 +873,7 @@ function DraftView({
           onCancel={() => setShowOutcomePicker(false)}
         />
       ) : (
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button size="md" onClick={() => setShowOutcomePicker(true)}>
             Sign & choose next step
           </Button>

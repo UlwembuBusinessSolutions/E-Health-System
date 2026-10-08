@@ -1759,7 +1759,7 @@ export function PatientDetailPage() {
             </>
           )}
 
-          {activeTab === "consultation" && <PatientConsultationTab visitId={activeVisitId} onTakeVitals={() => setActiveTab("vitals")} />}
+          {activeTab === "consultation" && <PatientConsultationTab patientId={patient.id} visitId={activeVisitId} onTakeVitals={() => setActiveTab("vitals")} />}
 
           {activeTab === "medication" && <PatientPrescriptionsTab patientId={patient.id} />}
 

@@ -1,16 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { History, Stethoscope } from "lucide-react";
 import { Button } from "@/shared/components/Button";
-import type { ConsultationOutcome, EarlierConsultation } from "@/shared/api/consultations";
+import { OUTCOME_TEXT } from "./outcomeText";
+import type { EarlierConsultation } from "@/shared/api/consultations";
 import type { TriageAssessment } from "@/shared/api/triage";
-
-// What happened at the end of the earlier consultation, in words that read after the fact.
-const OUTCOME_TEXT: Record<ConsultationOutcome, string> = {
-  SEND_TO_PHARMACY: "Sent to the pharmacy",
-  CONTINUE_INVESTIGATION: "Investigation continuing",
-  FINISH_NO_MEDICATION: "Finished without medication",
-  REFER_OR_TRANSFER: "Referred to another facility",
-};
 
 function whenOf(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString("en-ZA", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
