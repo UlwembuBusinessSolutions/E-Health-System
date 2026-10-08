@@ -727,8 +727,10 @@ export function PatientDetailPage() {
   // relevant no matter which tab someone's looking at, not "content" that
   // should hide when the Vitals tab (a different, cross-visit view of the
   // same clinical data) is selected.
+  // ?tab=consultation opens straight onto the consultation, e.g. from the list of unsigned ones.
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(
-    "overview",
+    searchParams.get("tab") === "consultation" ? "consultation" : "overview",
   );
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const [facilityId, setFacilityId] = useState("");
@@ -872,7 +874,6 @@ export function PatientDetailPage() {
   // here with ?visitId=, since a nurse capturing vitals is very often
   // visiting a patient's page for a visit someone else (or an earlier
   // page load) already started, not one they're starting right now.
-  const [searchParams] = useSearchParams();
   const linkedVisitId = searchParams.get("visitId");
   const activeVisitId = startedVisit?.visit.id ?? linkedVisitId ?? null;
 

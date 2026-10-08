@@ -106,6 +106,27 @@ export async function createConsultationDraft(
   });
 }
 
+/** One of the signed-in clinician's unsigned consultations, with the patient and visit it is for. */
+export interface InProgressConsultation {
+  consultationId: string;
+  visitId: string;
+  patientId: string;
+  patientName: string;
+  patientMpi: string;
+  facilityName: string;
+  visitDateTime: string;
+  startedAt: string;
+  updatedAt: string;
+}
+
+/** The clinician's own unsigned consultations, most recently saved first. */
+export async function getInProgressConsultations(): Promise<InProgressConsultation[]> {
+  const response = await apiClient.get<{ items: InProgressConsultation[] }>("/api/v1/consultations/in-progress", {
+    headers: tenantAuthHeaders(),
+  });
+  return response.items;
+}
+
 /** A consultation with the visit it belongs to, as listed on the patient's record. */
 export interface PatientConsultation {
   consultation: Consultation;

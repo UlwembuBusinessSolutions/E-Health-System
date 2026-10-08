@@ -10,6 +10,7 @@ import { Button } from "@/shared/components/Button";
 import { StatCard } from "@/shared/components/StatCard";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { PageHeader } from "@/shared/components/PageHeader";
+import { InProgressConsultations } from "@/patient/InProgressConsultations";
 
 function sectorLabel(sector: string): string {
   return sector.charAt(0) + sector.slice(1).toLowerCase();
@@ -66,6 +67,8 @@ export function DashboardPage() {
           )
         }
       />
+
+      <InProgressConsultations />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         {isOrgAdmin && (

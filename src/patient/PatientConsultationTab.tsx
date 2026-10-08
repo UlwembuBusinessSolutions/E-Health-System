@@ -181,6 +181,7 @@ function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeV
       queryClient.invalidateQueries({ queryKey: ["consultation-history", visitId] });
       queryClient.invalidateQueries({ queryKey: ["consultation-continuable", visitId] });
       queryClient.invalidateQueries({ queryKey: ["patient-consultations"] });
+      queryClient.invalidateQueries({ queryKey: ["in-progress-consultations"] });
     },
     onError: (error) => {
       setStartError(error instanceof ApiError ? error.message : "Couldn't start a consultation. Try again.");
@@ -191,6 +192,7 @@ function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeV
     queryClient.invalidateQueries({ queryKey: ["consultation-current", visitId] });
     queryClient.invalidateQueries({ queryKey: ["consultation-history", visitId] });
     queryClient.invalidateQueries({ queryKey: ["patient-consultations"] });
+      queryClient.invalidateQueries({ queryKey: ["in-progress-consultations"] });
   };
 
   const current = currentQuery.data ?? null;
