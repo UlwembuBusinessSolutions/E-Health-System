@@ -31,6 +31,7 @@ import {
   type PurchaseItemPayload,
   type VitalsBypass,
 } from "@/shared/api/consultations";
+import { DiagnosisSearchInput, type DiagnosisChoice } from "./DiagnosisSearchInput";
 import { PrescriptionWorkspace } from "@/prescribing/PrescriptionWorkspace";
 import {
   EMPTY_PRESCRIPTION,
@@ -640,9 +641,9 @@ function DraftView({
   const [newDiagnosisCertainty, setNewDiagnosisCertainty] = useState<DiagnosisCertainty>("PROVISIONAL");
 
   const addDiagnosis = useMutation({
-    mutationFn: () =>
+    mutationFn: (choice: DiagnosisChoice) =>
       addConsultationDiagnosis(consultation.id, {
-        diagnosisText: newDiagnosisText.trim(),
+        ...("diagnosisId" in choice ? { diagnosisId: choice.diagnosisId } : { diagnosisText: choice.diagnosisText }),
         isPrimary: newDiagnosisPrimary,
         certainty: newDiagnosisCertainty,
       }),
@@ -715,11 +716,12 @@ function DraftView({
           )}
         </div>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[2fr_auto_auto_auto] sm:items-end">
-          <Input
+          <DiagnosisSearchInput
             label="Add diagnosis"
-            placeholder="e.g. Upper respiratory tract infection"
+            placeholder="Search by name or ICD-10 code, e.g. bronchitis or J20"
             value={newDiagnosisText}
-            onChange={(e) => setNewDiagnosisText(e.target.value)}
+            onChangeText={setNewDiagnosisText}
+            onChoose={(choice) => addDiagnosis.mutate(choice)}
           />
           <label className="flex items-center gap-1.5 pb-3 text-[12.5px] text-text-secondary">
             <input
@@ -741,7 +743,7 @@ function DraftView({
             icon={<Plus className="size-3.5" aria-hidden />}
             loading={addDiagnosis.isPending}
             disabled={!newDiagnosisText.trim()}
-            onClick={() => addDiagnosis.mutate()}
+            onClick={() => addDiagnosis.mutate({ diagnosisText: newDiagnosisText.trim() })}
           >
             Add
           </Button>
@@ -807,7 +809,14 @@ function DraftView({
 function DiagnosisRow({ diagnosis, onRemove }: { diagnosis: ConsultationDiagnosis; onRemove?: () => void }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-surface-sunken/40 px-3.5 py-2.5">
-      <span className="text-[13.5px] text-text-primary">{diagnosis.diagnosisText}</span>
+      <span className="flex min-w-0 items-center gap-2 text-[13.5px] text-text-primary">
+        {diagnosis.code && (
+          <span className="shrink-0 rounded bg-brand-50 px-1.5 py-0.5 font-mono text-[11.5px] font-semibold text-brand-600">
+            {diagnosis.code}
+          </span>
+        )}
+        <span className="min-w-0">{diagnosis.diagnosisText}</span>
+      </span>
       <div className="flex items-center gap-2">
         <span
           className={clsx(
@@ -914,7 +923,12 @@ function AmendForm({
 }) {
   const [fields, setFields] = useState<ConsultationFieldsState>(() => toFieldsState(consultation));
   const [diagnoses, setDiagnoses] = useState(
-    () => consultation.diagnoses.map((d) => ({ diagnosisText: d.diagnosisText, isPrimary: d.isPrimary, certainty: d.certainty })),
+    () => consultation.diagnoses.map((d) => ({
+      diagnosisText: d.diagnosisText,
+      diagnosisId: d.diagnosisId ?? undefined,
+      isPrimary: d.isPrimary,
+      certainty: d.certainty,
+    })),
   );
   const [amendmentReason, setAmendmentReason] = useState("");
   const [prescription, setPrescription] = useState<PrescriptionState>(EMPTY_PRESCRIPTION);
@@ -1011,10 +1025,20 @@ function AmendForm({
         <div className="flex flex-col gap-2">
           {diagnoses.map((d, index) => (
             <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_auto_auto_auto] sm:items-end">
-              <Input
+              <DiagnosisSearchInput
                 label="Diagnosis"
+                placeholder="Search by name or ICD-10 code"
                 value={d.diagnosisText}
-                onChange={(e) => updateDiagnosis(index, { diagnosisText: e.target.value })}
+                // Typing again means it is no longer the catalogue entry that was picked.
+                onChangeText={(text) => updateDiagnosis(index, { diagnosisText: text, diagnosisId: undefined })}
+                onChoose={(choice) =>
+                  updateDiagnosis(
+                    index,
+                    "diagnosisId" in choice
+                      ? { diagnosisText: choice.name, diagnosisId: choice.diagnosisId }
+                      : { diagnosisText: choice.diagnosisText, diagnosisId: undefined },
+                  )
+                }
               />
               <label className="flex items-center gap-1.5 pb-3 text-[12.5px] text-text-secondary">
                 <input type="checkbox" checked={d.isPrimary} onChange={(e) => updateDiagnosis(index, { isPrimary: e.target.checked })} />
@@ -1039,7 +1063,7 @@ function AmendForm({
         </div>
         <button
           type="button"
-          onClick={() => setDiagnoses((items) => [...items, { diagnosisText: "", isPrimary: false, certainty: "PROVISIONAL" }])}
+          onClick={() => setDiagnoses((items) => [...items, { diagnosisText: "", diagnosisId: undefined, isPrimary: false, certainty: "PROVISIONAL" }])}
           className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-600 hover:text-brand-700"
         >
           <Plus className="size-3.5" aria-hidden />

@@ -25,6 +25,8 @@ export interface ConsultationDiagnosis {
   catalogueVersion: string | null;
   code: string | null;
   displayText: string | null;
+  /** The catalogue entry this is, so the same condition can be counted across consultations. */
+  diagnosisId: string | null;
 }
 
 export interface Consultation {
@@ -121,8 +123,10 @@ export async function updateConsultationDraft(
   return apiClient.patch<Consultation>(`/api/v1/consultations/${id}`, payload, { headers: tenantAuthHeaders() });
 }
 
+/** Either a catalogue pick (`diagnosisId`) or a typed name; a name not in the catalogue is added to it. */
 export interface AddDiagnosisPayload {
-  diagnosisText: string;
+  diagnosisId?: string;
+  diagnosisText?: string;
   isPrimary: boolean;
   certainty: DiagnosisCertainty;
 }
