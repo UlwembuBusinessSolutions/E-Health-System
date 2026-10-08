@@ -78,6 +78,18 @@ public class ConsultationController {
         return ResponseEntity.ok(body);
     }
 
+    // The patient's consultations across all their visits, newest first, each with the visit it belongs to.
+    @GetMapping("/api/v1/patients/{patientId}/consultations")
+    public ResponseEntity<Map<String, Object>> patientConsultations(@PathVariable UUID patientId) {
+        List<ConsultationService.PatientConsultation> entries = consultationService.getPatientConsultations(patientId);
+        Map<UUID, String> names = resolveNames(entries.stream().map(ConsultationService.PatientConsultation::consultation).toList());
+        var items = entries.stream()
+                .map(e -> new PatientConsultationResponse(toResponse(e.consultation(), names), e.visitDateTime(),
+                        e.facilityName()))
+                .toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
     // The earlier consultation of this episode the doctor can carry on from, for a visit made when the
     // patient was transferred and came back. Null when there is nothing to continue.
     @GetMapping("/api/v1/visits/{visitId}/consultations/continuable")
@@ -272,6 +284,10 @@ public class ConsultationController {
     // authorUserId/signedByUserId to real names — "who consulted this
     // patient," same reasoning PrescriptionResponse already applies to
     // prescriberName/dispensedByName.
+    public record PatientConsultationResponse(ConsultationResponse consultation, Instant visitDateTime,
+                                               String facilityName) {
+    }
+
     // An earlier signed consultation of the same episode of care, and where the patient's vitals are.
     public record EarlierConsultationResponse(UUID consultationId, UUID visitId, String facilityName,
                                                Instant signedAt, String signedByName, ConsultationOutcome outcome,
