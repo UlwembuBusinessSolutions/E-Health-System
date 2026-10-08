@@ -1,5 +1,7 @@
 package co.ehealth.platform.pharmacy.stock;
 
+import co.ehealth.platform.pharmacy.supplier.PharmacySupplierRepository;
+import co.ehealth.platform.pharmacy.supplier.SupplierNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -20,14 +22,17 @@ public class PharmacyProductService {
     private final PharmacyProductRepository productRepository;
     private final PharmacyFacilityProductRepository facilityProductRepository;
     private final PharmacyStockAccountRepository stockAccountRepository;
+    private final PharmacySupplierRepository supplierRepository;
     private final Clock clock;
 
     public PharmacyProductService(PharmacyProductRepository productRepository,
                                    PharmacyFacilityProductRepository facilityProductRepository,
-                                   PharmacyStockAccountRepository stockAccountRepository, Clock clock) {
+                                   PharmacyStockAccountRepository stockAccountRepository,
+                                   PharmacySupplierRepository supplierRepository, Clock clock) {
         this.productRepository = productRepository;
         this.facilityProductRepository = facilityProductRepository;
         this.stockAccountRepository = stockAccountRepository;
+        this.supplierRepository = supplierRepository;
         this.clock = clock;
     }
 
@@ -50,16 +55,17 @@ public class PharmacyProductService {
     public PharmacyProduct create(String code, String displayName, String genericName, String strength,
                                    String dosageForm, StockCategory category, StockBaseUnit baseUnit,
                                    Integer packSize, String barcode, String manufacturer, boolean batchTracked,
-                                   boolean expiryTracked, String storageInstructions, UUID facilityId,
-                                   Integer reorderThreshold, Integer targetQuantity, UUID actorUserId,
-                                   String actorName) {
+                                   boolean expiryTracked, String storageInstructions, ProductHandling handling,
+                                   UUID facilityId, Integer reorderThreshold, Integer targetQuantity,
+                                   UUID actorUserId, String actorName) {
+        requireValidTracking(batchTracked, handling);
         if (productRepository.findByCodeNormalized(code).isPresent()) {
             throw new DuplicateProductCodeException(code);
         }
         Instant now = clock.instant();
         PharmacyProduct product = productRepository.save(new PharmacyProduct(code, displayName, genericName,
                 strength, dosageForm, category, baseUnit, packSize, barcode, manufacturer, batchTracked,
-                expiryTracked, storageInstructions, actorUserId, actorName, now));
+                expiryTracked, storageInstructions, handling, actorUserId, actorName, now));
         facilityProductRepository.save(new PharmacyFacilityProduct(product.getId(), facilityId, reorderThreshold,
                 targetQuantity, now));
         return product;
@@ -71,11 +77,43 @@ public class PharmacyProductService {
     @Transactional
     public PharmacyProduct updateDetails(UUID productId, String displayName, String genericName, String strength,
                                           String dosageForm, Integer packSize, String barcode, String manufacturer,
-                                          String storageInstructions, UUID actorUserId, String actorName) {
+                                          String storageInstructions, DrugSchedule schedule, boolean coldChain,
+                                          UUID preferredSupplierId, AssortmentLevels levels, UUID actorUserId,
+                                          String actorName) {
         PharmacyProduct product = get(productId);
+        requireSupplierExists(preferredSupplierId);
         product.updateDetails(displayName, genericName, strength, dosageForm, packSize, barcode, manufacturer,
                 storageInstructions, actorUserId, actorName, clock.instant());
+        product.updateHandling(schedule, coldChain, preferredSupplierId);
+        if (levels.isPresent()) {
+            updateAssortmentLevels(productId, levels);
+        }
         return productRepository.save(product);
+    }
+
+    // The levels belong to the facility's assortment row, which a product
+    // edited from a facility that never stocked it gets created on the spot.
+    private void updateAssortmentLevels(UUID productId, AssortmentLevels levels) {
+        PharmacyFacilityProduct assortment = getOrCreateAssortment(productId, levels.facilityId(),
+                levels.reorderThreshold(), levels.targetQuantity());
+        assortment.updateLevels(levels.reorderThreshold(), levels.targetQuantity());
+        facilityProductRepository.save(assortment);
+    }
+
+    // A serial-tracked unit is its own identity while a lot is a group of
+    // interchangeable units, so a product cannot be both.
+    private void requireValidTracking(boolean batchTracked, ProductHandling handling) {
+        if (handling.serialTracked() && batchTracked) {
+            throw new PharmacyValidationException(
+                    "A product can be tracked by serial number or by lot, not both. Choose one.");
+        }
+        requireSupplierExists(handling.preferredSupplierId());
+    }
+
+    private void requireSupplierExists(UUID supplierId) {
+        if (supplierId != null && !supplierRepository.existsById(supplierId)) {
+            throw new SupplierNotFoundException();
+        }
     }
 
     // plan section 4: "Before archiving require no physical balance in any

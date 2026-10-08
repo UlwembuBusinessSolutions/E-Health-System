@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -64,8 +65,9 @@ public class PharmacyReceiptController {
                 ? UUID.randomUUID().toString() : idempotencyKeyHeader;
 
         User actor = userRepository.findById(principal.userId()).orElseThrow();
-        var command = new PharmacyReceiptService.ReceiveStockCommand(request.facilityId(), request.sourceReference(),
-                request.supplierName(), request.lines().stream().map(ReceiveLineRequest::toCommand).toList());
+        var command = new PharmacyReceiptService.ReceiveStockCommand(request.facilityId(), request.supplierId(),
+                request.invoiceNumber(), request.sourceReference(), request.supplierName(),
+                request.lines().stream().map(ReceiveLineRequest::toCommand).toList());
         PharmacyReceipt receipt = receiptService.receive(command, idempotencyKey, actor.getId(),
                 actor.getFirstName() + " " + actor.getLastName());
         return ResponseEntity.status(HttpStatus.CREATED).body(ReceiptResponse.from(receipt));
@@ -73,22 +75,33 @@ public class PharmacyReceiptController {
 
     public record ReceiveLineRequest(@NotNull UUID productId, String manufacturer, String lotNumber,
                                       LocalDate expiryDate, ExpiryPrecision expiryPrecision, Integer packs,
-                                      Integer packSizeUsed, Integer baseQuantity) {
+                                      Integer packSizeUsed, Integer baseQuantity, List<String> serialNumbers,
+                                      BigDecimal temperatureC, Boolean coldBoxIntact, LineFlagRequest flag) {
         PharmacyReceiptService.ReceiveLineCommand toCommand() {
             return new PharmacyReceiptService.ReceiveLineCommand(productId, manufacturer,
                     lotNumber == null || lotNumber.isBlank() ? "N/A" : lotNumber, expiryDate, expiryPrecision, packs,
-                    packSizeUsed, baseQuantity);
+                    packSizeUsed, baseQuantity, serialNumbers, temperatureC, coldBoxIntact,
+                    flag == null ? null : flag.toCommand());
         }
     }
 
-    public record ReceiveStockRequest(@NotNull UUID facilityId, String sourceReference, String supplierName,
+    public record LineFlagRequest(ReceiptFlagReason reason, String note, Integer acceptedQuantity) {
+        PharmacyReceiptService.LineFlag toCommand() {
+            return new PharmacyReceiptService.LineFlag(reason, note, acceptedQuantity);
+        }
+    }
+
+    public record ReceiveStockRequest(@NotNull UUID facilityId, UUID supplierId, String invoiceNumber,
+                                       String sourceReference, String supplierName,
                                        @NotEmpty List<@Valid ReceiveLineRequest> lines) {
     }
 
-    public record ReceiptResponse(UUID id, UUID facilityId, String sourceReference, String supplierName,
-                                   String createdByName, Instant createdAt) {
+    public record ReceiptResponse(UUID id, String receiptNumber, UUID facilityId, UUID supplierId,
+                                   String invoiceNumber, String sourceReference, String supplierName,
+                                   ReceiptStatus status, String createdByName, Instant createdAt) {
         static ReceiptResponse from(PharmacyReceipt r) {
-            return new ReceiptResponse(r.getId(), r.getFacilityId(), r.getSourceReference(), r.getSupplierName(),
+            return new ReceiptResponse(r.getId(), r.getReceiptNumber(), r.getFacilityId(), r.getSupplierId(),
+                    r.getInvoiceNumber(), r.getSourceReference(), r.getSupplierName(), r.getStatus(),
                     r.getCreatedByName(), r.getCreatedAt());
         }
     }

@@ -8,6 +8,7 @@ import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -75,6 +76,8 @@ public class PharmacyProductController {
                 request.genericName(), request.strength(), request.dosageForm(), request.category(),
                 request.baseUnit(), request.packSize(), request.barcode(), request.manufacturer(),
                 request.batchTracked(), request.expiryTracked(), request.storageInstructions(),
+                new ProductHandling(request.serialTracked(), request.schedule(), request.coldChain(),
+                        request.preferredSupplierId()),
                 request.facilityId(), request.reorderThreshold(), request.targetQuantity(), actor.getId(),
                 actorName(actor));
         return ResponseEntity.status(HttpStatus.CREATED).body(ProductResponse.from(product));
@@ -88,7 +91,8 @@ public class PharmacyProductController {
         User actor = currentUser(principal);
         PharmacyProduct product = productService.updateDetails(id, request.displayName(), request.genericName(),
                 request.strength(), request.dosageForm(), request.packSize(), request.barcode(),
-                request.manufacturer(), request.storageInstructions(), actor.getId(), actorName(actor));
+                request.manufacturer(), request.storageInstructions(), request.schedule(), request.coldChain(),
+                request.preferredSupplierId(), request.levels(), actor.getId(), actorName(actor));
         return ResponseEntity.ok(ProductResponse.from(product));
     }
 
@@ -120,25 +124,36 @@ public class PharmacyProductController {
             @NotBlank String code, @NotBlank String displayName, String genericName, String strength,
             String dosageForm, @NotNull StockCategory category, @NotNull StockBaseUnit baseUnit, Integer packSize,
             String barcode, String manufacturer, boolean batchTracked, boolean expiryTracked,
-            String storageInstructions, @NotNull UUID facilityId, Integer reorderThreshold,
+            String storageInstructions, boolean serialTracked, DrugSchedule schedule, boolean coldChain,
+            UUID preferredSupplierId, @NotNull UUID facilityId, Integer reorderThreshold,
             Integer targetQuantity) {
     }
 
     public record UpdateProductRequest(@NotBlank String displayName, String genericName, String strength,
                                         String dosageForm, Integer packSize, String barcode, String manufacturer,
-                                        String storageInstructions) {
+                                        String storageInstructions, DrugSchedule schedule, boolean coldChain,
+                                        UUID preferredSupplierId, UUID facilityId,
+                                        @PositiveOrZero Integer reorderThreshold,
+                                        @PositiveOrZero Integer targetQuantity) {
+
+        AssortmentLevels levels() {
+            return facilityId == null ? AssortmentLevels.NONE
+                    : new AssortmentLevels(facilityId, reorderThreshold, targetQuantity);
+        }
     }
 
     public record ProductResponse(UUID id, String code, String displayName, String genericName, String strength,
                                    String dosageForm, StockCategory category, StockBaseUnit baseUnit,
                                    Integer packSize, String barcode, String manufacturer, boolean batchTracked,
-                                   boolean expiryTracked, String storageInstructions, boolean active,
-                                   String createdByName, Instant createdAt, String updatedByName, Instant updatedAt) {
+                                   boolean expiryTracked, String storageInstructions, boolean serialTracked,
+                                   DrugSchedule schedule, boolean coldChain, UUID preferredSupplierId,
+                                   boolean active, String createdByName, Instant createdAt, String updatedByName, Instant updatedAt) {
         static ProductResponse from(PharmacyProduct p) {
             return new ProductResponse(p.getId(), p.getCode(), p.getDisplayName(), p.getGenericName(),
                     p.getStrength(), p.getDosageForm(), p.getCategory(), p.getBaseUnit(), p.getPackSize(),
                     p.getBarcode(), p.getManufacturer(), p.isBatchTracked(), p.isExpiryTracked(),
-                    p.getStorageInstructions(), p.isActive(), p.getCreatedByName(), p.getCreatedAt(),
+                    p.getStorageInstructions(), p.isSerialTracked(), p.getSchedule(), p.isColdChain(),
+                    p.getPreferredSupplierId(), p.isActive(), p.getCreatedByName(), p.getCreatedAt(),
                     p.getUpdatedByName(), p.getUpdatedAt());
         }
     }

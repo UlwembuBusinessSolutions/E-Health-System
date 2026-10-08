@@ -24,7 +24,7 @@ spring:
     enabled: false  # migrations run per-schema via TenantMigrationRunner — see core/tenant
   servlet:
     multipart:
-      max-file-size: 5MB   # enforced before StaffPhotoService runs
+      max-file-size: 5MB   # enforced before StaffPhotoService and CollectionProofStorage run
       max-request-size: 5MB
   mail:
     host: ${SMTP_HOST:localhost}

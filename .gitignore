@@ -6,10 +6,3 @@ data/
 *.iml
 .vscode/
 .DS_Store
-
-# Database dumps
-*.sql
-
-# Application logs
-*.log
-api-log.txt

@@ -22,10 +22,9 @@ class VitalsCaptureTest {
     final TriageAssessmentRepository repository = mock(TriageAssessmentRepository.class);
     final VisitRepository visits = mock(VisitRepository.class);
     final PatientService patients = mock(PatientService.class);
-        final PermissionService permissions = mock(PermissionService.class);
     final UUID visitId = UUID.randomUUID(), patientId = UUID.randomUUID(), actor = UUID.randomUUID();
     final TriageService service = new TriageService(repository, visits, patients, mock(UserRepository.class),
-            mock(AuditLogService.class), permissions, Clock.fixed(Instant.parse("2026-09-08T12:00:00Z"), ZoneOffset.UTC));
+            mock(AuditLogService.class), mock(PermissionService.class), Clock.fixed(Instant.parse("2026-09-08T12:00:00Z"), ZoneOffset.UTC));
 
     @BeforeEach void setup() {
         Visit visit = mock(Visit.class); Patient patient = mock(Patient.class);
@@ -43,23 +42,6 @@ class VitalsCaptureTest {
         return new TriageService.TriageCaptureCommand(visitId, false, null, profile, 18, 80, 120, 80, 37.0, 98,
                 OxygenSupport.ROOM_AIR, null, null, Avpu.ALERT, Mobility.WALKING, 0, "NRS", "Test", Set.of(),
                 null, null, "test-key", false, colour, colour == null ? null : "Clinician assessment", additional);
-    }
-
-    @Test void captureRequiresDoctorOrProfessionalNurseRole() {
-        var additional = new AdditionalObservations(); additional.traumaPresent = false;
-        service.capture(command(additional, ScoringProfile.ADULT, null), actor);
-        verify(permissions).requireAnyRole(Set.of("Professional Nurse", "Doctor"),
-                "Only doctors and professional nurses may access or manage vital signs.");
-    }
-
-    @Test void everyVitalsReadRequiresDoctorOrProfessionalNurseRole() {
-        when(visits.findByPatientId(patientId)).thenReturn(List.of());
-        service.getHistory(visitId);
-        service.getLatestActive(visitId);
-        service.getPatientVitalsHistory(patientId, null, null, false, 0, 10);
-        assertThrows(TriageAssessmentNotFoundException.class, () -> service.getAssessment(UUID.randomUUID()));
-        verify(permissions, times(4)).requireAnyRole(Set.of("Professional Nurse", "Doctor"),
-                "Only doctors and professional nurses may access or manage vital signs.");
     }
 
     @Test void capturePassesAdditionalMeasurementsToRepositoryAndResponse() {

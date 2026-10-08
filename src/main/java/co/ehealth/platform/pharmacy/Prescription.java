@@ -104,6 +104,12 @@ public class Prescription {
         }
     }
 
+    // A prescription whose every line is for the patient to buy has nothing for
+    // the pharmacy to dispense, so it must not wait in the dispensing queue.
+    public void markNothingToDispense() {
+        this.status = PrescriptionStatus.DISPENSED;
+    }
+
     public UUID getId() {
         return id;
     }

@@ -53,20 +53,55 @@ public class PharmacyReceipt {
     @Column(name = "transaction_id")
     private UUID transactionId;
 
+    // supplierName above stays as the text recorded at receiving time; this
+    // is the live link, which a supplier merge re-points.
+    @Column(name = "supplier_id")
+    private UUID supplierId;
+
+    @Column(name = "invoice_number", length = 100)
+    private String invoiceNumber;
+
+    @Column(name = "receipt_number", nullable = false, updatable = false, length = 20)
+    private String receiptNumber;
+
+    @Column(name = "reversed_at")
+    private Instant reversedAt;
+
+    @Column(name = "reversed_by_name", length = 200)
+    private String reversedByName;
+
+    @Column(name = "reversal_transaction_id")
+    private UUID reversalTransactionId;
+
     protected PharmacyReceipt() {
     }
 
-    public PharmacyReceipt(UUID facilityId, UUID locationId, String sourceReference, String supplierName,
-                            UUID createdBy, String createdByName, Instant createdAt, UUID transactionId) {
+    public PharmacyReceipt(UUID facilityId, UUID locationId, String receiptNumber, UUID supplierId,
+                            String invoiceNumber, String sourceReference, String supplierName, UUID createdBy,
+                            String createdByName, Instant createdAt, UUID transactionId) {
         this.facilityId = facilityId;
         this.locationId = locationId;
         this.status = ReceiptStatus.POSTED;
+        this.receiptNumber = receiptNumber;
+        this.supplierId = supplierId;
+        this.invoiceNumber = invoiceNumber;
         this.sourceReference = sourceReference;
         this.supplierName = supplierName;
         this.createdBy = createdBy;
         this.createdByName = createdByName;
         this.createdAt = createdAt;
         this.transactionId = transactionId;
+    }
+
+    public void markReversed(UUID reversalTransactionId, String reversedByName, Instant reversedAt) {
+        this.status = ReceiptStatus.REVERSED;
+        this.reversalTransactionId = reversalTransactionId;
+        this.reversedByName = reversedByName;
+        this.reversedAt = reversedAt;
+    }
+
+    public boolean isReversed() {
+        return status == ReceiptStatus.REVERSED;
     }
 
     public UUID getId() {
@@ -107,5 +142,29 @@ public class PharmacyReceipt {
 
     public UUID getTransactionId() {
         return transactionId;
+    }
+
+    public UUID getSupplierId() {
+        return supplierId;
+    }
+
+    public String getInvoiceNumber() {
+        return invoiceNumber;
+    }
+
+    public String getReceiptNumber() {
+        return receiptNumber;
+    }
+
+    public Instant getReversedAt() {
+        return reversedAt;
+    }
+
+    public String getReversedByName() {
+        return reversedByName;
+    }
+
+    public UUID getReversalTransactionId() {
+        return reversalTransactionId;
     }
 }

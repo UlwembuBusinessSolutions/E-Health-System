@@ -3,7 +3,6 @@ package co.ehealth.platform.pharmacy;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.notification.EmailService;
 import co.ehealth.platform.core.tenant.ModuleCode;
-import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
 import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.identity.PermissionLevel;
@@ -11,35 +10,34 @@ import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.identity.StaffService;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
+import co.ehealth.platform.pharmacy.prescribing.PrescribingStockService;
+import co.ehealth.platform.pharmacy.stock.PharmacyValidationException;
+import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService;
+import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService.DispenseOutcome;
+import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService.DispenseRequest;
+import co.ehealth.platform.pharmacy.dispensing.DispensingActor;
+import co.ehealth.platform.pharmacy.dispensing.DispensingGuard;
+import co.ehealth.platform.pharmacy.dispensing.DrugMappingService;
+import co.ehealth.platform.pharmacy.dispensing.ItemLock;
+import co.ehealth.platform.pharmacy.dispensing.PrescriptionRollup;
 import co.ehealth.platform.visit.Visit;
 import co.ehealth.platform.visit.VisitService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.time.Clock;
-import java.time.Instant;
-import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class PrescriptionService {
 
     private final PrescriptionRepository prescriptionRepository;
     private final PrescriptionItemRepository prescriptionItemRepository;
-    private final DispensingRecordRepository dispensingRecordRepository;
     private final PrescriptionOutOfStockRecordRepository outOfStockRecordRepository;
     private final PrescriberMessageRepository prescriberMessageRepository;
     private final VisitService visitService;
@@ -50,23 +48,29 @@ public class PrescriptionService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
-    private final S3Client s3Client;
-    private final S3Presigner s3Presigner;
-    private final String bucketName;
+    private final DispensingGuard dispensingGuard;
+    private final DispenseAllocationService dispenseAllocationService;
+    private final DrugMappingService drugMappingService;
+    private final PrescriptionRollup prescriptionRollup;
+    private final ItemLock itemLock;
+    private final PrescriptionPurchaseItemRepository purchaseItemRepository;
+    private final PrescribingStockService prescribingStock;
 
     public PrescriptionService(PrescriptionRepository prescriptionRepository,
                                 PrescriptionItemRepository prescriptionItemRepository,
-                                DispensingRecordRepository dispensingRecordRepository,
                                 PrescriptionOutOfStockRecordRepository outOfStockRecordRepository,
                                 PrescriberMessageRepository prescriberMessageRepository, VisitService visitService,
                                 StaffService staffService, UserRepository userRepository,
                                 OrganizationRepository organizationRepository, EmailService emailService,
                                 AuditLogService auditLogService, Clock clock, PermissionService permissionService,
-                                S3Client s3Client, S3Presigner s3Presigner,
-                                @Value("${app.storage.bucket-name}") String bucketName) {
+                                DispensingGuard dispensingGuard, DispenseAllocationService dispenseAllocationService,
+                                DrugMappingService drugMappingService, PrescriptionRollup prescriptionRollup,
+                                ItemLock itemLock, PrescriptionPurchaseItemRepository purchaseItemRepository,
+                                PrescribingStockService prescribingStock) {
+        this.purchaseItemRepository = purchaseItemRepository;
+        this.prescribingStock = prescribingStock;
         this.prescriptionRepository = prescriptionRepository;
         this.prescriptionItemRepository = prescriptionItemRepository;
-        this.dispensingRecordRepository = dispensingRecordRepository;
         this.outOfStockRecordRepository = outOfStockRecordRepository;
         this.prescriberMessageRepository = prescriberMessageRepository;
         this.visitService = visitService;
@@ -77,9 +81,11 @@ public class PrescriptionService {
         this.auditLogService = auditLogService;
         this.clock = clock;
         this.permissionService = permissionService;
-        this.s3Client = s3Client;
-        this.s3Presigner = s3Presigner;
-        this.bucketName = bucketName;
+        this.dispensingGuard = dispensingGuard;
+        this.dispenseAllocationService = dispenseAllocationService;
+        this.drugMappingService = drugMappingService;
+        this.prescriptionRollup = prescriptionRollup;
+        this.itemLock = itemLock;
     }
 
     // PHRM-US-018 + PHRM-US-009 — patientId/facilityId come from the visit,
@@ -95,15 +101,46 @@ public class PrescriptionService {
                     "You need a current HPCSA or SANC registration to prescribe.");
         }
         Visit visit = visitService.get(cmd.visitId());
+        List<PrescriptionPurchaseItemInput> purchaseInputs = cmd.purchaseItems();
+        if (cmd.items().isEmpty() && purchaseInputs.isEmpty()) {
+            throw new PharmacyValidationException("A prescription needs at least one medicine.");
+        }
+        // The pharmacy may only be asked for what it holds: checked here, inside the
+        // sign transaction, so a prescription can never leave the consulting room
+        // promising stock that is not there.
+        prescribingStock.requireCovered(visit.getFacilityId(), cmd.items().stream()
+                .filter(item -> item.productId() != null)
+                .map(item -> new PrescribingStockService.StockLine(item.productId(), item.quantity())).toList());
 
         String serialNumber = "RX-" + String.format("%07d", prescriptionRepository.nextSerialSequenceValue());
         Prescription prescription = new Prescription(serialNumber, visit.getId(), visit.getPatientId(),
                 visit.getFacilityId(), prescriberId, clock.instant(), cmd.consultationId());
+        if (cmd.items().isEmpty()) {
+            // Everything on it is for the patient to buy, so the pharmacy has nothing to hand over.
+            prescription.markNothingToDispense();
+        }
         prescriptionRepository.save(prescription);
 
         for (PrescriptionItemInput item : cmd.items()) {
-            prescriptionItemRepository.save(
-                    new PrescriptionItem(prescription.getId(), item.drugName(), item.dosage(), item.quantity(), item.schedule()));
+            PrescriptionItem saved = new PrescriptionItem(prescription.getId(), item.drugName(), item.dosage(),
+                    item.quantity());
+            if (item.productId() != null) {
+                // The prescriber picked the product from the pharmacy's list, so the
+                // pharmacist never has to match the name to a product by hand.
+                saved.mapToProduct(item.productId());
+            }
+            prescriptionItemRepository.save(saved);
+        }
+        Map<UUID, Integer> dispensedByProduct = cmd.items().stream().filter(item -> item.productId() != null)
+                .collect(Collectors.groupingBy(PrescriptionItemInput::productId,
+                        Collectors.summingInt(PrescriptionItemInput::quantity)));
+        for (PrescriptionPurchaseItemInput item : purchaseInputs) {
+            int alreadyDispensed = item.productId() == null ? 0 : dispensedByProduct.getOrDefault(item.productId(), 0);
+            purchaseItemRepository.save(new PrescriptionPurchaseItem(prescription.getId(), item.drugName(),
+                    item.dosage(), item.quantity(), item.productId(),
+                    prescribingStock.classifyPurchase(visit.getFacilityId(), item.productId(), item.quantity(),
+                            alreadyDispensed),
+                    item.note()));
         }
 
         auditLogService.append(prescriberId, visit.getFacilityId(), "PRESCRIPTION_CREATED", "Prescription",
@@ -154,154 +191,35 @@ public class PrescriptionService {
         return prescriptionRepository.findByPatientIdOrderByCreatedAtDesc(patientId);
     }
 
-    public Optional<DispensingRecord> getDispensingRecord(UUID prescriptionItemId) {
-        return dispensingRecordRepository.findByPrescriptionItemId(prescriptionItemId);
-    }
-
-    public Optional<PrescriptionOutOfStockRecord> getOutOfStockRecord(UUID prescriptionItemId) {
-        return outOfStockRecordRepository.findByPrescriptionItemId(prescriptionItemId);
-    }
-
     // PHRM-US-009's other half — dispensing requires a current SAPC
-    // registration. Reversible the other way: an item already OUT_OF_STOCK
-    // can still be dispensed here once stock is back (that's the whole
-    // point of getBySerialNumber() above) — only an already-DISPENSED item
-    // is refused.
+    // registration (DispensingGuard). Reversible the other way: an item
+    // already OUT_OF_STOCK can still be dispensed here once stock is back
+    // (that's the whole point of getBySerialNumber() above) — only an
+    // already-DISPENSED item is refused. The stock deduction, lot
+    // allocation and dispensing record are DispenseAllocationService's job;
+    // this only adds the prescription-level status rollup.
     @Transactional
-    public void dispenseItem(UUID prescriptionId, UUID itemId, UUID dispenserId) {
-        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.MANAGE);
-        if (!staffService.getLicenseStatus(dispenserId).canDispense()) {
-            throw new NotLicensedException("You need a current SAPC registration to dispense.");
-        }
-        Prescription prescription = get(prescriptionId);
-        PrescriptionItem item = requireOwnedItem(prescription, itemId);
-        dispenseItemInternal(prescription, item, dispenserId);
-        recomputeAndSave(prescription);
+    public DispenseOutcome dispenseItem(UUID prescriptionId, UUID itemId, DispenseRequest request,
+                                         UUID dispenserId) {
+        DispensingActor actor = dispensingGuard.requireDispenser(dispenserId);
+        Prescription prescription = dispensingGuard.loadPrescription(prescriptionId);
+        DispenseOutcome outcome = dispenseAllocationService.dispense(prescription, itemId, request, actor);
+        prescriptionRollup.refresh(prescription);
+        return outcome;
     }
 
+    // A pharmacist confirms (or overrides) which stock product backs this
+    // line; the choice is remembered for the same drug name next time.
     @Transactional
-    public void confirmCollection(UUID prescriptionId, List<UUID> itemIds, CollectionCommand cmd,
-                                  MultipartFile proof, MultipartFile signature, UUID staffId) {
-        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.MANAGE);
-        if (!staffService.getLicenseStatus(staffId).canDispense()) {
-            throw new NotLicensedException("You need a current SAPC registration to dispense.");
-        }
-        if (itemIds == null || itemIds.isEmpty() || itemIds.stream().distinct().count() != itemIds.size()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose at least one unique prescription item.");
-        }
-        Prescription prescription = get(prescriptionId);
-        String proofKey = null;
-        String signatureKey = null;
-        boolean controlled = itemIds.stream().map(this::getItem)
-                .anyMatch(item -> item.getPrescriptionId().equals(prescriptionId)
-                        && item.getSchedule() != null && item.getSchedule() >= 5);
-        if (!cmd.collectedByPatient()) {
-            if (!StringUtils.hasText(cmd.collectorName()) || !StringUtils.hasText(cmd.idType())
-                    || !StringUtils.hasText(cmd.idNumber()) || !StringUtils.hasText(cmd.relationship())
-                    || !StringUtils.hasText(cmd.contactNumber()) || !StringUtils.hasText(cmd.authorisationType())
-                    || !cmd.idChecked() || signature == null || signature.isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Collector identity, relationship, contact, authorisation, ID check and signature are required.");
-            }
-            if (controlled && (!"WRITTEN_CONSENT_LETTER".equals(cmd.authorisationType())
-                    || proof == null || proof.isEmpty())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Schedule 5 or higher medication requires uploaded written authorisation.");
-            }
-            if (proof != null && !proof.isEmpty()) proofKey = uploadCollectionFile(prescriptionId, proof, false);
-            signatureKey = uploadCollectionFile(prescriptionId, signature, true);
-        }
-        for (UUID itemId : itemIds) {
-            PrescriptionItem item = requireOwnedItem(prescription, itemId);
-            if (item.getStatus() == PrescriptionStatus.DISPENSED) throw new PrescriptionAlreadyDispensedException();
-            item.markDispensed();
-            prescriptionItemRepository.save(item);
-            DispensingRecord record = new DispensingRecord(item.getId(), staffId, clock.instant());
-            if (!cmd.collectedByPatient()) {
-                record.recordThirdPartyCollection(cmd.collectorName().trim(), cmd.idType(), cmd.idNumber().trim(),
-                        cmd.relationship(), cmd.contactNumber().trim(), cmd.authorisationType(), proofKey,
-                        signatureKey, staffId, cmd.notes());
-            }
-            dispensingRecordRepository.save(record);
-            auditLogService.append(staffId, prescription.getFacilityId(), "PRESCRIPTION_ITEM_DISPENSED",
-                    "PrescriptionItem", item.getId().toString(), null, null);
-        }
-        recomputeAndSave(prescription);
-    }
-
-    private String uploadCollectionFile(UUID prescriptionId, MultipartFile file, boolean signature) {
-        String type = file.getContentType();
-        boolean valid = signature ? "image/png".equals(type) || "image/jpeg".equals(type)
-                : "application/pdf".equals(type) || "image/png".equals(type) || "image/jpeg".equals(type);
-        if (!valid || file.getSize() > 10 * 1024 * 1024) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    signature ? "Signature must be PNG or JPEG (maximum 10 MB)." : "Proof must be PDF, PNG or JPEG (maximum 10 MB).");
-        }
-        String key = "pharmacy-collection/%s/%s/%s".formatted(TenantContext.getCurrentTenant(), prescriptionId, UUID.randomUUID());
-        try {
-            s3Client.putObject(PutObjectRequest.builder().bucket(bucketName).key(key).contentType(type).build(),
-                    RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException("Could not store collection evidence.", e);
-        }
-        return key;
-    }
-
-    public CollectionDetails getCollectionDetails(UUID itemId, UUID viewerId) {
-        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
-        permissionService.requireAnyRole(java.util.Set.of("Pharmacist", "ORG_ADMIN"),
-                "Only pharmacists and organization administrators can view collector identity details.");
-        PrescriptionItem item = getItem(itemId);
-        DispensingRecord record = dispensingRecordRepository.findByPrescriptionItemId(itemId)
-                .orElseThrow(PrescriptionItemNotFoundException::new);
-        if (record.isCollectedByPatient()) throw new PrescriptionItemNotFoundException();
-        Prescription prescription = prescriptionRepository.findById(item.getPrescriptionId())
-                .orElseThrow(PrescriptionNotFoundException::new);
-        auditLogService.append(viewerId, prescription.getFacilityId(), "PRESCRIPTION_COLLECTION_DETAILS_VIEWED",
-                "PrescriptionItem", itemId.toString(), null, null);
-        return new CollectionDetails(record.isCollectedByPatient(), record.getCollectorName(), record.getCollectorIdType(),
-                record.getCollectorIdNumber(), record.getCollectorRelationship(), record.getCollectorContactNumber(),
-                record.getAuthorisationType(), presign(record.getProofS3Key()), presign(record.getSignatureS3Key()), record.getIdCheckedByUserId(),
-                record.getCollectionNotes(), record.getDispensedAt(), record.getDispensedByUserId(), prescription.getFacilityId());
-    }
-
-    private String presign(String key) {
-        if (key == null) return null;
-        var request = GetObjectPresignRequest.builder().signatureDuration(Duration.ofMinutes(5))
-                .getObjectRequest(GetObjectRequest.builder().bucket(bucketName).key(key).build()).build();
-        return s3Presigner.presignGetObject(request).url().toString();
-    }
-
-    // "Mark all as collected" — dispenses every item still PENDING on this
-    // prescription in one action; an item already OUT_OF_STOCK is left
-    // alone (there's nothing to hand over until stock is actually back —
-    // this must never silently fabricate a dispense for something the
-    // pharmacy doesn't have).
-    @Transactional
-    public void dispenseAllPending(UUID prescriptionId, UUID dispenserId) {
-        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.MANAGE);
-        if (!staffService.getLicenseStatus(dispenserId).canDispense()) {
-            throw new NotLicensedException("You need a current SAPC registration to dispense.");
-        }
-        Prescription prescription = get(prescriptionId);
-        List<PrescriptionItem> items = getItems(prescriptionId);
-        for (PrescriptionItem item : items) {
-            if (item.getStatus() == PrescriptionStatus.PENDING) {
-                dispenseItemInternal(prescription, item, dispenserId);
-            }
-        }
-        recomputeAndSave(prescription);
-    }
-
-    private void dispenseItemInternal(Prescription prescription, PrescriptionItem item, UUID dispenserId) {
+    public Prescription confirmProduct(UUID prescriptionId, UUID itemId, UUID productId, UUID staffId) {
+        DispensingActor actor = dispensingGuard.requireManager(staffId);
+        Prescription prescription = dispensingGuard.loadPrescription(prescriptionId);
+        PrescriptionItem item = itemLock.lockOwnedItem(prescription, itemId);
         if (item.getStatus() == PrescriptionStatus.DISPENSED) {
             throw new PrescriptionAlreadyDispensedException();
         }
-        item.markDispensed();
-        prescriptionItemRepository.save(item);
-        dispensingRecordRepository.save(new DispensingRecord(item.getId(), dispenserId, clock.instant()));
-        auditLogService.append(dispenserId, prescription.getFacilityId(), "PRESCRIPTION_ITEM_DISPENSED",
-                "PrescriptionItem", item.getId().toString(), null, null);
+        drugMappingService.confirmProduct(prescription, item, productId, actor.userId());
+        return prescription;
     }
 
     // The other outcome for a PENDING item — the pharmacy doesn't have the
@@ -332,7 +250,7 @@ public class PrescriptionService {
         } else {
             outOfStockRecordRepository.save(new PrescriptionOutOfStockRecord(itemId, staffId, clock.instant(), note));
         }
-        recomputeAndSave(prescription);
+        prescriptionRollup.refresh(prescription);
 
         auditLogService.append(staffId, prescription.getFacilityId(), "PRESCRIPTION_ITEM_MARKED_OUT_OF_STOCK",
                 "PrescriptionItem", itemId.toString(), null, null);
@@ -344,11 +262,6 @@ public class PrescriptionService {
             throw new PrescriptionItemNotFoundException();
         }
         return item;
-    }
-
-    private void recomputeAndSave(Prescription prescription) {
-        prescription.recomputeStatus(getItems(prescription.getId()));
-        prescriptionRepository.save(prescription);
     }
 
     // "Something else" — a pharmacy query about this prescription that
@@ -389,21 +302,30 @@ public class PrescriptionService {
     // consultationId is optional traceability only (Prescription's own
     // why-note) — null keeps this call's behaviour identical to before it
     // existed.
-    public record CreatePrescriptionCommand(UUID visitId, List<PrescriptionItemInput> items, UUID consultationId) {
+    public record CreatePrescriptionCommand(UUID visitId, List<PrescriptionItemInput> items, UUID consultationId,
+                                            List<PrescriptionPurchaseItemInput> purchaseItems) {
+
+        public CreatePrescriptionCommand {
+            items = items == null ? List.of() : items;
+            purchaseItems = purchaseItems == null ? List.of() : purchaseItems;
+        }
+
+        public CreatePrescriptionCommand(UUID visitId, List<PrescriptionItemInput> items, UUID consultationId) {
+            this(visitId, items, consultationId, List.of());
+        }
     }
 
-    public record PrescriptionItemInput(String drugName, String dosage, int quantity, Integer schedule) {
+    // productId is set when the prescriber chose the medicine from the pharmacy's
+    // stock list; null for a typed name the pharmacist will match later.
+    public record PrescriptionItemInput(String drugName, String dosage, int quantity, UUID productId) {
+
         public PrescriptionItemInput(String drugName, String dosage, int quantity) {
             this(drugName, dosage, quantity, null);
         }
     }
 
-    public record CollectionCommand(boolean collectedByPatient, String collectorName, String idType, String idNumber,
-                                     String relationship, String contactNumber, String authorisationType,
-                                     boolean idChecked, String notes) { }
-
-    public record CollectionDetails(boolean collectedByPatient, String collectorName, String idType, String idNumber,
-                                    String relationship, String contactNumber, String authorisationType,
-                                    String proofUrl, String signatureUrl, UUID idCheckedByUserId, String notes, Instant collectedAt,
-                                    UUID collectedByUserId, UUID facilityId) { }
+    // A medicine the patient should buy rather than receive from the pharmacy.
+    public record PrescriptionPurchaseItemInput(String drugName, String dosage, int quantity, UUID productId,
+                                                String note) {
+    }
 }

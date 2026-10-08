@@ -68,6 +68,19 @@ public class PharmacyProduct {
     @Column(name = "storage_instructions", length = 500)
     private String storageInstructions;
 
+    @Column(name = "serial_tracked", nullable = false)
+    private boolean serialTracked;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 2)
+    private DrugSchedule schedule;
+
+    @Column(name = "cold_chain", nullable = false)
+    private boolean coldChain;
+
+    @Column(name = "preferred_supplier_id")
+    private UUID preferredSupplierId;
+
     @Column(nullable = false)
     private boolean active;
 
@@ -99,7 +112,8 @@ public class PharmacyProduct {
     public PharmacyProduct(String code, String displayName, String genericName, String strength, String dosageForm,
                             StockCategory category, StockBaseUnit baseUnit, Integer packSize, String barcode,
                             String manufacturer, boolean batchTracked, boolean expiryTracked,
-                            String storageInstructions, UUID createdBy, String createdByName, Instant createdAt) {
+                            String storageInstructions, ProductHandling handling, UUID createdBy,
+                            String createdByName, Instant createdAt) {
         this.code = code;
         this.displayName = displayName;
         this.genericName = genericName;
@@ -113,6 +127,10 @@ public class PharmacyProduct {
         this.batchTracked = batchTracked;
         this.expiryTracked = expiryTracked;
         this.storageInstructions = storageInstructions;
+        this.serialTracked = handling.serialTracked();
+        this.schedule = handling.schedule();
+        this.coldChain = handling.coldChain();
+        this.preferredSupplierId = handling.preferredSupplierId();
         this.active = true;
         this.createdBy = createdBy;
         this.createdByName = createdByName;
@@ -136,6 +154,14 @@ public class PharmacyProduct {
         this.updatedBy = updatedBy;
         this.updatedByName = updatedByName;
         this.updatedAt = updatedAt;
+    }
+
+    // schedule, cold chain and preferred supplier describe handling, not how
+    // quantity is counted, so unlike serialTracked they stay editable.
+    public void updateHandling(DrugSchedule schedule, boolean coldChain, UUID preferredSupplierId) {
+        this.schedule = schedule;
+        this.coldChain = coldChain;
+        this.preferredSupplierId = preferredSupplierId;
     }
 
     public void archive(UUID updatedBy, String updatedByName, Instant updatedAt) {
@@ -206,6 +232,22 @@ public class PharmacyProduct {
 
     public String getStorageInstructions() {
         return storageInstructions;
+    }
+
+    public boolean isSerialTracked() {
+        return serialTracked;
+    }
+
+    public DrugSchedule getSchedule() {
+        return schedule;
+    }
+
+    public boolean isColdChain() {
+        return coldChain;
+    }
+
+    public UUID getPreferredSupplierId() {
+        return preferredSupplierId;
     }
 
     public boolean isActive() {
