@@ -2,6 +2,7 @@ package co.ehealth.platform.consultation;
 
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import co.ehealth.platform.identity.StaffService;
+import co.ehealth.platform.pharmacy.MedicineDirections;
 import co.ehealth.platform.pharmacy.PrescriptionService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -81,7 +82,8 @@ public class ConsultationController {
                                                               @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         var cmd = new ConsultationService.UpdateConsultationCommand(request.relevantHistory(),
                 request.currentMedications(), request.allergyStatus(), request.allergyDetail(),
-                request.examinationNotes(), request.investigationsNotes(), request.treatmentPlan());
+                request.examinationNotes(), request.investigationsNotes(), request.treatmentPlan(),
+                request.prescriptionDraft());
         Consultation consultation = consultationService.updateDraft(id, cmd, staff.userId());
         return ResponseEntity.ok(toResponse(consultation));
     }
@@ -137,14 +139,14 @@ public class ConsultationController {
             List<PharmacyItemRequest> items) {
         return items == null ? null
                 : items.stream().map(i -> new PrescriptionService.PrescriptionItemInput(i.drugName(), i.dosage(),
-                        i.quantity(), i.productId())).toList();
+                        i.quantity(), i.productId(), i.directions())).toList();
     }
 
     private static List<PrescriptionService.PrescriptionPurchaseItemInput> toPurchaseItems(
             List<PurchaseItemRequest> items) {
         return items == null ? List.of()
                 : items.stream().map(i -> new PrescriptionService.PrescriptionPurchaseItemInput(i.drugName(),
-                        i.dosage(), i.quantity(), i.productId(), i.note())).toList();
+                        i.dosage(), i.quantity(), i.productId(), i.note(), i.directions())).toList();
     }
 
     @PostMapping("/api/v1/consultations/{id}/entered-in-error")
@@ -179,7 +181,7 @@ public class ConsultationController {
     public record UpdateConsultationRequest(String relevantHistory, String currentMedications,
                                               @NotNull AllergyStatus allergyStatus, String allergyDetail,
                                               String examinationNotes, String investigationsNotes,
-                                              String treatmentPlan) {
+                                              String treatmentPlan, @Size(max = 100000) String prescriptionDraft) {
     }
 
     // Both optional: only needed when the visit has no vitals on record.
@@ -194,15 +196,17 @@ public class ConsultationController {
     // Required only when outcome is SEND_TO_PHARMACY (ConsultationService.
     // requirePharmacyItemsIfNeeded()) — omitted/null for every other
     // outcome, same as PrescriptionController.ItemRequest's own shape.
-    public record PharmacyItemRequest(@NotBlank String drugName, @NotBlank String dosage,
-                                       @Positive int quantity, UUID productId) {
+    public record PharmacyItemRequest(@NotBlank String drugName, @NotBlank @Size(max = 300) String dosage,
+                                       @Positive int quantity, UUID productId,
+                                       @Valid MedicineDirections directions) {
     }
 
     // A medicine the patient should buy rather than receive from the pharmacy
     // (out of stock, short, or not stocked). productId is set when it was
     // picked from the pharmacy's list.
-    public record PurchaseItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity,
-                                       UUID productId, @Size(max = 300) String note) {
+    public record PurchaseItemRequest(@NotBlank String drugName, @NotBlank @Size(max = 300) String dosage,
+                                       @Positive int quantity, UUID productId, @Size(max = 300) String note,
+                                       @Valid MedicineDirections directions) {
     }
 
     public record SignConsultationRequest(@NotNull ConsultationOutcome outcome, String outcomeNotes,
@@ -249,7 +253,8 @@ public class ConsultationController {
                                         String investigationsNotes, String treatmentPlan,
                                         ConsultationOutcome outcome, String outcomeNotes, Instant createdAt,
                                         Instant updatedAt, List<DiagnosisResponse> diagnoses,
-                                        VitalsBypassReason vitalsBypassReason, String vitalsBypassNote) {
+                                        VitalsBypassReason vitalsBypassReason, String vitalsBypassNote,
+                                        String prescriptionDraft) {
         static ConsultationResponse from(Consultation c, List<DiagnosisResponse> diagnoses, String authorName,
                                           String signedByName) {
             return new ConsultationResponse(c.getId(), c.getVisitId(), c.getStatus(),
@@ -258,7 +263,7 @@ public class ConsultationController {
                     c.getCurrentMedications(), c.getAllergyStatus(), c.getAllergyDetail(), c.getExaminationNotes(),
                     c.getInvestigationsNotes(), c.getTreatmentPlan(), c.getOutcome(), c.getOutcomeNotes(),
                     c.getCreatedAt(), c.getUpdatedAt(), diagnoses, c.getVitalsBypassReason(),
-                    c.getVitalsBypassNote());
+                    c.getVitalsBypassNote(), c.getPrescriptionDraft());
         }
     }
 }

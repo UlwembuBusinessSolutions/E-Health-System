@@ -107,6 +107,10 @@ public class Consultation {
     @Column(name = "vitals_bypass_note", length = 300)
     private String vitalsBypassNote;
 
+    // The doctor's unsigned prescription as JSON, kept so closing the record loses nothing.
+    @Column(name = "prescription_draft")
+    private String prescriptionDraft;
+
     public Consultation(UUID visitId, UUID authorUserId, Instant now) {
         this.visitId = visitId;
         this.status = ConsultationStatus.DRAFT;
@@ -181,6 +185,14 @@ public class Consultation {
 
     public String getAmendmentReason() {
         return amendmentReason;
+    }
+
+    public String getPrescriptionDraft() {
+        return prescriptionDraft;
+    }
+
+    public void savePrescriptionDraft(String json) {
+        this.prescriptionDraft = json;
     }
 
     public VitalsBypassReason getVitalsBypassReason() {

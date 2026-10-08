@@ -164,6 +164,10 @@ public class ConsultationService {
         consultation.updateFields(cmd.relevantHistory(), cmd.currentMedications(), cmd.allergyStatus(),
                 cmd.allergyDetail(), cmd.examinationNotes(), cmd.investigationsNotes(), cmd.treatmentPlan(),
                 clock.instant());
+        // null means the caller did not send a prescription, so what is saved stays as it is.
+        if (cmd.prescriptionDraft() != null) {
+            consultation.savePrescriptionDraft(cmd.prescriptionDraft().isBlank() ? null : cmd.prescriptionDraft());
+        }
         consultationRepository.save(consultation);
         return consultation;
     }
@@ -461,7 +465,15 @@ public class ConsultationService {
     public record UpdateConsultationCommand(String relevantHistory, String currentMedications,
                                              AllergyStatus allergyStatus, String allergyDetail,
                                              String examinationNotes, String investigationsNotes,
-                                             String treatmentPlan) {
+                                             String treatmentPlan, String prescriptionDraft) {
+
+        public UpdateConsultationCommand(String relevantHistory, String currentMedications,
+                                         AllergyStatus allergyStatus, String allergyDetail,
+                                         String examinationNotes, String investigationsNotes,
+                                         String treatmentPlan) {
+            this(relevantHistory, currentMedications, allergyStatus, allergyDetail, examinationNotes,
+                    investigationsNotes, treatmentPlan, null);
+        }
     }
 
     public record DiagnosisInput(String diagnosisText, boolean isPrimary, DiagnosisCertainty certainty) {
