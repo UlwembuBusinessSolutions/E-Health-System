@@ -92,8 +92,8 @@ public class ConsultationController {
     public ResponseEntity<DiagnosisResponse> addDiagnosis(@PathVariable UUID id,
                                                             @Valid @RequestBody DiagnosisRequest request,
                                                             @AuthenticationPrincipal AuthenticatedPrincipal staff) {
-        ConsultationDiagnosis diagnosis = consultationService.addDiagnosis(id, request.diagnosisText(),
-                request.isPrimary(), request.certainty(), staff.userId());
+        ConsultationDiagnosis diagnosis = consultationService.addDiagnosis(id, request.diagnosisId(),
+                request.diagnosisText(), request.isPrimary(), request.certainty(), staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(DiagnosisResponse.from(diagnosis));
     }
 
@@ -119,7 +119,8 @@ public class ConsultationController {
                                                         @Valid @RequestBody AmendConsultationRequest request,
                                                         @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         var diagnoses = request.diagnoses().stream()
-                .map(d -> new ConsultationService.DiagnosisInput(d.diagnosisText(), d.isPrimary(), d.certainty()))
+                .map(d -> new ConsultationService.DiagnosisInput(d.diagnosisText(), d.isPrimary(), d.certainty(),
+                        d.diagnosisId()))
                 .toList();
         var cmd = new ConsultationService.AmendConsultationCommand(request.relevantHistory(),
                 request.currentMedications(), request.allergyStatus(), request.allergyDetail(),
@@ -189,8 +190,10 @@ public class ConsultationController {
                                            @Size(max = 300) String vitalsBypassNote) {
     }
 
-    public record DiagnosisRequest(@NotBlank String diagnosisText, boolean isPrimary,
-                                    DiagnosisCertainty certainty) {
+    // Either diagnosisId (picked from the catalogue) or diagnosisText (typed) is needed; a typed name that is
+    // not in the catalogue is added to it.
+    public record DiagnosisRequest(@Size(max = 200) String diagnosisText, boolean isPrimary,
+                                    DiagnosisCertainty certainty, UUID diagnosisId) {
     }
 
     // Required only when outcome is SEND_TO_PHARMACY (ConsultationService.
@@ -231,10 +234,11 @@ public class ConsultationController {
 
     public record DiagnosisResponse(UUID id, String diagnosisText, boolean isPrimary, DiagnosisCertainty certainty,
                                      int sortOrder, String codingSystem, String catalogueVersion, String code,
-                                     String displayText) {
+                                     String displayText, UUID diagnosisId) {
         static DiagnosisResponse from(ConsultationDiagnosis d) {
             return new DiagnosisResponse(d.getId(), d.getDiagnosisText(), d.isPrimary(), d.getCertainty(),
-                    d.getSortOrder(), d.getCodingSystem(), d.getCatalogueVersion(), d.getCode(), d.getDisplayText());
+                    d.getSortOrder(), d.getCodingSystem(), d.getCatalogueVersion(), d.getCode(), d.getDisplayText(),
+                    d.getDiagnosisId());
         }
     }
 
