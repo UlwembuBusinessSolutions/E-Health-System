@@ -25,10 +25,10 @@ function formatDateTime(iso: string): string {
 export function AuditPage() {
   const auditQuery = useQuery({
     queryKey: ["tenant", "audit"],
-    queryFn: listTenantAudit,
+    queryFn: () => listTenantAudit(),
   });
 
-  const entries = auditQuery.data ?? [];
+  const entries = auditQuery.data?.items ?? [];
 
   return (
     <div>
@@ -93,10 +93,10 @@ function AuditRow({ entry }: { entry: TenantAuditEntry }) {
         <p className="text-[12px] text-text-secondary">{entry.entityId ?? "—"}</p>
       </td>
       <td className="px-5 py-3.5 text-[13px] text-text-primary">
-        <p>{entry.userId ?? "System"}</p>
+        <p>{entry.actorName ?? "System"}</p>
       </td>
       <td className="px-5 py-3.5 text-[13px] text-text-primary">
-        {entry.facilityId ?? "—"}
+        —
       </td>
       <td className="max-w-[220px] px-5 py-3.5 text-[12px] text-text-secondary">
         {entry.ipAddress && <p className="font-mono">{entry.ipAddress}</p>}

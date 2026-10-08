@@ -104,6 +104,8 @@ export function AddProductScreen() {
         manufacturer: values.manufacturer || undefined,
         batchTracked: values.batchTracked,
         expiryTracked: values.expiryTracked,
+        serialTracked: false,
+        coldChain: false,
         storageInstructions: values.storageInstructions || undefined,
         facilityId: values.facilityId,
         reorderThreshold: values.reorderThreshold ? Number(values.reorderThreshold) : undefined,
