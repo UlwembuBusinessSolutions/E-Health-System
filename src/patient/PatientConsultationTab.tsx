@@ -83,7 +83,7 @@ function outcomeLabel(outcome: ConsultationOutcome | null): string {
   return OUTCOME_CHOICES.find((o) => o.value === outcome)?.label ?? "—";
 }
 
-export function PatientConsultationTab({ visitId }: { visitId: string | null }) {
+export function PatientConsultationTab({ visitId, onTakeVitals }: { visitId: string | null; onTakeVitals?: () => void }) {
   const queryClient = useQueryClient();
 
   const currentQuery = useQuery({
@@ -155,6 +155,7 @@ export function PatientConsultationTab({ visitId }: { visitId: string | null }) 
           loading={startConsultation.isPending}
           error={startError}
           onStart={(bypass) => startConsultation.mutate(bypass)}
+          onTakeVitals={onTakeVitals}
         />
       ) : (
         <>

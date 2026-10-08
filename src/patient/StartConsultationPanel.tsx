@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { HeartPulse, Stethoscope, TriangleAlert } from "lucide-react";
 import { Button } from "@/shared/components/Button";
 import type { VitalsBypass, VitalsBypassReason } from "@/shared/api/consultations";
@@ -11,6 +10,8 @@ interface StartConsultationPanelProps {
   loading: boolean;
   error: string | null;
   onStart: (bypass?: VitalsBypass) => void;
+  /** Takes the doctor to this patient's Vitals tab, where vitals are taken for the visit. */
+  onTakeVitals?: () => void;
 }
 
 const MIN_NOTE_LENGTH = 3;
@@ -24,7 +25,7 @@ const REASON_OPTIONS: ReasonOption<VitalsBypassReason>[] = [
 // Starting a consultation. A visit with vitals starts straight away. One without them
 // asks why they are being skipped, and that reason stays on the consultation record, so a
 // missing reading is never mistaken for a normal one.
-export function StartConsultationPanel({ vitalsMissing, loading, error, onStart }: StartConsultationPanelProps) {
+export function StartConsultationPanel({ vitalsMissing, loading, error, onStart, onTakeVitals }: StartConsultationPanelProps) {
   const [reason, setReason] = useState<VitalsBypassReason | null>(null);
   const [note, setNote] = useState("");
 
@@ -48,12 +49,9 @@ export function StartConsultationPanel({ vitalsMissing, loading, error, onStart 
             No vitals have been taken for this visit.
           </p>
           <div>
-            <Link
-              to="/app/vitals"
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border-strong bg-surface-raised px-4 text-[14px] font-semibold text-text-primary hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-            >
-              <HeartPulse className="size-4" aria-hidden /> Take vitals first
-            </Link>
+            <Button variant="secondary" icon={<HeartPulse className="size-4" aria-hidden />} onClick={onTakeVitals}>
+              Take vitals first
+            </Button>
           </div>
           <ReasonPicker
             legend="Or start without them. Why?"
