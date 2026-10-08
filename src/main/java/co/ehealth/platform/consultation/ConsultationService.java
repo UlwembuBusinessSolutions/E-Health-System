@@ -123,6 +123,15 @@ public class ConsultationService {
     @Transactional
     public Consultation createDraft(UUID visitId, UUID staffUserId, VitalsBypassReason bypassReason,
                                     String bypassNote) {
+        return createDraft(visitId, staffUserId, bypassReason, bypassNote, null);
+    }
+
+    // continueFromConsultationId carries on from an earlier signed consultation of the same episode (see
+    // findContinuable): the draft starts with a copy of its notes and diagnoses, and the vitals taken on
+    // the earlier visit count, so no reason for skipping them is needed. Null starts a fresh consultation.
+    @Transactional
+    public Consultation createDraft(UUID visitId, UUID staffUserId, VitalsBypassReason bypassReason,
+                                    String bypassNote, UUID continueFromConsultationId) {
         requireDraftAccess();
         Visit visit = visitRepository.findById(visitId).orElseThrow(VisitNotFoundException::new);
         Patient patient = patientService.get(visit.getPatientId());
@@ -136,7 +145,15 @@ public class ConsultationService {
             return existingDraft.get();
         }
 
-        boolean hasVitals = !triageRepository.findActiveOrderByObservedAtDesc(visitId).isEmpty();
+        EarlierConsultation earlier = null;
+        if (continueFromConsultationId != null) {
+            earlier = findContinuable(visitId)
+                    .filter(candidate -> candidate.consultation().getId().equals(continueFromConsultationId))
+                    .orElseThrow(() -> new InvalidConsultationException(
+                            "That consultation cannot be continued on this visit."));
+        }
+        boolean hasVitals = !triageRepository.findActiveOrderByObservedAtDesc(visitId).isEmpty()
+                || (earlier != null && earlier.vitalsVisitId() != null);
         String note = bypassNote == null ? null : bypassNote.trim();
         if (!hasVitals) {
             if (bypassReason == null) {
@@ -153,11 +170,101 @@ public class ConsultationService {
         if (!hasVitals) {
             consultation.recordVitalsBypass(bypassReason, note == null || note.isEmpty() ? null : note);
         }
+        if (earlier != null) {
+            consultation.continueFrom(earlier.consultation(), clock.instant());
+        }
         consultationRepository.save(consultation);
+        if (earlier != null) {
+            copyDiagnoses(earlier.consultation().getId(), consultation.getId());
+        }
         auditLogService.append(staffUserId, visit.getFacilityId(), "CONSULTATION_DRAFT_CREATED", "Consultation",
-                consultation.getId().toString(), null, hasVitals ? null
-                        : AuditDetails.of("vitalsBypassReason", bypassReason.name(), "vitalsBypassNote", note));
+                consultation.getId().toString(), null, createdDetails(hasVitals, bypassReason, note, earlier));
         return consultation;
+    }
+
+    private static String createdDetails(boolean hasVitals, VitalsBypassReason bypassReason, String note,
+                                         EarlierConsultation earlier) {
+        if (earlier != null) {
+            return AuditDetails.of("continuedFromConsultationId", earlier.consultation().getId().toString());
+        }
+        return hasVitals ? null
+                : AuditDetails.of("vitalsBypassReason", bypassReason.name(), "vitalsBypassNote", note);
+    }
+
+    private void copyDiagnoses(UUID fromConsultationId, UUID toConsultationId) {
+        for (ConsultationDiagnosis original : consultationDiagnosisRepository
+                .findByConsultationIdOrderBySortOrderAsc(fromConsultationId)) {
+            ConsultationDiagnosis copy = new ConsultationDiagnosis(toConsultationId, original.getDiagnosisText(),
+                    original.isPrimary(), original.getCertainty(), original.getSortOrder());
+            if (original.getDiagnosisId() != null) {
+                diagnosisCatalogue.find(original.getDiagnosisId()).ifPresent(copy::applyCatalogueEntry);
+            }
+            consultationDiagnosisRepository.save(copy);
+        }
+    }
+
+    /**
+     * What the doctor can carry on from. {@code vitalsVisitId} is the nearest visit in the chain, this one
+     * first, that has vitals on record; null when none does.
+     */
+    public record EarlierConsultation(Consultation consultation, UUID visitId, String facilityName,
+                                      UUID vitalsVisitId) {
+    }
+
+    private static final int MAX_VISIT_CHAIN = 10;
+
+    /**
+     * The patient's earlier signed consultation for this episode of care. A visit made by transferring a
+     * patient points back at the visit it replaced, so following those links finds the consultation
+     * from before the patient was sent to the pharmacy or another facility. Empty when this visit
+     * already has a consultation, or nothing earlier was signed.
+     */
+    public Optional<EarlierConsultation> findContinuable(UUID visitId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        if (getCurrent(visitId).isPresent()) {
+            return Optional.empty();
+        }
+        Visit visit = visitRepository.findById(visitId).orElseThrow(VisitNotFoundException::new);
+        UUID previous = visit.getTransferredFromVisitId();
+        for (int step = 0; step < MAX_VISIT_CHAIN && previous != null; step++) {
+            Optional<Visit> earlierVisit = visitRepository.findById(previous);
+            if (earlierVisit.isEmpty()) {
+                return Optional.empty();
+            }
+            Optional<Consultation> signed = consultationRepository
+                    .findFirstByVisitIdAndStatusOrderByCreatedAtDesc(previous, ConsultationStatus.SIGNED);
+            if (signed.isPresent()) {
+                return Optional.of(describe(signed.get(), earlierVisit.get(), visitId));
+            }
+            previous = earlierVisit.get().getTransferredFromVisitId();
+        }
+        return Optional.empty();
+    }
+
+    /** Where this consultation carried on from, if it did. */
+    public Optional<EarlierConsultation> findContinuedFrom(Consultation consultation) {
+        UUID earlierId = consultation.getContinuedFromConsultationId();
+        if (earlierId == null) {
+            return Optional.empty();
+        }
+        return consultationRepository.findById(earlierId).flatMap(earlier -> visitRepository
+                .findById(earlier.getVisitId()).map(visit -> describe(earlier, visit, consultation.getVisitId())));
+    }
+
+    private EarlierConsultation describe(Consultation earlier, Visit earlierVisit, UUID currentVisitId) {
+        return new EarlierConsultation(earlier, earlierVisit.getId(),
+                facilityService.get(earlierVisit.getFacilityId()).getName(), nearestVisitWithVitals(currentVisitId));
+    }
+
+    private UUID nearestVisitWithVitals(UUID visitId) {
+        UUID candidate = visitId;
+        for (int step = 0; step <= MAX_VISIT_CHAIN && candidate != null; step++) {
+            if (!triageRepository.findActiveOrderByObservedAtDesc(candidate).isEmpty()) {
+                return candidate;
+            }
+            candidate = visitRepository.findById(candidate).map(Visit::getTransferredFromVisitId).orElse(null);
+        }
+        return null;
     }
 
     @Transactional

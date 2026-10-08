@@ -49,7 +49,9 @@ public class ConsultationController {
                                                               @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         VitalsBypassReason reason = request == null ? null : request.vitalsBypassReason();
         String note = request == null ? null : request.vitalsBypassNote();
-        Consultation consultation = consultationService.createDraft(visitId, staff.userId(), reason, note);
+        UUID continueFrom = request == null ? null : request.continueFromConsultationId();
+        Consultation consultation = consultationService.createDraft(visitId, staff.userId(), reason, note,
+                continueFrom);
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(consultation));
     }
 
@@ -71,6 +73,16 @@ public class ConsultationController {
     @GetMapping("/api/v1/visits/{visitId}/consultations/current")
     public ResponseEntity<Map<String, Object>> current(@PathVariable UUID visitId) {
         var item = consultationService.getCurrent(visitId).map(this::toResponse).orElse(null);
+        Map<String, Object> body = new HashMap<>();
+        body.put("item", item);
+        return ResponseEntity.ok(body);
+    }
+
+    // The earlier consultation of this episode the doctor can carry on from, for a visit made when the
+    // patient was transferred and came back. Null when there is nothing to continue.
+    @GetMapping("/api/v1/visits/{visitId}/consultations/continuable")
+    public ResponseEntity<Map<String, Object>> continuable(@PathVariable UUID visitId) {
+        var item = consultationService.findContinuable(visitId).map(this::toEarlierResponse).orElse(null);
         Map<String, Object> body = new HashMap<>();
         body.put("item", item);
         return ResponseEntity.ok(body);
@@ -164,8 +176,18 @@ public class ConsultationController {
 
     private ConsultationResponse toResponse(Consultation c, Map<UUID, String> names) {
         var diagnoses = consultationService.getDiagnoses(c.getId()).stream().map(DiagnosisResponse::from).toList();
+        var continuedFrom = consultationService.findContinuedFrom(c).map(this::toEarlierResponse).orElse(null);
         return ConsultationResponse.from(c, diagnoses, names.get(c.getAuthorUserId()),
-                c.getSignedByUserId() == null ? null : names.get(c.getSignedByUserId()));
+                c.getSignedByUserId() == null ? null : names.get(c.getSignedByUserId()), continuedFrom);
+    }
+
+    private EarlierConsultationResponse toEarlierResponse(ConsultationService.EarlierConsultation earlier) {
+        Consultation c = earlier.consultation();
+        var diagnoses = consultationService.getDiagnoses(c.getId()).stream().map(DiagnosisResponse::from).toList();
+        Map<UUID, String> names = resolveNames(List.of(c));
+        return new EarlierConsultationResponse(c.getId(), earlier.visitId(), earlier.facilityName(), c.getSignedAt(),
+                c.getSignedByUserId() == null ? null : names.get(c.getSignedByUserId()), c.getOutcome(), diagnoses,
+                earlier.vitalsVisitId());
     }
 
     private Map<UUID, String> resolveNames(List<Consultation> consultations) {
@@ -187,7 +209,8 @@ public class ConsultationController {
 
     // Both optional: only needed when the visit has no vitals on record.
     public record StartConsultationRequest(VitalsBypassReason vitalsBypassReason,
-                                           @Size(max = 300) String vitalsBypassNote) {
+                                           @Size(max = 300) String vitalsBypassNote,
+                                           UUID continueFromConsultationId) {
     }
 
     // Either diagnosisId (picked from the catalogue) or diagnosisText (typed) is needed; a typed name that is
@@ -249,6 +272,12 @@ public class ConsultationController {
     // authorUserId/signedByUserId to real names — "who consulted this
     // patient," same reasoning PrescriptionResponse already applies to
     // prescriberName/dispensedByName.
+    // An earlier signed consultation of the same episode of care, and where the patient's vitals are.
+    public record EarlierConsultationResponse(UUID consultationId, UUID visitId, String facilityName,
+                                               Instant signedAt, String signedByName, ConsultationOutcome outcome,
+                                               List<DiagnosisResponse> diagnoses, UUID vitalsVisitId) {
+    }
+
     public record ConsultationResponse(UUID id, UUID visitId, ConsultationStatus status,
                                         UUID supersedesConsultationId, String amendmentReason, UUID authorUserId,
                                         String authorName, UUID signedByUserId, String signedByName,
@@ -258,16 +287,16 @@ public class ConsultationController {
                                         ConsultationOutcome outcome, String outcomeNotes, Instant createdAt,
                                         Instant updatedAt, List<DiagnosisResponse> diagnoses,
                                         VitalsBypassReason vitalsBypassReason, String vitalsBypassNote,
-                                        String prescriptionDraft) {
+                                        String prescriptionDraft, EarlierConsultationResponse continuedFrom) {
         static ConsultationResponse from(Consultation c, List<DiagnosisResponse> diagnoses, String authorName,
-                                          String signedByName) {
+                                          String signedByName, EarlierConsultationResponse continuedFrom) {
             return new ConsultationResponse(c.getId(), c.getVisitId(), c.getStatus(),
                     c.getSupersedesConsultationId(), c.getAmendmentReason(), c.getAuthorUserId(), authorName,
                     c.getSignedByUserId(), signedByName, c.getSignedAt(), c.getRelevantHistory(),
                     c.getCurrentMedications(), c.getAllergyStatus(), c.getAllergyDetail(), c.getExaminationNotes(),
                     c.getInvestigationsNotes(), c.getTreatmentPlan(), c.getOutcome(), c.getOutcomeNotes(),
                     c.getCreatedAt(), c.getUpdatedAt(), diagnoses, c.getVitalsBypassReason(),
-                    c.getVitalsBypassNote(), c.getPrescriptionDraft());
+                    c.getVitalsBypassNote(), c.getPrescriptionDraft(), continuedFrom);
         }
     }
 }
