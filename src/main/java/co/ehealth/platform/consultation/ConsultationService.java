@@ -196,18 +196,19 @@ public class ConsultationService {
     @Transactional
     public Consultation sign(UUID id, ConsultationOutcome outcome, String outcomeNotes,
                               List<PrescriptionService.PrescriptionItemInput> pharmacyItems,
+                              List<PrescriptionService.PrescriptionPurchaseItemInput> purchaseItems,
                               UUID destinationFacilityId, UUID staffUserId) {
         requireSignAccess();
         if (outcome == null) {
             throw new InvalidConsultationException("Choose what happens next before signing.");
         }
-        requirePharmacyItemsIfNeeded(outcome, pharmacyItems);
+        requirePharmacyItemsIfNeeded(outcome, pharmacyItems, purchaseItems);
         requireDestinationFacilityIfNeeded(outcome, destinationFacilityId);
         Consultation consultation = findConsultation(id);
         requireDraft(consultation);
         consultation.sign(outcome, outcomeNotes, staffUserId, clock.instant());
         consultationRepository.save(consultation);
-        handleSendToPharmacy(consultation, pharmacyItems, staffUserId);
+        handleSendToPharmacy(consultation, pharmacyItems, purchaseItems, staffUserId);
         handleReferOrTransfer(consultation, destinationFacilityId, staffUserId);
 
         Visit visit = visitRepository.findById(consultation.getVisitId()).orElseThrow(VisitNotFoundException::new);
@@ -230,7 +231,7 @@ public class ConsultationService {
         if (cmd.outcome() == null) {
             throw new InvalidConsultationException("Choose what happens next before signing.");
         }
-        requirePharmacyItemsIfNeeded(cmd.outcome(), cmd.pharmacyItems());
+        requirePharmacyItemsIfNeeded(cmd.outcome(), cmd.pharmacyItems(), cmd.purchaseItems());
         requireDestinationFacilityIfNeeded(cmd.outcome(), cmd.destinationFacilityId());
         Consultation original = findConsultation(originalId);
         if (original.getStatus() != ConsultationStatus.SIGNED) {
@@ -253,7 +254,7 @@ public class ConsultationService {
         amendment.sign(cmd.outcome(), cmd.outcomeNotes(), staffUserId, now);
         amendment.linkSupersedes(original.getId(), cmd.amendmentReason());
         consultationRepository.save(amendment);
-        handleSendToPharmacy(amendment, cmd.pharmacyItems(), staffUserId);
+        handleSendToPharmacy(amendment, cmd.pharmacyItems(), cmd.purchaseItems(), staffUserId);
         handleReferOrTransfer(amendment, cmd.destinationFacilityId(), staffUserId);
 
         original.markSuperseded();
@@ -327,8 +328,11 @@ public class ConsultationService {
     // fail confusingly inside PrescriptionService.create() (an empty items
     // list) or silently create nothing for pharmacy to dispense.
     private void requirePharmacyItemsIfNeeded(ConsultationOutcome outcome,
-                                               List<PrescriptionService.PrescriptionItemInput> pharmacyItems) {
-        if (outcome == ConsultationOutcome.SEND_TO_PHARMACY && (pharmacyItems == null || pharmacyItems.isEmpty())) {
+                                               List<PrescriptionService.PrescriptionItemInput> pharmacyItems,
+                                               List<PrescriptionService.PrescriptionPurchaseItemInput> purchaseItems) {
+        boolean nothingPrescribed = (pharmacyItems == null || pharmacyItems.isEmpty())
+                && (purchaseItems == null || purchaseItems.isEmpty());
+        if (outcome == ConsultationOutcome.SEND_TO_PHARMACY && nothingPrescribed) {
             throw new InvalidConsultationException("At least one medicine is required to send to pharmacy.");
         }
     }
@@ -361,6 +365,7 @@ public class ConsultationService {
     // consultation whose patient was never actually sent anywhere.
     private void handleSendToPharmacy(Consultation consultation,
                                        List<PrescriptionService.PrescriptionItemInput> pharmacyItems,
+                                       List<PrescriptionService.PrescriptionPurchaseItemInput> purchaseItems,
                                        UUID staffUserId) {
         if (consultation.getOutcome() != ConsultationOutcome.SEND_TO_PHARMACY) {
             return;
@@ -369,7 +374,7 @@ public class ConsultationService {
         QueueService.QueueEntryView transferred = queueService.transferVisitToFacility(consultation.getVisitId(),
                 pharmacy.getId(), "Sent to pharmacy from signed consultation", staffUserId);
         var prescriptionCommand = new PrescriptionService.CreatePrescriptionCommand(
-                transferred.token().getVisitId(), pharmacyItems, consultation.getId());
+                transferred.token().getVisitId(), pharmacyItems, consultation.getId(), purchaseItems);
         prescriptionService.create(prescriptionCommand, staffUserId);
     }
 
@@ -437,6 +442,7 @@ public class ConsultationService {
                                             ConsultationOutcome outcome, String outcomeNotes,
                                             String amendmentReason,
                                             List<PrescriptionService.PrescriptionItemInput> pharmacyItems,
+                                            List<PrescriptionService.PrescriptionPurchaseItemInput> purchaseItems,
                                             UUID destinationFacilityId) {
     }
 }
