@@ -33,12 +33,17 @@ public interface DiagnosisRepository extends JpaRepository<Diagnosis, UUID> {
         long getTotal();
     }
 
-    // How often each diagnosis was recorded on consultations signed in the period.
+    // How often each diagnosis was recorded on consultations signed in the period. A consultation that carries
+    // on from an earlier one starts with a copy of its diagnoses, so a diagnosis it only inherited is not
+    // counted a second time: one episode of care counts once.
     @Query(value = "SELECT d.id AS diagnosisId, d.code AS code, d.name AS name, d.source AS source, count(*) AS total "
             + "FROM consultation_diagnoses cd "
             + "JOIN consultations c ON c.id = cd.consultation_id "
             + "JOIN diagnoses d ON d.id = cd.diagnosis_id "
             + "WHERE c.status = 'SIGNED' AND c.signed_at >= :from AND c.signed_at < :to "
+            + "AND NOT EXISTS (SELECT 1 FROM consultation_diagnoses inherited "
+            + "WHERE inherited.consultation_id = c.continued_from_consultation_id "
+            + "AND inherited.diagnosis_id = cd.diagnosis_id) "
             + "GROUP BY d.id, d.code, d.name, d.source ORDER BY total DESC, d.name", nativeQuery = true)
     List<Count> countsBetween(@Param("from") Instant from, @Param("to") Instant to);
 }

@@ -111,6 +111,10 @@ public class Consultation {
     @Column(name = "prescription_draft")
     private String prescriptionDraft;
 
+    // The earlier signed consultation this one carries on from, when the patient came back on a new visit.
+    @Column(name = "continued_from_consultation_id")
+    private UUID continuedFromConsultationId;
+
     public Consultation(UUID visitId, UUID authorUserId, Instant now) {
         this.visitId = visitId;
         this.status = ConsultationStatus.DRAFT;
@@ -201,6 +205,17 @@ public class Consultation {
 
     public String getVitalsBypassNote() {
         return vitalsBypassNote;
+    }
+
+    public UUID getContinuedFromConsultationId() {
+        return continuedFromConsultationId;
+    }
+
+    public void continueFrom(Consultation earlier, Instant now) {
+        this.continuedFromConsultationId = earlier.getId();
+        updateFields(earlier.getRelevantHistory(), earlier.getCurrentMedications(), earlier.getAllergyStatus(),
+                earlier.getAllergyDetail(), earlier.getExaminationNotes(), earlier.getInvestigationsNotes(),
+                earlier.getTreatmentPlan(), now);
     }
 
     public void recordVitalsBypass(VitalsBypassReason reason, String note) {
