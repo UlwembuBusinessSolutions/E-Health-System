@@ -22,6 +22,7 @@ services:
     build: .
     ports:
       - "8081:8081"
+      - "5005:5005"
     environment:
       # The only override actually needed. application.yml's own default
       # (localhost:5432) assumes the app runs on the host — inside this
@@ -46,7 +47,7 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ../Frontend
+    build: ../../frontend/E-Health-System
     ports:
       - "5173:5173"
     environment:
@@ -64,7 +65,7 @@ services:
       # `docker-compose build`) win inside the container — without this
       # second, more specific mount, the bind mount above would shadow it
       # with whatever (or nothing) is in node_modules on the host.
-      - ../Frontend:/app
+      - ../../frontend/E-Health-System:/app
       - frontend_node_modules:/app/node_modules
     depends_on:
       - api

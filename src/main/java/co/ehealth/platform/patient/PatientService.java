@@ -44,8 +44,8 @@ public class PatientService {
     private final OrganizationRepository organizationRepository;
 
     public PatientService(PatientRepository patientRepository, PatientFieldHistoryRepository fieldHistoryRepository,
-                           AuditLogService auditLogService, Clock clock, PermissionService permissionService,
-                           OrganizationRepository organizationRepository) {
+            AuditLogService auditLogService, Clock clock, PermissionService permissionService,
+            OrganizationRepository organizationRepository) {
         this.patientRepository = patientRepository;
         this.fieldHistoryRepository = fieldHistoryRepository;
         this.auditLogService = auditLogService;
@@ -95,6 +95,23 @@ public class PatientService {
         return createPatient(cmd, null);
     }
 
+    // Offline-sync entry point (PREG offline story). Reuses createPatient()
+    // unchanged, so ID-number parsing, MPI generation, duplicate check and the
+    // PATIENT_REGISTERED audit row behave exactly as for online registration.
+    // Only adds the original capture time and a distinct audit row.
+    // OfflineRegistrationProcessor pre-checks the ID number and validates
+    // capturedAt before calling this.
+    @Transactional
+    public Patient registerOffline(RegisterPatientCommand cmd, UUID registeredByUserId, Instant capturedAt) {
+        permissionService.requireAccess(ModuleCode.PREG, PermissionLevel.MANAGE);
+        Patient patient = createPatient(cmd, registeredByUserId);
+        patient.markCapturedOffline(capturedAt);
+        patientRepository.save(patient);
+        auditLogService.append(registeredByUserId, null, "PATIENT_SYNCED_FROM_OFFLINE", "Patient",
+                patient.getId().toString(), null, null);
+        return patient;
+    }
+
     private Patient createPatient(RegisterPatientCommand cmd, UUID registeredByUserId) {
         if (patientRepository.existsByIdNumber(cmd.idNumber())) {
             throw new DuplicateFieldException("idNumber", "A patient with this ID number is already registered.");
@@ -103,7 +120,8 @@ public class PatientService {
 
         Organization organization = organizationRepository.findBySchemaName(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new IllegalStateException("Unknown organization for current tenant"));
-        String mpiNumber = MpiNumberFormat.generate(organization.getTenantCode(), patientRepository.nextMpiSequenceValue());
+        String mpiNumber = MpiNumberFormat.generate(organization.getTenantCode(),
+                patientRepository.nextMpiSequenceValue());
         Patient patient = new Patient(mpiNumber, cmd.firstName(), cmd.lastName(), parsed.dateOfBirth(),
                 parsed.gender(), parsed.citizenshipStatus(), cmd.idNumber(), cmd.address(), cmd.contactNumber(),
                 cmd.email(), cmd.medicalAidProvider(), cmd.medicalAidNumber(), cmd.passportNumber(),
@@ -221,7 +239,7 @@ public class PatientService {
     // an empty form field round-trips isn't a real change worth a history
     // row and a forced reason.
     private void diff(List<PatientFieldHistory> changes, UUID patientId, String field, String oldVal, String newVal,
-                       String reason, UUID userId) {
+            String reason, UUID userId) {
         String normalizedOld = oldVal == null ? "" : oldVal;
         String normalizedNew = newVal == null ? "" : newVal;
         if (normalizedOld.equals(normalizedNew)) {
@@ -262,7 +280,7 @@ public class PatientService {
     // filter behaves the same regardless of what machine the API happens
     // to be deployed on.
     public Page<Patient> list(int page, int size, String sortBy, String sortDir, String gender, String medicalAid,
-                               String mpiNumber, String citizenship, String createdFrom, String createdTo) {
+            String mpiNumber, String citizenship, String createdFrom, String createdTo) {
         permissionService.requireAccess(ModuleCode.PREG, PermissionLevel.VIEW);
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
@@ -360,8 +378,8 @@ public class PatientService {
     }
 
     public record RegisterPatientCommand(String firstName, String lastName, String idNumber, String address,
-                                          String contactNumber, String email, String medicalAidProvider,
-                                          String medicalAidNumber, String passportNumber, LocalDate passportExpiry) {
+            String contactNumber, String email, String medicalAidProvider,
+            String medicalAidNumber, String passportNumber, LocalDate passportExpiry) {
     }
 
     // No idNumber/dateOfBirth/gender/citizenshipStatus/mpiNumber here at
@@ -370,7 +388,7 @@ public class PatientService {
     // why-note on why this doesn't try to classify "clinically
     // significant" fields).
     public record UpdatePatientCommand(String firstName, String lastName, String address, String contactNumber,
-                                        String email, String medicalAidProvider, String medicalAidNumber,
-                                        String passportNumber, LocalDate passportExpiry, String reason) {
+            String email, String medicalAidProvider, String medicalAidNumber,
+            String passportNumber, LocalDate passportExpiry, String reason) {
     }
 }
