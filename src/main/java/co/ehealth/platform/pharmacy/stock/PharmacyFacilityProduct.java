@@ -52,9 +52,15 @@ public class PharmacyFacilityProduct {
         this.createdAt = createdAt;
     }
 
+    // A level that isn't supplied keeps its current value, so editing the
+    // reorder level alone can't wipe the target.
     public void updateLevels(Integer reorderThreshold, Integer targetQuantity) {
-        this.reorderThreshold = reorderThreshold;
-        this.targetQuantity = targetQuantity;
+        if (reorderThreshold != null) {
+            this.reorderThreshold = reorderThreshold;
+        }
+        if (targetQuantity != null) {
+            this.targetQuantity = targetQuantity;
+        }
     }
 
     public UUID getId() {

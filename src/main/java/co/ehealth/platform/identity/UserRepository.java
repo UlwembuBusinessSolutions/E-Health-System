@@ -1,7 +1,5 @@
 package co.ehealth.platform.identity;
 
-import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -12,14 +10,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select u from User u where u.email = :email")
-    Optional<User> findForLoginByEmail(@Param("email") String email);
-
-    @Modifying
-    @Query("update User u set u.activeSessionJti = null, u.activeSessionExpiresAt = null where u.activeSessionJti = :jti")
-    int clearActiveSession(@Param("jti") String jti);
 
     // The login lookup — email is the sole login identifier. employee_number
     // remains a real column but isn't queried for authentication anywhere.
@@ -40,6 +30,21 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     boolean existsByHpcsaNumber(String hpcsaNumber);
 
     boolean existsBySapcNumber(String sapcNumber);
+
+    // StaffService.updateDetails()'s own uniqueness checks — same
+    // constraints as createStaff() enforces, but excluding the record
+    // being edited itself, so saving a staff member's own unchanged
+    // contact number/id number/license number doesn't falsely collide
+    // with the very row it belongs to.
+    boolean existsByContactNumberAndIdNot(String contactNumber, UUID id);
+
+    boolean existsByIdNumberAndIdNot(String idNumber, UUID id);
+
+    boolean existsBySancNumberAndIdNot(String sancNumber, UUID id);
+
+    boolean existsByHpcsaNumberAndIdNot(String hpcsaNumber, UUID id);
+
+    boolean existsBySapcNumberAndIdNot(String sapcNumber, UUID id);
 
     @Query(value = "select r.name from roles r, user_roles ur where ur.role_id = r.id and ur.user_id = :userId",
            nativeQuery = true)

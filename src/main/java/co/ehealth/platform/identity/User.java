@@ -144,21 +144,6 @@ public class User {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
-    @Column(name = "active_session_jti", length = 36)
-    private String activeSessionJti;
-
-    @Column(name = "active_session_expires_at")
-    private Instant activeSessionExpiresAt;
-
-    public String getActiveSessionJti() { return activeSessionJti; }
-
-    public Instant getActiveSessionExpiresAt() { return activeSessionExpiresAt; }
-
-    public void activateSession(String jti, Instant expiresAt) {
-        this.activeSessionJti = jti;
-        this.activeSessionExpiresAt = expiresAt;
-    }
-
     protected User() {
     }
 
@@ -179,6 +164,24 @@ public class User {
     // ones it actually received a value for.
     public void setIdNumber(String idNumber) {
         this.idNumber = idNumber;
+    }
+
+    // StaffService.updateDetails() — name/contact are constructor
+    // parameters (every staff member has both from creation) but still
+    // need a way to correct later: a legal name change, a typo, a new
+    // phone number. Deliberately excludes email: that's the login
+    // identifier and changing it is a bigger operation (verification,
+    // notifying the person) this method doesn't attempt.
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
+    }
+
+    public void setContactNumber(String contactNumber) {
+        this.contactNumber = contactNumber;
     }
 
     public void setEmploymentStartDate(LocalDate employmentStartDate) {

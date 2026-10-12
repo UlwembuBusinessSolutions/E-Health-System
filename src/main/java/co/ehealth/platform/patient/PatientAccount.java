@@ -22,7 +22,7 @@ import java.util.UUID;
 // tenant's clinic relationship, same as staff.
 //
 // patientId is always resolved before this row is ever inserted —
-// PatientAuthService.register() either finds an existing Patient with a
+// PatientAuthService.verifyRegistration() either finds an existing Patient with a
 // matching idNumber (reception already registered this person) or creates
 // one on the spot (PatientService.registerSelf()), then constructs this
 // entity with that id already in hand. The column stays nullable at the DB
@@ -121,6 +121,17 @@ public class PatientAccount {
 
     public void setLastLoginAt(Instant at) {
         this.lastLoginAt = at;
+    }
+
+    public void resetPassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+        this.tokenVersion++;
+        this.failedLoginCount = 0;
+        this.lastFailedLoginAt = null;
+        if (this.status == PatientAccountStatus.LOCKED) {
+            this.status = PatientAccountStatus.ACTIVE;
+            this.lockedAt = null;
+        }
     }
 
     public UUID getId() {

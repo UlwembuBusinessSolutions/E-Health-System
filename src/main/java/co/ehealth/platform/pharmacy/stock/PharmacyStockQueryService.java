@@ -1,9 +1,5 @@
 package co.ehealth.platform.pharmacy.stock;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -11,33 +7,29 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-// The read side — facility stock balances, per-product batches, and the
-// ledger listing. Never writes anything (PharmacyStockLedgerService owns
-// every quantity change); this only projects what's already posted.
+// The read side — facility stock balances and per-product batches (the
+// ledger listing lives in PharmacyLedgerQueryService). Never writes anything
+// (PharmacyStockLedgerService owns every quantity change); this only
+// projects what's already posted.
 @Service
 public class PharmacyStockQueryService {
-
-    public static final int MAX_PAGE_SIZE = 100;
 
     private final PharmacyStockAccountRepository stockAccountRepository;
     private final PharmacyProductRepository productRepository;
     private final PharmacyBatchRepository batchRepository;
-    private final PharmacyStockEntryRepository stockEntryRepository;
-    private final PharmacyStockTransactionRepository stockTransactionRepository;
     private final PharmacyFacilityProductRepository facilityProductRepository;
+    private final SerialUnitGateway serialUnitGateway;
 
     public PharmacyStockQueryService(PharmacyStockAccountRepository stockAccountRepository,
                                       PharmacyProductRepository productRepository,
                                       PharmacyBatchRepository batchRepository,
-                                      PharmacyStockEntryRepository stockEntryRepository,
-                                      PharmacyStockTransactionRepository stockTransactionRepository,
-                                      PharmacyFacilityProductRepository facilityProductRepository) {
+                                      PharmacyFacilityProductRepository facilityProductRepository,
+                                      SerialUnitGateway serialUnitGateway) {
         this.stockAccountRepository = stockAccountRepository;
         this.productRepository = productRepository;
         this.batchRepository = batchRepository;
-        this.stockEntryRepository = stockEntryRepository;
-        this.stockTransactionRepository = stockTransactionRepository;
         this.facilityProductRepository = facilityProductRepository;
+        this.serialUnitGateway = serialUnitGateway;
     }
 
     // One row per product with positive stock somewhere at this facility —
@@ -69,25 +61,12 @@ public class PharmacyStockQueryService {
         return batchRepository.findByProductIdOrderByExpiryDateAsc(productId);
     }
 
+    // Serials on the shelf per lot, for the batch list of a serial-tracked product.
+    public Map<UUID, List<String>> inStockSerialsByBatch(UUID productId) {
+        return serialUnitGateway.inStockSerialsByBatch(productId);
+    }
+
     public List<PharmacyStockAccount> listAccountsForProduct(UUID productId) {
         return stockAccountRepository.findByProductId(productId);
-    }
-
-    public Page<LedgerRow> listLedger(UUID facilityId, UUID productId, int page, int size) {
-        int boundedSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
-        Pageable pageable = PageRequest.of(Math.max(page, 0), boundedSize, Sort.unsorted());
-        Page<PharmacyStockEntry> entries = stockEntryRepository.findLedger(facilityId, productId, pageable);
-        return entries.map(entry -> {
-            PharmacyStockAccount account = stockAccountRepository.findById(entry.getStockAccountId()).orElseThrow();
-            PharmacyProduct product = productRepository.findById(account.getProductId()).orElseThrow();
-            PharmacyStockTransaction transaction = stockTransactionRepository.findById(entry.getTransactionId())
-                    .orElseThrow();
-            PharmacyBatch batch = batchRepository.findById(account.getBatchId()).orElse(null);
-            return new LedgerRow(entry, account, product, transaction, batch);
-        });
-    }
-
-    public record LedgerRow(PharmacyStockEntry entry, PharmacyStockAccount account, PharmacyProduct product,
-                             PharmacyStockTransaction transaction, PharmacyBatch batch) {
     }
 }

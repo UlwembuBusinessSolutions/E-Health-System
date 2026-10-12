@@ -44,7 +44,7 @@ public class SecurityConfig {
             @Value("${app.idle-lock.timeout-minutes}") long idleTimeoutMinutes,
             CorsConfigurationSource corsConfigurationSource) throws Exception {
 
-        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository);
+        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository, activityStore, clock);
         IdleLockFilter idleLockFilter =
                 new IdleLockFilter(activityStore, Duration.ofMinutes(idleTimeoutMinutes), clock);
         PlatformJwtAuthenticationFilter platformJwtFilter =
@@ -65,7 +65,8 @@ public class SecurityConfig {
                 // endpoints — must be listed before the broader
                 // /api/v1/patient/** rule below, since Spring Security
                 // matches requestMatchers in declaration order.
-                .requestMatchers("/api/v1/patient/register", "/api/v1/patient/auth/login").permitAll()
+                .requestMatchers("/api/v1/patient/register", "/api/v1/patient/verify-email",
+                        "/api/v1/patient/auth/login", "/api/v1/patient/auth/password-reset/**").permitAll()
                 // Everything else under /platform/** needs a real,
                 // ACTIVE, correctly-signed operator token — PlatformJwtAuthenticationFilter
                 // is what actually populates that Authentication; this
@@ -120,7 +121,6 @@ public class SecurityConfig {
         configuration.setAllowedHeaders(
                 List.of("Authorization", "Content-Type", "X-Tenant-ID", "X-Platform-Key", "X-Patient-Key",
                         "Idempotency-Key"));
-        configuration.setExposedHeaders(List.of("X-Session-Status"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;

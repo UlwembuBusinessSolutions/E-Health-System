@@ -95,15 +95,19 @@ public class Prescription {
         long outOfStock = items.stream().filter(i -> i.getStatus() == PrescriptionStatus.OUT_OF_STOCK).count();
         if (pending == items.size()) {
             this.status = PrescriptionStatus.PENDING;
-        } else if (pending > 0 || items.stream().anyMatch(i -> i.getStatus() == PrescriptionStatus.PARTIALLY_DISPENSED)) {
+        } else if (pending > 0) {
             this.status = PrescriptionStatus.PARTIALLY_DISPENSED;
         } else if (outOfStock > 0) {
             this.status = PrescriptionStatus.OUT_OF_STOCK;
-        } else if (items.stream().anyMatch(i -> i.getStatus() == PrescriptionStatus.DECLINED)) {
-            this.status = PrescriptionStatus.DECLINED;
         } else {
             this.status = PrescriptionStatus.DISPENSED;
         }
+    }
+
+    // A prescription whose every line is for the patient to buy has nothing for
+    // the pharmacy to dispense, so it must not wait in the dispensing queue.
+    public void markNothingToDispense() {
+        this.status = PrescriptionStatus.DISPENSED;
     }
 
     public UUID getId() {

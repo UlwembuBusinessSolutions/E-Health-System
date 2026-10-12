@@ -17,10 +17,6 @@ import java.util.UUID;
 // class-level comment) on why that's enforced by omission.
 public interface PatientRepository extends JpaRepository<Patient, UUID> {
 
-    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT p FROM Patient p WHERE p.id = :id")
-    Optional<Patient> findForDispensingUpdate(@Param("id") UUID id);
-
     boolean existsByIdNumber(String idNumber);
 
     // PatientMigrationWriter's "returning patient" check — id_number is

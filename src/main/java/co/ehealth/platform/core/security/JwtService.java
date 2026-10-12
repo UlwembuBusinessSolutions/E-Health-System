@@ -31,9 +31,14 @@ public class JwtService {
     }
 
     public IssuedToken issue(UUID userId, String tenantSchema, List<String> roles, int tokenVersion) {
+        return renew(userId, tenantSchema, roles, tokenVersion, UUID.randomUUID().toString());
+    }
+
+    // Retaining the session ID allows in-flight requests to finish with the
+    // previous JWT and lets logout revoke every renewal of this session.
+    public IssuedToken renew(UUID userId, String tenantSchema, List<String> roles, int tokenVersion, String jti) {
         Instant now = clock.instant();
         Instant expiresAt = now.plus(accessTokenTtl);
-        String jti = UUID.randomUUID().toString();
 
         String token = Jwts.builder()
                 .id(jti)

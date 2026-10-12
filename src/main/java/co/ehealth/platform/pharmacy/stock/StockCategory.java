@@ -4,5 +4,5 @@ package co.ehealth.platform.pharmacy.stock;
 // with configured subcategories." Subcategories aren't modeled yet (no
 // approved subcategory list exists); this is the top-level split alone.
 public enum StockCategory {
-    MEDICINE, SUPPLY
+    MEDICINE, SUPPLY, DEVICE
 }

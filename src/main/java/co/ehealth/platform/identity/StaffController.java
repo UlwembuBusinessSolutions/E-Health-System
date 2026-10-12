@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,10 +31,13 @@ public class StaffController {
 
     private final StaffService staffService;
     private final StaffPhotoService staffPhotoService;
+    private final StaffDocumentService staffDocumentService;
 
-    public StaffController(StaffService staffService, StaffPhotoService staffPhotoService) {
+    public StaffController(StaffService staffService, StaffPhotoService staffPhotoService,
+                            StaffDocumentService staffDocumentService) {
         this.staffService = staffService;
         this.staffPhotoService = staffPhotoService;
+        this.staffDocumentService = staffDocumentService;
     }
 
     // The tenant app's staff roster — ORG_ADMIN-only, same
@@ -110,6 +114,14 @@ public class StaffController {
         return ResponseEntity.noContent().build();
     }
 
+    // The reverse of offboard() above — StaffService.reboardStaff()'s own
+    // why-note on why this is its own lever rather than reusing enable().
+    @PostMapping("/api/v1/admin/staff/{id}/reboard")
+    public ResponseEntity<Void> reboard(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedPrincipal admin) {
+        staffService.reboardStaff(id, admin.userId());
+        return ResponseEntity.noContent().build();
+    }
+
     // The other half of "change employment status," alongside offboard()
     // above — that one means "this person left"; this means "their contract
     // type changed while they're still here" (a secondment ending, contract
@@ -120,6 +132,33 @@ public class StaffController {
                                                        @AuthenticationPrincipal AuthenticatedPrincipal admin) {
         staffService.updateEmploymentType(id, request.employmentType(), admin.userId());
         return ResponseEntity.noContent().build();
+    }
+
+    // The read half — GET .../staff feeds the roster table, this feeds the
+    // edit-details form, which needs fields the roster summary never
+    // carries (StaffService.get()'s own why-note).
+    @GetMapping("/api/v1/admin/staff/{id}")
+    public ResponseEntity<StaffDetailResponse> get(@PathVariable UUID id) {
+        return ResponseEntity.ok(StaffDetailResponse.from(staffService.get(id)));
+    }
+
+    // The general "edit this person's own details" endpoint — StaffService.
+    // updateDetails()'s own why-note on exactly what this does and
+    // deliberately doesn't cover. POST, not PATCH, matching every other
+    // mutation in this controller (StaffController has no PATCH endpoints
+    // to be consistent with instead).
+    @PostMapping("/api/v1/admin/staff/{id}/details")
+    public ResponseEntity<StaffSummary> updateDetails(@PathVariable UUID id,
+                                                        @Valid @RequestBody UpdateStaffDetailsRequest request,
+                                                        @AuthenticationPrincipal AuthenticatedPrincipal admin) {
+        var command = new StaffService.UpdateStaffDetailsCommand(
+                request.firstName(), request.lastName(), request.contactNumber(), request.idNumber(),
+                request.department(), request.designation(), request.managerId(), request.dateOfBirth(),
+                request.sancNumber(), request.sancExpiryDate(), request.hpcsaNumber(), request.hpcsaExpiryDate(),
+                request.sapcNumber(), request.sapcExpiryDate(), request.emergencyContactName(),
+                request.emergencyContactRelationship(), request.emergencyContactPhone());
+        User updated = staffService.updateDetails(id, command, admin.userId());
+        return ResponseEntity.ok(StaffSummary.from(updated));
     }
 
     // Separate from staff creation on purpose — race/disability/background-
@@ -151,6 +190,53 @@ public class StaffController {
         return ResponseEntity.ok(new PhotoUploadResponse(url));
     }
 
+    // Qualification certificates, professional registration proof, ID
+    // copies, contracts and other HR paperwork — PatientController's own
+    // upload/list/download-url trio (StaffDocumentService's why-note),
+    // just against a staff member instead of a patient. Multipart, not
+    // JSON, same reasoning as uploadPhoto() above. Repeatable, not
+    // one-shot — a renewed certificate or an updated CV is a new row, never
+    // a replacement (V36's own why-note).
+    @PostMapping(value = "/api/v1/admin/staff/{id}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<StaffDocumentSummary> uploadDocument(@PathVariable UUID id,
+                                                                 @RequestParam("file") MultipartFile file,
+                                                                 @RequestParam StaffDocumentType documentType,
+                                                                 @AuthenticationPrincipal AuthenticatedPrincipal admin) {
+        StaffDocument document = staffDocumentService.upload(id, documentType, file, admin.userId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(StaffDocumentSummary.from(document));
+    }
+
+    @GetMapping("/api/v1/admin/staff/{id}/documents")
+    public ResponseEntity<Map<String, Object>> listDocuments(@PathVariable UUID id) {
+        List<StaffDocumentSummary> items =
+                staffDocumentService.list(id).stream().map(StaffDocumentSummary::from).toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    // A fresh presigned URL per call, never the stored s3Key or a permanent
+    // link — StaffDocumentService.getDownloadUrl()'s own why-note. The
+    // frontend fetches this, then navigates the browser straight to the
+    // returned URL; the file bytes themselves never round-trip through this
+    // API the way an upload does.
+    @GetMapping("/api/v1/admin/staff/{id}/documents/{documentId}/download-url")
+    public ResponseEntity<Map<String, String>> getDocumentDownloadUrl(@PathVariable UUID id,
+                                                                        @PathVariable UUID documentId) {
+        String url = staffDocumentService.getDownloadUrl(id, documentId);
+        return ResponseEntity.ok(Map.of("url", url));
+    }
+
+    // Unlike patient documents (no delete path exists — PREG-US-017's
+    // "impossible to delete" reasoning), a staff HR attachment carries no
+    // audit requirement to keep a mistaken upload around forever
+    // (StaffDocumentService.delete()'s own why-note): the actual
+    // qualification data of record lives on User's own sancNumber/
+    // hpcsaNumber/sapcNumber fields, never derived from a scanned file.
+    @DeleteMapping("/api/v1/admin/staff/{id}/documents/{documentId}")
+    public ResponseEntity<Void> deleteDocument(@PathVariable UUID id, @PathVariable UUID documentId) {
+        staffDocumentService.delete(id, documentId);
+        return ResponseEntity.noContent().build();
+    }
+
     public record CreateStaffRequest(
             @NotBlank String firstName, @NotBlank String lastName,
             @NotBlank @Size(max = 30) String employeeNumber,
@@ -174,6 +260,16 @@ public class StaffController {
     public record UpdateEmploymentTypeRequest(@NotNull EmploymentType employmentType) {
     }
 
+    public record UpdateStaffDetailsRequest(
+            @NotBlank String firstName, @NotBlank String lastName,
+            @NotBlank @Pattern(regexp = "^\\+?[0-9]{9,15}$") String contactNumber,
+            @Pattern(regexp = "^[0-9]{13}$") String idNumber, String department, String designation,
+            UUID managerId, LocalDate dateOfBirth, String sancNumber, LocalDate sancExpiryDate, String hpcsaNumber,
+            LocalDate hpcsaExpiryDate, String sapcNumber, LocalDate sapcExpiryDate, String emergencyContactName,
+            String emergencyContactRelationship,
+            @Pattern(regexp = "^\\+?[0-9]{9,15}$") String emergencyContactPhone) {
+    }
+
     // race/disabilityStatus deliberately not @NotBlank — declining to
     // answer has to be representable, not just "not asked yet."
     public record RecordComplianceRequest(
@@ -184,6 +280,39 @@ public class StaffController {
     }
 
     public record PhotoUploadResponse(String profilePhotoUrl) {
+    }
+
+    // s3Key deliberately excluded — StaffDocumentService.getDownloadUrl()
+    // is the only sanctioned way to actually fetch the file (PatientDocumentSummary's
+    // own precedent for the same exclusion).
+    public record StaffDocumentSummary(UUID id, StaffDocumentType documentType, String originalFilename,
+                                        String contentType, long fileSize, Instant uploadedAt) {
+        static StaffDocumentSummary from(StaffDocument d) {
+            return new StaffDocumentSummary(d.getId(), d.getDocumentType(), d.getOriginalFilename(),
+                    d.getContentType(), d.getFileSize(), d.getUploadedAt());
+        }
+    }
+
+    // The edit-details form's own read/write shape — everything
+    // UpdateStaffDetailsRequest can change, plus enough read-only context
+    // (employeeNumber, email, status) for the form to display without a
+    // second call. Never the User entity itself — same passwordHash-leak
+    // reasoning as StaffSummary above.
+    public record StaffDetailResponse(
+            UUID id, String employeeNumber, String email, String firstName, String lastName, String contactNumber,
+            String idNumber, String department, String designation, UUID managerId, LocalDate dateOfBirth,
+            String sancNumber, LocalDate sancExpiryDate, String hpcsaNumber, LocalDate hpcsaExpiryDate,
+            String sapcNumber, LocalDate sapcExpiryDate, String emergencyContactName,
+            String emergencyContactRelationship, String emergencyContactPhone, UUID facilityId, String status,
+            String profilePhotoUrl) {
+        static StaffDetailResponse from(User u) {
+            return new StaffDetailResponse(u.getId(), u.getEmployeeNumber(), u.getEmail(), u.getFirstName(),
+                    u.getLastName(), u.getContactNumber(), u.getIdNumber(), u.getDepartment(), u.getDesignation(),
+                    u.getManagerId(), u.getDateOfBirth(), u.getSancNumber(), u.getSancExpiryDate(),
+                    u.getHpcsaNumber(), u.getHpcsaExpiryDate(), u.getSapcNumber(), u.getSapcExpiryDate(),
+                    u.getEmergencyContactName(), u.getEmergencyContactRelationship(), u.getEmergencyContactPhone(),
+                    u.getFacilityId(), u.getStatus().name(), u.getProfilePhotoUrl());
+        }
     }
 
     // Never return the User entity itself — it carries passwordHash, and

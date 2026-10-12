@@ -1,6 +1,7 @@
 target/
 .env
 *.local
+.local-secrets/
 data/
 .idea/
 *.iml

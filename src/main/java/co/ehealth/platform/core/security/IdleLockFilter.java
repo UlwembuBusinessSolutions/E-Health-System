@@ -52,11 +52,10 @@ public class IdleLockFilter extends OncePerRequestFilter {
         Instant now = clock.instant();
         Instant lastActivity = activityStore.getLastActivity(jti);
         boolean isUnlockAttempt = request.getRequestURI().equals("/api/v1/auth/unlock");
-        boolean isLogoutAttempt = request.getMethod().equals("POST")
-                && request.getRequestURI().equals("/api/v1/auth/logout");
+        boolean isLogoutAttempt = request.getRequestURI().equals("/api/v1/auth/logout");
 
         if (lastActivity != null
-                && Duration.between(lastActivity, now).compareTo(idleTimeout) > 0
+                && Duration.between(lastActivity, now).compareTo(idleTimeout) >= 0
                 && !isUnlockAttempt && !isLogoutAttempt) {
             // Deliberately does NOT touch activityStore here — a request
             // bounced for being idle must not itself count as activity, or
@@ -66,7 +65,14 @@ public class IdleLockFilter extends OncePerRequestFilter {
             return;
         }
 
-        activityStore.recordActivity(jti, now);
+        // Polling and metadata reads must not keep an unattended terminal
+        // active. The client reports real interaction via /session/activity.
+        // Failed unlock attempts must not unlock a session as a side effect.
+        String method = request.getMethod();
+        if (!isUnlockAttempt && !isLogoutAttempt
+                && !method.equals("GET") && !method.equals("HEAD") && !method.equals("OPTIONS")) {
+            activityStore.recordActivity(jti, now);
+        }
         chain.doFilter(request, response);
     }
 }

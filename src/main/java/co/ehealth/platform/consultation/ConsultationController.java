@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -103,7 +104,8 @@ public class ConsultationController {
                                                        @Valid @RequestBody SignConsultationRequest request,
                                                        @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         Consultation consultation = consultationService.sign(id, request.outcome(), request.outcomeNotes(),
-                toPharmacyItems(request.pharmacyItems()), request.destinationFacilityId(), staff.userId());
+                toPharmacyItems(request.pharmacyItems()), toPurchaseItems(request.purchaseItems()),
+                request.destinationFacilityId(), staff.userId());
         return ResponseEntity.ok(toResponse(consultation));
     }
 
@@ -118,7 +120,8 @@ public class ConsultationController {
                 request.currentMedications(), request.allergyStatus(), request.allergyDetail(),
                 request.examinationNotes(), request.investigationsNotes(), request.treatmentPlan(), diagnoses,
                 request.outcome(), request.outcomeNotes(), request.amendmentReason(),
-                toPharmacyItems(request.pharmacyItems()), request.destinationFacilityId());
+                toPharmacyItems(request.pharmacyItems()), toPurchaseItems(request.purchaseItems()),
+                request.destinationFacilityId());
         Consultation amendment = consultationService.amend(id, cmd, staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(amendment));
     }
@@ -131,7 +134,14 @@ public class ConsultationController {
             List<PharmacyItemRequest> items) {
         return items == null ? null
                 : items.stream().map(i -> new PrescriptionService.PrescriptionItemInput(i.drugName(), i.dosage(),
-                        i.quantity())).toList();
+                        i.quantity(), i.productId())).toList();
+    }
+
+    private static List<PrescriptionService.PrescriptionPurchaseItemInput> toPurchaseItems(
+            List<PurchaseItemRequest> items) {
+        return items == null ? List.of()
+                : items.stream().map(i -> new PrescriptionService.PrescriptionPurchaseItemInput(i.drugName(),
+                        i.dosage(), i.quantity(), i.productId(), i.note())).toList();
     }
 
     @PostMapping("/api/v1/consultations/{id}/entered-in-error")
@@ -177,11 +187,19 @@ public class ConsultationController {
     // requirePharmacyItemsIfNeeded()) — omitted/null for every other
     // outcome, same as PrescriptionController.ItemRequest's own shape.
     public record PharmacyItemRequest(@NotBlank String drugName, @NotBlank String dosage,
-                                       @Positive int quantity) {
+                                       @Positive int quantity, UUID productId) {
+    }
+
+    // A medicine the patient should buy rather than receive from the pharmacy
+    // (out of stock, short, or not stocked). productId is set when it was
+    // picked from the pharmacy's list.
+    public record PurchaseItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity,
+                                       UUID productId, @Size(max = 300) String note) {
     }
 
     public record SignConsultationRequest(@NotNull ConsultationOutcome outcome, String outcomeNotes,
                                            List<@Valid PharmacyItemRequest> pharmacyItems,
+                                           List<@Valid PurchaseItemRequest> purchaseItems,
                                            UUID destinationFacilityId) {
     }
 
@@ -192,6 +210,7 @@ public class ConsultationController {
                                             @NotNull ConsultationOutcome outcome, String outcomeNotes,
                                             @NotBlank String amendmentReason,
                                             List<@Valid PharmacyItemRequest> pharmacyItems,
+                                            List<@Valid PurchaseItemRequest> purchaseItems,
                                             UUID destinationFacilityId) {
     }
 

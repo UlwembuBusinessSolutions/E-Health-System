@@ -9,7 +9,9 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
-// Latest supply summary per item; immutable supply history lives in the stock ledger.
+// One row per dispensed prescription ITEM — prescriptionItemId is unique
+// because once dispensed, an item is terminal and can never be dispensed a
+// second time (PrescriptionItem's own why-note).
 @Entity
 @Table(name = "dispensing_records")
 public class DispensingRecord {
@@ -36,10 +38,6 @@ public class DispensingRecord {
         this.dispensedAt = dispensedAt;
     }
 
-    public void recordLatestDispense(UUID userId, Instant at) {
-        this.dispensedByUserId = userId;
-        this.dispensedAt = at;
-    }
     public UUID getId() {
         return id;
     }

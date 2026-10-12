@@ -226,6 +226,28 @@ public class EmailService {
         send(toEmail, subject, body, html);
     }
 
+    public void sendPatientRegistrationCodeEmail(String toEmail, String firstName, String code,
+                                                  long codeTtlMinutes) {
+        String subject = "Verify your patient portal email";
+        String body = """
+                Hi %s,
+
+                Use this code to verify your email address and finish creating your patient account:
+
+                  %s
+
+                This code expires in %d minutes. If you didn't start this registration, you can ignore this email.
+                """.formatted(firstName, code, codeTtlMinutes);
+        String html = shell(Accent.SUCCESS,
+                kicker(Accent.SUCCESS, "Verify your email")
+                        + greeting("Hi " + esc(firstName) + ",")
+                        + lead("Use this code to verify your email address and finish creating your patient account:")
+                        + codeBox(esc(code), "Expires in " + codeTtlMinutes + " minutes")
+                        + muted("If you didn&rsquo;t start this registration, you can ignore this email."),
+                footer(FooterAudience.PATIENT));
+        send(toEmail, subject, body, html, true);
+    }
+
     // Fired once per PlatformOperatorService.resetPassword() call — the
     // admin-triggered counterpart to sendPlatformOperatorAccountCreatedEmail
     // above, for an operator who already has an account but needs a new
@@ -370,21 +392,61 @@ public class EmailService {
         send(toEmail, subject, body, html);
     }
 
-    public void sendPrescriberDeclineEmail(String toEmail, String prescriberFirstName, String organizationDisplayName,
-                                          String senderName, String prescriptionSerialNumber, String message) {
-        String subject = "Dispensing declined for prescription " + prescriptionSerialNumber + " - " + organizationDisplayName;
-        String body = "Hi " + prescriberFirstName + ",\n\n" + senderName + " at " + organizationDisplayName
-                + " has declined dispensing on prescription " + prescriptionSerialNumber + ":\n\n" + message
-                + "\n\nPlease follow up with the pharmacy directly.";
-        String html = shell(Accent.BRAND, kicker(Accent.BRAND, "Dispensing declined")
-                + greeting("Hi " + esc(prescriberFirstName) + ",")
-                + lead(esc(senderName) + " declined dispensing on prescription " + esc(prescriptionSerialNumber) + ".")
-                + infoBox("Decision", List.of(new InfoRow("Reason", esc(message))))
-                + muted("Please follow up with the pharmacy directly."), footer(FooterAudience.STAFF));
+    // AppointmentService calls these only after the booking transaction commits.
+    public void sendAppointmentConfirmedEmail(String toEmail, String firstName, String organizationDisplayName,
+                                               String facilityName, String appointmentDate, String appointmentTime,
+                                               String assignedStaffName) {
+        sendAppointmentEmail(toEmail, firstName, organizationDisplayName, facilityName, appointmentDate,
+                appointmentTime, assignedStaffName, false);
+    }
+
+    public void sendAppointmentUpdatedEmail(String toEmail, String firstName, String organizationDisplayName,
+                                             String facilityName, String appointmentDate, String appointmentTime,
+                                             String assignedStaffName) {
+        sendAppointmentEmail(toEmail, firstName, organizationDisplayName, facilityName, appointmentDate,
+                appointmentTime, assignedStaffName, true);
+    }
+
+    private void sendAppointmentEmail(String toEmail, String firstName, String organizationDisplayName,
+                                      String facilityName, String appointmentDate, String appointmentTime,
+                                      String assignedStaffName, boolean updated) {
+        String heading = updated ? "Your appointment has been updated" : "Your appointment is confirmed";
+        String action = updated ? "updated" : "confirmed";
+        String subject = heading + " — " + organizationDisplayName;
+        String staffLine = assignedStaffName == null ? "" : "\n  With: " + assignedStaffName;
+        String body = """
+                Hi %s,
+
+                Your appointment at %s has been %s.
+
+                  Facility: %s
+                  Date: %s
+                  Time: %s%s
+
+                If you need to reschedule or cancel, please contact the clinic directly.
+                """.formatted(firstName, organizationDisplayName, action, facilityName, appointmentDate, appointmentTime,
+                staffLine);
+        List<InfoRow> rows = new java.util.ArrayList<>(List.of(
+                new InfoRow("Facility", esc(facilityName)),
+                new InfoRow("Date", esc(appointmentDate)),
+                new InfoRow("Time", esc(appointmentTime))));
+        if (assignedStaffName != null) rows.add(new InfoRow("With", esc(assignedStaffName)));
+        String html = shell(Accent.SUCCESS,
+                kicker(Accent.SUCCESS, heading)
+                        + greeting("Hi " + esc(firstName) + ",")
+                        + lead("Your appointment at <strong>" + esc(organizationDisplayName) + "</strong> has been " + action + ".")
+                        + infoBox("Appointment details", rows)
+                        + muted("If you need to reschedule or cancel, please contact the clinic directly."),
+                footer(FooterAudience.PATIENT));
         send(toEmail, subject, body, html);
     }
 
     private void send(String toEmail, String subject, String textBody, String htmlBody) {
+        send(toEmail, subject, textBody, htmlBody, false);
+    }
+
+    private void send(String toEmail, String subject, String textBody, String htmlBody,
+                      boolean requireSuccessfulDelivery) {
         // Resolved here, on the request thread, not inside
         // EmailDeliveryWorker — TenantContext is a ThreadLocal, so it's only
         // readable before the @Async hop, and only some callers even have a
@@ -416,7 +478,13 @@ public class EmailService {
         // mode this split exists to remove.
         MailOverride mailOverride = override.map(creds ->
                 new MailOverride(creds.host(), creds.port(), creds.username(), creds.password())).orElse(null);
-        deliveryWorker.deliver(toEmail, subject, textBody, htmlBody, effectiveFrom, mailOverride);
+        if (requireSuccessfulDelivery) {
+            if (!deliveryWorker.deliverNow(toEmail, subject, textBody, htmlBody, effectiveFrom, mailOverride)) {
+                throw new EmailDeliveryFailedException();
+            }
+        } else {
+            deliveryWorker.deliver(toEmail, subject, textBody, htmlBody, effectiveFrom, mailOverride);
+        }
     }
 
     // Local-dev/testing aid: every outbound email is written to disk BEFORE

@@ -46,15 +46,16 @@ public interface PharmacyStockAccountRepository extends JpaRepository<PharmacySt
 
     List<PharmacyStockAccount> findByProductIdAndLocationId(UUID productId, UUID locationId);
 
+    Optional<PharmacyStockAccount> findByProductIdAndBatchIdAndLocationIdAndBucket(UUID productId, UUID batchId,
+                                                                                    UUID locationId,
+                                                                                    StockBucket bucket);
+
     // The facility-wide balance sweep behind GET /api/v1/pharmacy/stock —
     // joined through location to scope by facility, since a stock account
     // itself only knows its location, not the facility that owns it.
     @Query("SELECT a FROM PharmacyStockAccount a, PharmacyStockLocation l "
             + "WHERE a.locationId = l.id AND l.facilityId = :facilityId AND a.quantity > 0")
     List<PharmacyStockAccount> findPositiveByFacility(@Param("facilityId") UUID facilityId);
-
-    @Query("SELECT a FROM PharmacyStockAccount a, PharmacyStockLocation l WHERE a.locationId = l.id AND l.facilityId = :facilityId")
-    List<PharmacyStockAccount> findAllByFacility(@Param("facilityId") UUID facilityId);
 
     List<PharmacyStockAccount> findByProductId(UUID productId);
 }

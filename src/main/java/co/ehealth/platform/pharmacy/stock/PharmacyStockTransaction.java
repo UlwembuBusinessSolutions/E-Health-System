@@ -13,7 +13,7 @@ import java.util.UUID;
 
 // One posting event — plan section 7. Never updated after insert (rule 2
 // of the plan's non-negotiable stock rules); corrections are a separate
-// REVERSAL transaction linking back via reversalOfTransactionId (Phase 2).
+// REVERSAL transaction linking back via reversalOfTransactionId.
 // idempotencyKey is always populated, client-supplied or server-derived
 // from actor+operation+body hash (PharmacyStockLedgerService's own
 // why-note) — a retried request with the same key AND bodyHash returns the
@@ -58,6 +58,18 @@ public class PharmacyStockTransaction {
     @Column(name = "reversal_of_transaction_id")
     private UUID reversalOfTransactionId;
 
+    @Column(name = "supplier_id")
+    private UUID supplierId;
+
+    @Column(name = "patient_id")
+    private UUID patientId;
+
+    @Column(name = "prescription_serial", length = 30)
+    private String prescriptionSerial;
+
+    @Column(name = "reason_code", length = 30)
+    private String reasonCode;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -66,7 +78,7 @@ public class PharmacyStockTransaction {
 
     public PharmacyStockTransaction(StockTransactionType type, UUID facilityId, UUID actorUserId, String actorName,
                                      String reason, String sourceReference, String idempotencyKey, String bodyHash,
-                                     UUID reversalOfTransactionId, Instant createdAt) {
+                                     LedgerContext context, Instant createdAt) {
         this.type = type;
         this.facilityId = facilityId;
         this.actorUserId = actorUserId;
@@ -75,7 +87,11 @@ public class PharmacyStockTransaction {
         this.sourceReference = sourceReference;
         this.idempotencyKey = idempotencyKey;
         this.bodyHash = bodyHash;
-        this.reversalOfTransactionId = reversalOfTransactionId;
+        this.reversalOfTransactionId = context.reversalOfTransactionId();
+        this.supplierId = context.supplierId();
+        this.patientId = context.patientId();
+        this.prescriptionSerial = context.prescriptionSerial();
+        this.reasonCode = context.reasonCode();
         this.createdAt = createdAt;
     }
 
@@ -117,6 +133,22 @@ public class PharmacyStockTransaction {
 
     public UUID getReversalOfTransactionId() {
         return reversalOfTransactionId;
+    }
+
+    public UUID getSupplierId() {
+        return supplierId;
+    }
+
+    public UUID getPatientId() {
+        return patientId;
+    }
+
+    public String getPrescriptionSerial() {
+        return prescriptionSerial;
+    }
+
+    public String getReasonCode() {
+        return reasonCode;
     }
 
     public Instant getCreatedAt() {

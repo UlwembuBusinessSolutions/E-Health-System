@@ -3,6 +3,7 @@ package co.ehealth.platform.core.notification;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
@@ -41,9 +42,17 @@ class EmailDeliveryWorker {
     private static final ClassPathResource LOGO_RESOURCE = new ClassPathResource("email/ulwembu-logo.png");
 
     private final JavaMailSender defaultMailSender;
+    private final MicrosoftGraphEmailSender microsoftGraphEmailSender;
+    private final String provider;
+    private final String fromName;
 
-    EmailDeliveryWorker(JavaMailSender defaultMailSender) {
+    EmailDeliveryWorker(JavaMailSender defaultMailSender, MicrosoftGraphEmailSender microsoftGraphEmailSender,
+                        @Value("${app.notifications.provider:smtp}") String provider,
+                        @Value("${app.notifications.from-name:Verify}") String fromName) {
         this.defaultMailSender = defaultMailSender;
+        this.microsoftGraphEmailSender = microsoftGraphEmailSender;
+        this.provider = provider;
+        this.fromName = fromName;
     }
 
     // Runs on emailTaskExecutor (EmailAsyncConfig), never the request
@@ -59,9 +68,26 @@ class EmailDeliveryWorker {
     @Async("emailTaskExecutor")
     void deliver(String toEmail, String subject, String textBody, String htmlBody, String fromAddress,
                  MailOverride override) {
-        JavaMailSender mailSender = override != null ? buildOverrideSender(override) : defaultMailSender;
+        deliverWithRetries(toEmail, subject, textBody, htmlBody, fromAddress, override);
+    }
+
+    // Patient registration must not report that verification is ready until
+    // the code has actually been accepted by the configured SMTP server.
+    // Other notification types remain asynchronous because their business
+    // operation has already completed by the time they are sent.
+    boolean deliverNow(String toEmail, String subject, String textBody, String htmlBody, String fromAddress,
+                       MailOverride override) {
+        return deliverWithRetries(toEmail, subject, textBody, htmlBody, fromAddress, override);
+    }
+
+    private boolean deliverWithRetries(String toEmail, String subject, String textBody, String htmlBody,
+                                       String fromAddress, MailOverride override) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
+                if (override == null && "microsoft-graph".equalsIgnoreCase(provider)) {
+                    microsoftGraphEmailSender.send(toEmail, subject, htmlBody, fromAddress, fromName);
+                } else {
+                JavaMailSender mailSender = override != null ? buildOverrideSender(override) : defaultMailSender;
                 MimeMessage message = mailSender.createMimeMessage();
                 // MULTIPART_MODE_RELATED, not the boolean-true overload —
                 // this is what lets setText(text, html) (a multipart/
@@ -71,12 +97,13 @@ class EmailDeliveryWorker {
                 // dangling attachment instead of an inline image.
                 MimeMessageHelper helper = new MimeMessageHelper(message, MimeMessageHelper.MULTIPART_MODE_RELATED,
                         "UTF-8");
-                helper.setFrom(fromAddress);
+                helper.setFrom(fromAddress, fromName);
                 helper.setTo(toEmail);
                 helper.setSubject(subject);
                 helper.setText(textBody, htmlBody);
                 helper.addInline(LOGO_CONTENT_ID, LOGO_RESOURCE);
                 mailSender.send(message);
+                }
                 // Logged unconditionally, including a first-try success —
                 // previously silent, which made a genuine send indistinguishable
                 // from the async task never having run at all. Found the hard
@@ -84,20 +111,20 @@ class EmailDeliveryWorker {
                 // succeeded with zero log output, and only manually checking the
                 // inbox confirmed it — logs alone couldn't tell the difference.
                 log.info("Email sent to {} on attempt {}/{}", toEmail, attempt, MAX_ATTEMPTS);
-                return;
+                return true;
             } catch (Exception ex) {
                 if (attempt == MAX_ATTEMPTS) {
-                    // Expected outcome in this environment: no real SMTP
-                    // credentials are configured, so every attempt fails
-                    // the same way and this is exactly what should happen.
-                    log.warn("Failed to send email to {} after {} attempts "
-                                    + "(expected without real SMTP credentials configured)",
+                    // Keep the request outcome consistent across SMTP and
+                    // Microsoft Graph transports; callers that require mail
+                    // delivery can turn this false result into an API error.
+                    log.warn("Failed to send email to {} after {} attempts",
                             toEmail, MAX_ATTEMPTS, ex);
-                    return;
+                    return false;
                 }
                 sleepBeforeRetry(RETRY_DELAY_MS[attempt - 1], toEmail, attempt, ex);
             }
         }
+        return false;
     }
 
     // Built fresh per send rather than cached — a tenant can change its

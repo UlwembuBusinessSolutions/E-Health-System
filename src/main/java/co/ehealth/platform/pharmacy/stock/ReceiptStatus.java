@@ -7,5 +7,5 @@ package co.ehealth.platform.pharmacy.stock;
 // draft someone can save and reopen (documented simplification,
 // pharmacy-stock-ledger-context.md's delivery-order note).
 public enum ReceiptStatus {
-    DRAFT, POSTED, CANCELLED
+    DRAFT, POSTED, CANCELLED, REVERSED
 }

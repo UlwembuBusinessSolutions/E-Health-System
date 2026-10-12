@@ -11,9 +11,9 @@ spring:
   profiles:
     active: dev
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/ulwembut}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/ulwembu}
     username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:change-me}
+    password: ${DB_PASSWORD:Linhle@12}
     hikari:
       maximum-pool-size: 20
   jpa:
@@ -24,7 +24,7 @@ spring:
     enabled: false  # migrations run per-schema via TenantMigrationRunner — see core/tenant
   servlet:
     multipart:
-      max-file-size: 5MB   # enforced before StaffPhotoService runs
+      max-file-size: 5MB   # enforced before StaffPhotoService and CollectionProofStorage run
       max-request-size: 5MB
   mail:
     host: ${SMTP_HOST:localhost}
@@ -75,7 +75,13 @@ app:
     bucket-name: ${STORAGE_BUCKET_NAME:ulwembu-app-storage-dev}
     public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://ulwembu-app-storage-dev.s3.af-south-1.amazonaws.com}
   notifications:
+    provider: ${NOTIFICATIONS_PROVIDER:smtp}
     from-address: ${NOTIFICATIONS_FROM_ADDRESS:no-reply@ulwembu.example}
+    from-name: ${NOTIFICATIONS_FROM_NAME:Verify}
+    microsoft-graph:
+      tenant-id: ${MS_GRAPH_TENANT_ID:}
+      client-id: ${MS_GRAPH_CLIENT_ID:}
+      client-secret: ${MS_GRAPH_CLIENT_SECRET:}
     # Every outbound email gets written here before the real send is
     # attempted — see core/notification/EmailService.java. Relative to
     # wherever the app is started from.

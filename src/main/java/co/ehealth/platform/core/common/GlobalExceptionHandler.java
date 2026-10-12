@@ -4,6 +4,7 @@ import co.ehealth.platform.consultation.ConsultationNotFoundException;
 import co.ehealth.platform.consultation.InvalidConsultationException;
 import co.ehealth.platform.consultation.InvalidConsultationStateException;
 import co.ehealth.platform.core.security.InvalidTokenException;
+import co.ehealth.platform.core.notification.EmailDeliveryFailedException;
 import co.ehealth.platform.identity.AccountLockedException;
 import co.ehealth.platform.identity.DuplicateFieldException;
 import co.ehealth.platform.identity.InvalidCredentialsException;
@@ -19,6 +20,7 @@ import co.ehealth.platform.platform.OrganizationNotFoundException;
 import co.ehealth.platform.platform.OrganizationSuspendedException;
 import co.ehealth.platform.platform.PlatformOperatorNotFoundException;
 import co.ehealth.platform.patient.InvalidIdNumberException;
+import co.ehealth.platform.patient.InvalidPatientVerificationCodeException;
 import co.ehealth.platform.patient.InvalidMigrationDestinationException;
 import co.ehealth.platform.patient.MigrationNotFoundException;
 import co.ehealth.platform.patient.PatientAlreadyArchivedException;
@@ -26,6 +28,7 @@ import co.ehealth.platform.patient.PatientAlreadyExistsAtDestinationException;
 import co.ehealth.platform.patient.PatientArchivedException;
 import co.ehealth.platform.patient.PatientDocumentNotFoundException;
 import co.ehealth.platform.patient.PatientGuardianNotFoundException;
+import co.ehealth.platform.patient.PatientIdentityMismatchException;
 import co.ehealth.platform.patient.PatientNotFoundException;
 import co.ehealth.platform.patient.TooManyGuardiansException;
 import co.ehealth.platform.facility.FacilityNotFoundException;
@@ -43,15 +46,45 @@ import co.ehealth.platform.visit.QueueTokenNotFoundException;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import co.ehealth.platform.triage.InvalidTriageCaptureException;
 import co.ehealth.platform.triage.TriageAssessmentNotFoundException;
+import co.ehealth.platform.pharmacy.csvimport.ImportBatchNotFoundException;
+import co.ehealth.platform.pharmacy.csvimport.ImportConflictException;
+import co.ehealth.platform.pharmacy.openingstock.OpeningStockAlreadyLoadedException;
+import co.ehealth.platform.pharmacy.receiving.ReceiptAlreadyReversedException;
+import co.ehealth.platform.pharmacy.receiving.ReceiptNotFoundException;
+import co.ehealth.platform.pharmacy.receiving.ReceiptStockUsedException;
+import co.ehealth.platform.pharmacy.serial.DuplicateSerialException;
+import co.ehealth.platform.pharmacy.serial.SerialNotInStockException;
+import co.ehealth.platform.pharmacy.dispensing.CollectionNotFoundException;
+import co.ehealth.platform.pharmacy.dispensing.CollectionProofNotFoundException;
+import co.ehealth.platform.pharmacy.dispensing.DispensingConflictException;
+import co.ehealth.platform.pharmacy.dispensing.DispensingValidationException;
 import co.ehealth.platform.pharmacy.stock.BatchExpiryConflictException;
+import co.ehealth.platform.pharmacy.stock.PharmacyValidationException;
+import co.ehealth.platform.pharmacy.supplier.DuplicateSupplierException;
+import co.ehealth.platform.pharmacy.supplier.DuplicateSupplierResponse;
+import co.ehealth.platform.pharmacy.supplier.InvalidSupplierStateException;
+import co.ehealth.platform.pharmacy.supplier.SupplierNotFoundException;
 import co.ehealth.platform.pharmacy.stock.DuplicateProductCodeException;
+import co.ehealth.platform.pharmacy.count.InvalidStockCountException;
+import co.ehealth.platform.pharmacy.count.InvalidStockCountStateException;
+import co.ehealth.platform.pharmacy.count.MissingCountReasonsException;
+import co.ehealth.platform.pharmacy.count.StockCountLineNotFoundException;
+import co.ehealth.platform.pharmacy.count.StockCountNotFoundException;
+import co.ehealth.platform.pharmacy.register.InvalidRegisterEntryException;
+import co.ehealth.platform.pharmacy.register.InvalidWitnessException;
+import co.ehealth.platform.pharmacy.register.RegisterBalanceExceededException;
+import co.ehealth.platform.pharmacy.register.RegisterDayClosedException;
 import co.ehealth.platform.pharmacy.stock.IdempotencyConflictException;
 import co.ehealth.platform.pharmacy.stock.InsufficientStockException;
+import co.ehealth.platform.pharmacy.stock.InvalidStockRequestException;
 import co.ehealth.platform.pharmacy.stock.MissingExpiryException;
 import co.ehealth.platform.pharmacy.stock.PharmacyProductNotFoundException;
 import co.ehealth.platform.pharmacy.stock.ProductArchivedException;
 import co.ehealth.platform.pharmacy.stock.ProductHasStockException;
 import co.ehealth.platform.pharmacy.stock.ProductNotStockedAtFacilityException;
+import co.ehealth.platform.pharmacy.stock.StockReversalBlockedException;
+import co.ehealth.platform.pharmacy.stock.StockTransactionNotFoundException;
+import co.ehealth.platform.pharmacy.stock.TransactionAlreadyReversedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -144,6 +177,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(InvalidResetCodeException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidResetCode(InvalidResetCodeException ex) {
         return ResponseEntity.badRequest().body(new ApiErrorResponse("Incorrect or expired code.", null));
+    }
+
+    @ExceptionHandler(InvalidPatientVerificationCodeException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidPatientVerificationCode(
+            InvalidPatientVerificationCodeException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(EmailDeliveryFailedException.class)
+    public ResponseEntity<ApiErrorResponse> handleEmailDeliveryFailed(EmailDeliveryFailedException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(DuplicateFieldException.class)
@@ -254,6 +299,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(InvalidIdNumberException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidIdNumber(InvalidIdNumberException ex) {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PatientIdentityMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handlePatientIdentityMismatch(PatientIdentityMismatchException ex) {
+        return ResponseEntity.unprocessableEntity().body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(PatientNotFoundException.class)
@@ -418,6 +468,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
+    @ExceptionHandler({CollectionNotFoundException.class, CollectionProofNotFoundException.class})
+    public ResponseEntity<ApiErrorResponse> handleCollectionRecordNotFound(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     @ExceptionHandler(InvalidPrescriberMessageException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidPrescriberMessage(InvalidPrescriberMessageException ex) {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
@@ -489,25 +544,103 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler(co.ehealth.platform.pharmacy.DuplicateSupplyException.class)
-    public ResponseEntity<java.util.Map<String, Object>> handleDuplicateSupply(co.ehealth.platform.pharmacy.DuplicateSupplyException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(java.util.Map.of(
-                "code", "DUPLICATE_DISPENSING", "message", ex.getMessage(), "warnings", ex.getWarnings()));
-    }
-
-    @ExceptionHandler(co.ehealth.platform.pharmacy.InvalidDispenseException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidDispense(co.ehealth.platform.pharmacy.InvalidDispenseException ex) {
-        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
     @ExceptionHandler(InsufficientStockException.class)
     public ResponseEntity<ApiErrorResponse> handleInsufficientStock(InsufficientStockException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
+    // Stock-backed dispensing (co.ehealth.platform.pharmacy.dispensing): an
+    // expired lot / not enough usable stock clashes with the shelf (409); a
+    // missing product mapping or an unacceptable collector is a request the
+    // pharmacist must correct (422).
+    @ExceptionHandler(DispensingConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleDispensingConflict(DispensingConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(DispensingValidationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDispensingValidation(DispensingValidationException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     @ExceptionHandler(IdempotencyConflictException.class)
     public ResponseEntity<ApiErrorResponse> handleIdempotencyConflict(IdempotencyConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidStockRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidStockRequest(InvalidStockRequestException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(StockReversalBlockedException.class)
+    public ResponseEntity<ApiErrorResponse> handleStockReversalBlocked(StockReversalBlockedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(TransactionAlreadyReversedException.class)
+    public ResponseEntity<ApiErrorResponse> handleTransactionAlreadyReversed(TransactionAlreadyReversedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(StockTransactionNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleStockTransactionNotFound(StockTransactionNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // Pharmacy suppliers, receiving, serials and opening stock (B2 slice —
+    // Docs/pharmacy-module-contract.md section 3). 409 = conflicts with
+    // current state, 422 = a business rule the user can fix.
+    @ExceptionHandler(DuplicateSupplierException.class)
+    public ResponseEntity<DuplicateSupplierResponse> handleDuplicateSupplier(DuplicateSupplierException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(DuplicateSupplierResponse.from(ex));
+    }
+
+    @ExceptionHandler({SupplierNotFoundException.class, ReceiptNotFoundException.class,
+            ImportBatchNotFoundException.class})
+    public ResponseEntity<ApiErrorResponse> handlePharmacyRecordNotFound(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler({InvalidSupplierStateException.class, DuplicateSerialException.class,
+            SerialNotInStockException.class, ReceiptAlreadyReversedException.class,
+            ReceiptStockUsedException.class, OpeningStockAlreadyLoadedException.class,
+            ImportConflictException.class})
+    public ResponseEntity<ApiErrorResponse> handlePharmacyConflict(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PharmacyValidationException.class)
+    public ResponseEntity<ApiErrorResponse> handlePharmacyValidation(PharmacyValidationException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // Pharmacy stock counts and the scheduled medicines register
+    // (co.ehealth.platform.pharmacy.count / .register). 422 is used where the
+    // request is well-formed but breaks a business rule the user can fix.
+    @ExceptionHandler({StockCountNotFoundException.class, StockCountLineNotFoundException.class})
+    public ResponseEntity<ApiErrorResponse> handleStockCountNotFound(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler({InvalidStockCountStateException.class, RegisterBalanceExceededException.class,
+            RegisterDayClosedException.class})
+    public ResponseEntity<ApiErrorResponse> handlePharmacyCountOrRegisterConflict(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler({InvalidStockCountException.class, InvalidRegisterEntryException.class,
+            InvalidWitnessException.class})
+    public ResponseEntity<ApiErrorResponse> handlePharmacyCountOrRegisterInvalid(RuntimeException ex) {
+        return ResponseEntity.unprocessableEntity().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    // fieldErrors maps each line id missing a reason to a description of
+    // that line, so the screen can highlight exactly those rows.
+    @ExceptionHandler(MissingCountReasonsException.class)
+    public ResponseEntity<ApiErrorResponse> handleMissingCountReasons(MissingCountReasonsException ex) {
+        return ResponseEntity.unprocessableEntity()
+                .body(new ApiErrorResponse(ex.getMessage(), ex.getLinesWithoutReason()));
     }
 
     // StaffPhotoService.uploadPhoto() wraps a checked IOException from

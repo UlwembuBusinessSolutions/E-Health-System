@@ -10,12 +10,14 @@ import jakarta.persistence.Table;
 
 import java.util.UUID;
 
-// A plain drugName/dosage/quantity line, not a StockItem/formulary_code
-// reference — "Restrict to approved formulary" is PHRM-US-010, explicitly
-// Blocked/Not Ready in the backlog (BRD Open Item OI-012, no formulary
-// source of truth exists yet), so an item here is free text a prescriber
-// writes, same as a paper script would carry, not a lookup against
-// inventory this codebase doesn't have.
+// A plain drugName/dosage/quantity line a prescriber writes, same as a
+// paper script would carry — "Restrict to approved formulary" is
+// PHRM-US-010, still Blocked in the backlog (BRD Open Item OI-012).
+//
+// productId links the line to the stock product it is dispensed from. It
+// stays null until a pharmacist confirms the mapping; a null productId is
+// the explicit "not inventory-backed" state (legacy rows included), and
+// nothing ever guesses a product from the free-text name.
 @Entity
 @Table(name = "prescription_items")
 public class PrescriptionItem {
@@ -36,77 +38,19 @@ public class PrescriptionItem {
     @Column(nullable = false)
     private int quantity;
 
-    @Column(name = "dispensed_quantity", nullable = false)
-    private int dispensedQuantity;
-
-    @Column(name = "product_id")
-    private UUID productId;
-    @Enumerated(EnumType.STRING)
-    @Column(name = "clinical_check_status", nullable = false, length = 20)
-    private ClinicalCheckStatus clinicalCheckStatus = ClinicalCheckStatus.REVIEW_REQUIRED;
-    @Column(name = "clinical_check_note", length = 500)
-    private String clinicalCheckNote;
-    @Column(name = "reviewed_by")
-    private UUID reviewedBy;
-    @Column(name = "reviewed_at")
-    private java.time.Instant reviewedAt;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "decline_reason", length = 40)
-    private DeclineReason declineReason;
-    @Column(name = "decline_note", length = 500)
-    private String declineNote;
-    @Column(name = "declined_by")
-    private UUID declinedBy;
-    @Column(name = "declined_at")
-    private java.time.Instant declinedAt;
-
-    public DeclineReason getDeclineReason() { return declineReason; }
-    public String getDeclineNote() { return declineNote; }
-    public UUID getDeclinedBy() { return declinedBy; }
-    public java.time.Instant getDeclinedAt() { return declinedAt; }
-
-    public void decline(DeclineReason reason, String note, UUID actor, java.time.Instant at) {
-        requireNotDeclined();
-        if (status == PrescriptionStatus.DISPENSED)
-            throw new InvalidDispenseException("A fully dispensed item cannot be declined.");
-        if (reason == null || actor == null || at == null || (note != null && note.length() > 500)
-                || (reason == DeclineReason.OTHER && (note == null || note.isBlank())))
-            throw new InvalidDispenseException("A decline reason is required; OTHER also requires a note (maximum 500 characters).");
-        declineReason = reason; declineNote = note == null || note.isBlank() ? null : note.trim();
-        declinedBy = actor; declinedAt = at; status = PrescriptionStatus.DECLINED;
-    }
-
-    private void requireNotDeclined() {
-        if (status == PrescriptionStatus.DECLINED)
-            throw new InvalidDispenseException("This item has been declined. A new prescription is required to supply it.");
-    }
-
-    public UUID getProductId() { return productId; }
-    public ClinicalCheckStatus getClinicalCheckStatus() { return clinicalCheckStatus; }
-    public String getClinicalCheckNote() { return clinicalCheckNote; }
-    public UUID getReviewedBy() { return reviewedBy; }
-    public java.time.Instant getReviewedAt() { return reviewedAt; }
-
-    public void review(UUID product, ClinicalCheckStatus result, String note, UUID reviewer, java.time.Instant at) {
-        requireNotDeclined();
-        if (product == null || result == null || note == null || note.isBlank() || note.length() > 500)
-            throw new InvalidDispenseException("Select a product and record the clinical review outcome and note.");
-        if (dispensedQuantity > 0 && productId != null && !product.equals(productId))
-            throw new InvalidDispenseException("The product cannot change after a supply has been recorded.");
-        if (status == PrescriptionStatus.DISPENSED)
-            throw new InvalidDispenseException("A completed item cannot be reviewed again.");
-        productId = product;
-        clinicalCheckStatus = result;
-        clinicalCheckNote = note.trim();
-        reviewedBy = reviewer;
-        reviewedAt = at;
-    }
-
-    // Partial supplies retain the remaining prescribed quantity.
+    // Never PARTIALLY_DISPENSED — that value only ever applies to a
+    // Prescription's own rollup (PrescriptionStatus's own why-note).
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private PrescriptionStatus status;
+
+    @Column(name = "product_id")
+    private UUID productId;
+
+    // Supports partial dispensing: remaining = quantity - dispensedQuantity.
+    // The item stays PENDING until this reaches quantity.
+    @Column(name = "dispensed_quantity", nullable = false)
+    private int dispensedQuantity;
 
     protected PrescriptionItem() {
     }
@@ -123,9 +67,20 @@ public class PrescriptionItem {
     // markOutOfStock() below) but not from here: once dispensed, this item
     // is physically with the patient and stays terminal.
     public void markDispensed() {
-        requireNotDeclined();
-        this.dispensedQuantity = quantity;
         this.status = PrescriptionStatus.DISPENSED;
+    }
+
+    // Records one dispense event; the item only becomes DISPENSED once the
+    // whole prescribed quantity has been handed over.
+    public void recordDispensed(int dispensedNow) {
+        this.dispensedQuantity += dispensedNow;
+        if (dispensedQuantity == quantity) {
+            markDispensed();
+        }
+    }
+
+    public void mapToProduct(UUID productId) {
+        this.productId = productId;
     }
 
     // PrescriptionService.markItemOutOfStock() — deliberately not terminal:
@@ -134,18 +89,9 @@ public class PrescriptionItem {
     // again on an already-OUT_OF_STOCK item (idempotent) so a pharmacist
     // can update the note without it being an error.
     public void markOutOfStock() {
-        requireNotDeclined();
         this.status = PrescriptionStatus.OUT_OF_STOCK;
     }
 
-    public int getDispensedQuantity() { return dispensedQuantity; }
-    public void dispenseQuantity(int amount) {
-        requireNotDeclined();
-        if (amount <= 0 || amount > quantity - dispensedQuantity)
-            throw new InvalidDispenseException("Quantity must be positive and no greater than the remaining prescribed quantity.");
-        dispensedQuantity += amount;
-        status = dispensedQuantity == quantity ? PrescriptionStatus.DISPENSED : PrescriptionStatus.PARTIALLY_DISPENSED;
-    }
     public UUID getId() {
         return id;
     }
@@ -168,5 +114,17 @@ public class PrescriptionItem {
 
     public PrescriptionStatus getStatus() {
         return status;
+    }
+
+    public UUID getProductId() {
+        return productId;
+    }
+
+    public int getDispensedQuantity() {
+        return dispensedQuantity;
+    }
+
+    public int getRemainingQuantity() {
+        return quantity - dispensedQuantity;
     }
 }

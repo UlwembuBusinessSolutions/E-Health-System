@@ -4,6 +4,7 @@ import co.ehealth.platform.core.common.FilterResponses;
 import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.identity.User;
 import co.ehealth.platform.identity.UserRepository;
+import co.ehealth.platform.identity.UserStatus;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -15,6 +16,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,10 +25,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final SessionActivityStore activityStore;
+    private final Clock clock;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository) {
+    public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository,
+                                   SessionActivityStore activityStore, Clock clock) {
         this.jwtService = jwtService;
         this.userRepository = userRepository;
+        this.activityStore = activityStore;
+        this.clock = clock;
     }
 
     @Override
@@ -57,7 +64,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String tokenTenant = claims.get("tenant", String.class);
-        if (!tokenTenant.equals(TenantContext.getCurrentTenant())) {
+        if (tokenTenant == null || !tokenTenant.equals(TenantContext.getCurrentTenant())
+                || claims.getId() == null || claims.getIssuedAt() == null || claims.getExpiration() == null) {
             // A token minted for one client presented against another
             // client's subdomain — reject even though the signature itself
             // is valid, since every tenant currently shares one signing key.
@@ -70,7 +78,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         Optional<User> user = userRepository.findById(userId);
         int tokenVersion = claims.get("tokenVersion", Integer.class);
 
-        if (user.isEmpty() || user.get().getTokenVersion() != tokenVersion) {
+        if (user.isEmpty() || user.get().getTokenVersion() != tokenVersion
+                || user.get().getStatus() != UserStatus.ACTIVE) {
             // Password changed, or the account was disabled, since this
             // token was issued — tokenVersion no longer matches, so it's
             // treated as revoked even though it hasn't naturally expired.
@@ -79,11 +88,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (claims.getId() == null || !claims.getId().equals(user.get().getActiveSessionJti())) {
-            SecurityContextHolder.clearContext();
-            response.setHeader("X-Session-Status", "SESSION_REPLACED_OR_ENDED");
+        activityStore.registerSession(claims.getId(), claims.getIssuedAt().toInstant(),
+                claims.getExpiration().toInstant(), clock.instant());
+        if (activityStore.isRevoked(claims.getId())) {
             FilterResponses.writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED,
-                    "Your session has ended because you signed in elsewhere or signed out. Please sign in again.");
+                    "Session expired. Please sign in again.");
             return;
         }
 
@@ -97,6 +106,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 new AuthenticatedPrincipal(userId, claims.getId()), null, authorities);
         SecurityContextHolder.getContext().setAuthentication(authentication);
         request.setAttribute("jti", claims.getId());
+        request.setAttribute("jwtExpiresAt", claims.getExpiration().toInstant());
+        request.setAttribute("jwtTokenVersion", tokenVersion);
 
         chain.doFilter(request, response);
     }
