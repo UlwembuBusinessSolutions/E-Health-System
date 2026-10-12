@@ -4,6 +4,8 @@ import co.ehealth.platform.consultation.ConsultationNotFoundException;
 import co.ehealth.platform.consultation.InvalidConsultationException;
 import co.ehealth.platform.consultation.InvalidConsultationStateException;
 import co.ehealth.platform.core.security.InvalidTokenException;
+import co.ehealth.platform.identity.InvalidRolePermissionChangeException;
+import co.ehealth.platform.identity.RoleNotFoundException;
 import co.ehealth.platform.identity.AccountLockedException;
 import co.ehealth.platform.identity.DuplicateFieldException;
 import co.ehealth.platform.identity.InvalidCredentialsException;
@@ -243,6 +245,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
+    @ExceptionHandler(RoleNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleRoleNotFound(RoleNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidRolePermissionChangeException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidRolePermissionChange(
+            InvalidRolePermissionChangeException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     // The safety check in the same method: refusing to remove an
     // organization's last remaining admin, since every endpoint that could
     // add another one back requires ORG_ADMIN to call it in the first
@@ -453,7 +466,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler({CollectionNotFoundException.class, CollectionProofNotFoundException.class})
+    @ExceptionHandler({ CollectionNotFoundException.class, CollectionProofNotFoundException.class })
     public ResponseEntity<ApiErrorResponse> handleCollectionRecordNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
@@ -600,16 +613,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(DuplicateSupplierResponse.from(ex));
     }
 
-    @ExceptionHandler({SupplierNotFoundException.class, ReceiptNotFoundException.class,
-            ImportBatchNotFoundException.class})
+    @ExceptionHandler({ SupplierNotFoundException.class, ReceiptNotFoundException.class,
+            ImportBatchNotFoundException.class })
     public ResponseEntity<ApiErrorResponse> handlePharmacyRecordNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler({InvalidSupplierStateException.class, DuplicateSerialException.class,
+    @ExceptionHandler({ InvalidSupplierStateException.class, DuplicateSerialException.class,
             SerialNotInStockException.class, ReceiptAlreadyReversedException.class,
             ReceiptStockUsedException.class, OpeningStockAlreadyLoadedException.class,
-            ImportConflictException.class})
+            ImportConflictException.class })
     public ResponseEntity<ApiErrorResponse> handlePharmacyConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
@@ -622,19 +635,19 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // Pharmacy stock counts and the scheduled medicines register
     // (co.ehealth.platform.pharmacy.count / .register). 422 is used where the
     // request is well-formed but breaks a business rule the user can fix.
-    @ExceptionHandler({StockCountNotFoundException.class, StockCountLineNotFoundException.class})
+    @ExceptionHandler({ StockCountNotFoundException.class, StockCountLineNotFoundException.class })
     public ResponseEntity<ApiErrorResponse> handleStockCountNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler({InvalidStockCountStateException.class, RegisterBalanceExceededException.class,
-            RegisterDayClosedException.class})
+    @ExceptionHandler({ InvalidStockCountStateException.class, RegisterBalanceExceededException.class,
+            RegisterDayClosedException.class })
     public ResponseEntity<ApiErrorResponse> handlePharmacyCountOrRegisterConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler({InvalidStockCountException.class, InvalidRegisterEntryException.class,
-            InvalidWitnessException.class})
+    @ExceptionHandler({ InvalidStockCountException.class, InvalidRegisterEntryException.class,
+            InvalidWitnessException.class })
     public ResponseEntity<ApiErrorResponse> handlePharmacyCountOrRegisterInvalid(RuntimeException ex) {
         return ResponseEntity.unprocessableEntity().body(new ApiErrorResponse(ex.getMessage(), null));
     }

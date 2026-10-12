@@ -37,7 +37,10 @@ public class PlatformAuditLog {
     // ...) say everything they need to in the action code alone. Added for
     // MODULE_TOGGLED, whose own acceptance criteria requires capturing which
     // module and its previous/new state, not just that a toggle happened.
-    @Column(length = 500)
+    // @Column(length = 500)
+    // private String detail;
+
+    @Column(columnDefinition = "TEXT")
     private String detail;
 
     @Column(name = "ip_address", length = 45)
@@ -65,7 +68,7 @@ public class PlatformAuditLog {
     // one of those 8 call sites gets both captured for free, the same
     // guarantee AuditLogService.append() gives the tenant side.
     public PlatformAuditLog(UUID platformOperatorId, String action, UUID organizationId, String detail,
-                             Instant createdAt) {
+            Instant createdAt) {
         this.platformOperatorId = platformOperatorId;
         this.action = action;
         this.organizationId = organizationId;

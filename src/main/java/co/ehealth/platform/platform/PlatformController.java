@@ -1,5 +1,7 @@
 package co.ehealth.platform.platform;
 
+import co.ehealth.platform.identity.RolePermissionService;
+import org.springframework.web.bind.annotation.PutMapping;
 import co.ehealth.platform.core.common.CsvExport;
 import co.ehealth.platform.core.security.PlatformOperatorPrincipal;
 import co.ehealth.platform.core.tenant.ModuleCode;
@@ -125,7 +127,7 @@ public class PlatformController {
     // requires already being one.
     @DeleteMapping("/{id}/admins/{userId}")
     public ResponseEntity<Void> removeAdmin(@PathVariable UUID id, @PathVariable UUID userId,
-                                             @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.removeAdmin(id, userId, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
@@ -143,14 +145,14 @@ public class PlatformController {
 
     @PostMapping("/{id}/admins/{userId}/enable")
     public ResponseEntity<Void> enableAdmin(@PathVariable UUID id, @PathVariable UUID userId,
-                                             @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.setAdminEnabled(id, userId, true, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/admins/{userId}/disable")
     public ResponseEntity<Void> disableAdmin(@PathVariable UUID id, @PathVariable UUID userId,
-                                              @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.setAdminEnabled(id, userId, false, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
@@ -169,8 +171,8 @@ public class PlatformController {
     // own why-note for why that one stays permanent.
     @PatchMapping("/{id}")
     public ResponseEntity<OrganizationSummary> updateDetails(@PathVariable UUID id,
-                                                               @Valid @RequestBody UpdateOrganizationRequest request,
-                                                               @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @Valid @RequestBody UpdateOrganizationRequest request,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.updateDetails(id, request.displayName(), request.sector(), operator.operatorId());
         Organization organization = provisioningService.getOrganization(id);
         int enabledModules = provisioningService.countEnabledModules(List.of(id)).get(id);
@@ -182,14 +184,14 @@ public class PlatformController {
 
     @PostMapping("/{id}/suspend")
     public ResponseEntity<Void> suspend(@PathVariable UUID id,
-                                         @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.suspend(id, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/reactivate")
     public ResponseEntity<Void> reactivate(@PathVariable UUID id,
-                                            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.reactivate(id, operator.operatorId());
         return ResponseEntity.noContent().build();
     }
@@ -203,8 +205,8 @@ public class PlatformController {
     // same shape as staff creation then a separate photo upload.
     @PostMapping(value = "/{id}/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<LogoUploadResponse> uploadLogo(@PathVariable UUID id,
-                                                          @RequestParam("file") MultipartFile file,
-                                                          @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         String url = provisioningService.uploadLogo(id, file, operator.operatorId());
         return ResponseEntity.ok(new LogoUploadResponse(url));
     }
@@ -245,11 +247,11 @@ public class PlatformController {
     }
 
     public record MailSettingsRequest(String host, Integer port, String username, String password,
-                                       String fromAddress) {
+            String fromAddress) {
     }
 
     public record MailSettingsResponse(String host, Integer port, String username, boolean passwordSet,
-                                        String fromAddress) {
+            String fromAddress) {
     }
 
     // AUDT-US-005/006's platform-side entry point — one organization's own
@@ -258,8 +260,8 @@ public class PlatformController {
     // OrganizationProvisioningService.listTenantAuditLog()'s own why-note.
     @GetMapping("/{id}/audit")
     public ResponseEntity<Map<String, Object>> listTenantAudit(@PathVariable UUID id,
-                                                                 @RequestParam(required = false, defaultValue = "0") int page,
-                                                                 @RequestParam(required = false, defaultValue = "50") int size) {
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "50") int size) {
         var result = provisioningService.listTenantAuditLog(id, page, size);
         return ResponseEntity.ok(Map.of("items", result.items(), "page", result.page(), "size", result.size(),
                 "totalItems", result.totalItems(), "hasMore", result.hasMore()));
@@ -271,9 +273,9 @@ public class PlatformController {
     // platform_audit_log row rather than back into the tenant's own log.
     @GetMapping("/{id}/audit/export")
     public ResponseEntity<byte[]> exportTenantAudit(@PathVariable UUID id,
-                                                      @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
-        List<OrganizationProvisioningService.TenantAuditEntryView> items =
-                provisioningService.listTenantAuditLogForExport(id, operator.operatorId());
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+        List<OrganizationProvisioningService.TenantAuditEntryView> items = provisioningService
+                .listTenantAuditLogForExport(id, operator.operatorId());
 
         List<String> header = List.of("When (UTC)", "Action", "Entity type", "Entity ID", "Actor", "Before",
                 "After", "IP address", "Device");
@@ -292,7 +294,8 @@ public class PlatformController {
         String filename = "organization-audit-" + id + "-" + DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
                 .withZone(ZoneOffset.UTC).format(clock.instant()) + ".csv";
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(filename).build().toString())
                 .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
                 .body(csv);
     }
@@ -303,8 +306,8 @@ public class PlatformController {
     // needs a tenant-scoped session this controller's callers don't have).
     @PostMapping("/{id}/facilities")
     public ResponseEntity<FacilityResponse> addClinic(@PathVariable UUID id,
-                                                        @Valid @RequestBody AddClinicRequest request,
-                                                        @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @Valid @RequestBody AddClinicRequest request,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         var command = new OrganizationProvisioningService.AddClinicCommand(
                 request.name(), request.code(), request.type(), request.address(), request.phone(),
                 request.operatingHours());
@@ -328,15 +331,35 @@ public class PlatformController {
     }
 
     public record FacilityResponse(UUID id, String name, String code, FacilityType type, String address,
-                                    String phone, String operatingHours, boolean active) {
+            String phone, String operatingHours, boolean active) {
         static FacilityResponse from(Facility f) {
             return new FacilityResponse(f.getId(), f.getName(), f.getCode(), f.getType(), f.getAddress(),
                     f.getPhone(), f.getOperatingHours(), f.isActive());
         }
     }
 
+    // IAM-F02 / BR-IAM-020 — view and customise one tenant's role permissions.
+    @GetMapping("/{id}/roles")
+    public ResponseEntity<RolePermissionService.RoleCatalogue> listRolePermissions(@PathVariable UUID id) {
+        return ResponseEntity.ok(provisioningService.listRolePermissions(id));
+    }
+
+    @PutMapping("/{id}/roles/{roleId}/permissions")
+    public ResponseEntity<RolePermissionService.PermissionChange> updateRolePermissions(
+            @PathVariable UUID id, @PathVariable UUID roleId,
+            @Valid @RequestBody UpdateRolePermissionsRequest request,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+        return ResponseEntity.ok(provisioningService.updateRolePermissions(id, roleId,
+                request.permissionCodes(), operator.operatorId()));
+    }
+
+    // An empty list is valid (a role with no access); null is not.
+    public record UpdateRolePermissionsRequest(@NotNull List<String> permissionCodes) {
+    }
+
     // SADM-US-010. All 20 modules, not just the ones this org has an
-    // opinion about — see OrganizationProvisioningService.listModuleEntitlements()'s
+    // opinion about — see
+    // OrganizationProvisioningService.listModuleEntitlements()'s
     // own why-note on what an absent row means.
     @GetMapping("/{id}/modules")
     public ResponseEntity<Map<String, Object>> listModules(@PathVariable UUID id) {
@@ -349,8 +372,8 @@ public class PlatformController {
     // any other malformed path variable.
     @PostMapping("/{id}/modules/{moduleCode}")
     public ResponseEntity<Void> toggleModule(@PathVariable UUID id, @PathVariable ModuleCode moduleCode,
-                                              @Valid @RequestBody ToggleModuleRequest request,
-                                              @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+            @Valid @RequestBody ToggleModuleRequest request,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
         provisioningService.toggleModule(id, moduleCode, request.enabled(), operator.operatorId());
         return ResponseEntity.noContent().build();
     }
@@ -386,8 +409,8 @@ public class PlatformController {
     // rather than being a frontend constant, so the catalogue only has one
     // source of truth (ModuleCode) instead of two places that could drift.
     public record OrganizationSummary(UUID id, String slug, String displayName, OrganizationStatus status,
-                                       OrganizationSector sector, String logoUrl, Instant createdAt,
-                                       int enabledModuleCount, int totalModuleCount) {
+            OrganizationSector sector, String logoUrl, Instant createdAt,
+            int enabledModuleCount, int totalModuleCount) {
         static OrganizationSummary from(Organization o, int enabledModuleCount) {
             return new OrganizationSummary(o.getId(), o.getSlug(), o.getDisplayName(), o.getStatus(), o.getSector(),
                     o.getBranding().logoUrl(), o.getCreatedAt(), enabledModuleCount,
