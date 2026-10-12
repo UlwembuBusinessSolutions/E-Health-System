@@ -22,6 +22,7 @@ services:
     build: .
     ports:
       - "8081:8081"
+      - "5005:5005"
     environment:
       # The only override actually needed. application.yml's own default
       # (localhost:5432) assumes the app runs on the host — inside this

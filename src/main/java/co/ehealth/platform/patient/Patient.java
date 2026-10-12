@@ -129,13 +129,19 @@ public class Patient {
     @Column(name = "deceased_date")
     private LocalDate deceasedDate;
 
+    // When an offline-captured registration was actually taken on the
+    // device — createdAt stays server time. Null for every online
+    // registration and every patient that predates offline sync.
+    @Column(name = "captured_offline_at")
+    private Instant capturedOfflineAt;
+
     protected Patient() {
     }
 
     public Patient(String mpiNumber, String firstName, String lastName, LocalDate dateOfBirth, Gender gender,
-                   CitizenshipStatus citizenshipStatus, String idNumber, String address, String contactNumber,
-                   String email, String medicalAidProvider, String medicalAidNumber, String passportNumber,
-                   LocalDate passportExpiry, UUID registeredByUserId, Instant createdAt) {
+            CitizenshipStatus citizenshipStatus, String idNumber, String address, String contactNumber,
+            String email, String medicalAidProvider, String medicalAidNumber, String passportNumber,
+            LocalDate passportExpiry, UUID registeredByUserId, Instant createdAt) {
         this.mpiNumber = mpiNumber;
         this.firstName = firstName;
         this.lastName = lastName;
@@ -242,6 +248,10 @@ public class Patient {
         return deceasedDate;
     }
 
+    public Instant getCapturedOfflineAt() {
+        return capturedOfflineAt;
+    }
+
     // PatientService.archive() is the normal caller, same "one entry point,
     // guarded by the service layer" pattern setFirstName() etc. above
     // already follow. PatientMigrationService.migrate() is the one other
@@ -273,8 +283,8 @@ public class Patient {
     // fields refresh from whatever the migration is carrying now (they may
     // have changed while this person was away).
     public void reactivateFromMigration(String firstName, String lastName, String address, String contactNumber,
-                                         String email, String medicalAidProvider, String medicalAidNumber,
-                                         String passportNumber, LocalDate passportExpiry) {
+            String email, String medicalAidProvider, String medicalAidNumber,
+            String passportNumber, LocalDate passportExpiry) {
         this.archived = false;
         this.archivedReason = null;
         this.archivedAt = null;
@@ -289,6 +299,12 @@ public class Patient {
         this.medicalAidNumber = medicalAidNumber;
         this.passportNumber = passportNumber;
         this.passportExpiry = passportExpiry;
+    }
+
+    // Called only by PatientService.registerOffline(). Deliberately not a
+    // general-purpose setter, same "narrow mutator" discipline as archive().
+    public void markCapturedOffline(Instant capturedAt) {
+        this.capturedOfflineAt = capturedAt;
     }
 
     public void setFirstName(String firstName) {
