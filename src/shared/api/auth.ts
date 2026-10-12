@@ -1,6 +1,5 @@
 import type { AuthenticatedUser } from "./types";
 import { apiClient } from "./client";
-import { clearStaffSessionNotice } from "./staffSession";
 
 
 const TENANT_TOKEN_KEY = "ulwembu.tenantToken";
@@ -15,7 +14,11 @@ export function getTenantToken(): string | null {
 
 function setTenantToken(token: string): void {
   sessionStorage.setItem(TENANT_TOKEN_KEY, token);
-  clearStaffSessionNotice();
+}
+
+// A successful server-side continuation replaces the signed token in this tab.
+export function replaceTenantToken(token: string): void {
+  setTenantToken(token);
 }
 
 export function getTenantSlug(): string | null {
@@ -40,14 +43,6 @@ function setTenantSlug(slug: string): void {
 // which org signs in next, so nothing goes stale.
 export function clearTenantAuth(): void {
   sessionStorage.removeItem(TENANT_TOKEN_KEY);
-}
-
-// Capture the session headers before the UI clears its local credentials.
-export async function revokeStaffSession(): Promise<void> {
-  if (!getTenantToken()) return;
-  await apiClient.post<void>("/api/v1/auth/logout", undefined, {
-    headers: tenantAuthHeaders(),
-  });
 }
 
 // Every other tenant-scoped module (staff.ts, organization.ts) sends these

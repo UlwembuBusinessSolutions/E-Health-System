@@ -6,6 +6,8 @@ import { EmailSettingsSection } from "./EmailSettingsSection";
 import { ContactInfoSection } from "./ContactInfoSection";
 import { ModulesSettingsSection } from "./ModulesSettingsSection";
 import { SsoSettingsSection } from "./SsoSettingsSection";
+import { AppointmentsSettingsSection } from "./AppointmentsSettingsSection";
+import { CalendarDays } from "lucide-react";
 
 type OrganizationSettingsSection = {
   id: string;
@@ -22,6 +24,10 @@ const sections: OrganizationSettingsSection[] = [{
   id: "email", title: "Email", group: "Communication",
   description: "Manage the outgoing email used for your organization's notifications.",
   keywords: "smtp server sender password notifications mail", icon: Mail, component: EmailSettingsSection,
+}, {
+  id: "appointments", title: "Appointments", group: "Organization",
+  description: "Set daily appointment limits for each facility.",
+  keywords: "appointments booking daily visit count capacity limit reception", icon: CalendarDays, component: AppointmentsSettingsSection,
 }, { id: "facilities", title: "Facilities", group: "Organization", description: "Add and maintain your organization's clinics, hospitals, stores and pharmacies.", keywords: "clinic hospital pharmacy store location address create edit", icon: Building2, component: FacilitiesSettingsSection }, {
   id: "contact-info", title: "Contact info", group: "Organization",
   description: "Manage your organization's contact details, location and online presence.",

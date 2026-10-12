@@ -85,3 +85,8 @@
   .rx-table td { padding-top: 12px; padding-bottom: 12px; }
   .rx-footer { margin-top: 8px; }
 }
+
+.rx-dispensed { display: block; margin-top: 4px; color: #4b5963; font-size: 10px; font-weight: 400; }
+.rx-buy { margin-top: 26px; padding-top: 18px; border-top: 1px dashed #b9c2c7; }
+.rx-buy-reason { margin: 4px 0 0; color: #697780; font-size: 11px; }
+@media print { .rx-buy { break-inside: avoid; } }

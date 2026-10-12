@@ -47,10 +47,36 @@ export interface PatientAccountSummary {
   linked: boolean;
 }
 
+export interface PatientOwnRecords {
+  mpiNumber: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender: string;
+  address: string;
+  contactNumber: string;
+  email: string | null;
+  visits: PatientOwnVisit[];
+}
+
+export interface PatientOwnVisit {
+  id: string;
+  facilityName: string | null;
+  visitType: string;
+  serviceStream: string;
+  visitDateTime: string;
+}
+
 interface AuthResponse {
   accessToken: string;
   expiresAt: string;
   account: PatientAccountSummary;
+}
+
+export interface PatientRegistrationStarted {
+  verificationRequired: boolean;
+  email: string;
+  expiresInMinutes: number;
 }
 
 export interface RegisterPatientAccountPayload {
@@ -66,9 +92,9 @@ export interface RegisterPatientAccountPayload {
 
 export async function registerPatientAccount(
   payload: RegisterPatientAccountPayload,
-): Promise<PatientAccountSummary> {
+): Promise<PatientRegistrationStarted> {
   setPatientTenantSlug(payload.tenantSlug);
-  const response = await apiClient.post<AuthResponse>(
+  return apiClient.post<PatientRegistrationStarted>(
     "/api/v1/patient/register",
     {
       firstName: payload.firstName,
@@ -81,12 +107,23 @@ export async function registerPatientAccount(
     },
     { headers: { "X-Tenant-ID": payload.tenantSlug } },
   );
+}
+
+export async function verifyPatientRegistrationEmail(payload: {
+  email: string;
+  code: string;
+}): Promise<PatientAccountSummary> {
+  const response = await apiClient.post<AuthResponse>(
+    "/api/v1/patient/verify-email",
+    payload,
+    { headers: patientAuthHeaders() },
+  );
   setPatientToken(response.accessToken);
   return response.account;
 }
 
 export interface PatientLoginPayload {
-  email: string;
+  identifier: string;
   password: string;
   tenantSlug: string;
 }
@@ -95,11 +132,37 @@ export async function patientLogin(payload: PatientLoginPayload): Promise<Patien
   setPatientTenantSlug(payload.tenantSlug);
   const response = await apiClient.post<AuthResponse>(
     "/api/v1/patient/auth/login",
-    { email: payload.email, password: payload.password },
+    { identifier: payload.identifier, password: payload.password },
     { headers: { "X-Tenant-ID": payload.tenantSlug } },
   );
   setPatientToken(response.accessToken);
   return response.account;
+}
+
+export interface PatientPasswordResetRequest {
+  identifier: string;
+  tenantSlug: string;
+}
+
+export async function requestPatientPasswordReset(payload: PatientPasswordResetRequest): Promise<void> {
+  await apiClient.post<void>(
+    "/api/v1/patient/auth/password-reset/request",
+    { identifier: payload.identifier },
+    { headers: { "X-Tenant-ID": payload.tenantSlug } },
+  );
+}
+
+export interface ConfirmPatientPasswordReset extends PatientPasswordResetRequest {
+  code: string;
+  newPassword: string;
+}
+
+export async function confirmPatientPasswordReset(payload: ConfirmPatientPasswordReset): Promise<void> {
+  await apiClient.post<void>(
+    "/api/v1/patient/auth/password-reset/confirm",
+    { identifier: payload.identifier, code: payload.code, newPassword: payload.newPassword },
+    { headers: { "X-Tenant-ID": payload.tenantSlug } },
+  );
 }
 
 // Same rehydration role as auth.ts's own getCurrentUser() — a stored token
@@ -110,6 +173,10 @@ export async function getCurrentPatientAccount(): Promise<PatientAccountSummary>
   const token = getPatientToken();
   if (!token) throw new Error("No stored session to rehydrate");
   return apiClient.get<PatientAccountSummary>("/api/v1/patient/auth/me", { headers: patientAuthHeaders() });
+}
+
+export async function getOwnPatientRecords(): Promise<PatientOwnRecords> {
+  return apiClient.get<PatientOwnRecords>("/api/v1/patient/records", { headers: patientAuthHeaders() });
 }
 
 export async function patientLogout(): Promise<void> {

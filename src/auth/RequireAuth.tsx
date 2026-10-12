@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import { getTenantSlug } from "@/shared/api/auth";
+import { SessionTimeoutGuard } from "./SessionTimeoutGuard";
 
 // Sends a signed-out visitor back to their own org's login, not the bare
 // /login gate — getTenantSlug() survives a sign-out click that fires this
@@ -25,5 +26,5 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     const slug = getTenantSlug();
     return <Navigate to={slug ? `/org/${slug}/login` : "/login"} replace />;
   }
-  return <>{children}</>;
+  return <SessionTimeoutGuard>{children}</SessionTimeoutGuard>;
 }

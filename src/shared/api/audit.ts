@@ -1,4 +1,3 @@
-import { staffSessionFetch } from "./staffSession";
 import { apiClient, apiOrigin, ApiError } from "./client";
 import { tenantAuthHeaders } from "./auth";
 
@@ -67,7 +66,7 @@ export async function exportTenantAudit(params: ExportTenantAuditParams = {}): P
   const search = new URLSearchParams();
   if (params.from) search.set("from", params.from);
   if (params.to) search.set("to", params.to);
-  const res = await staffSessionFetch(`${apiOrigin()}/api/v1/admin/audit/export?${search.toString()}`, {
+  const res = await fetch(`${apiOrigin()}/api/v1/admin/audit/export?${search.toString()}`, {
     headers: tenantAuthHeaders(),
   });
   if (!res.ok) {

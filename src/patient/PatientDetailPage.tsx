@@ -1,3 +1,6 @@
+import { PrescriptionBuilder } from "@/prescribing/PrescriptionBuilder";
+import { EMPTY_DRAFT, draftProblems, toPayload, type PrescriptionDraft } from "@/prescribing/prescriptionDraft";
+import { generateUUID } from "../utils/uuid";
 import { PatientVisitsTab } from "./PatientVisitsTab";
 import { createPortal } from "react-dom";
 import { VitalsOverview } from "./VitalsOverview";
@@ -73,7 +76,6 @@ import {
   createPrescription,
   getPatientPrescriptions,
   type Prescription,
-  type PrescriptionItemInput,
 } from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
 import { printQueueTicket } from "@/shared/lib/printTicket";
@@ -103,6 +105,7 @@ import {
 } from "@/shared/api/triage";
 import { ApiError } from "@/shared/api/client";
 import { useAuth } from "@/auth/AuthContext";
+import { canTakeVitals } from "@/auth/roles";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
 import { Input } from "@/shared/components/Input";
@@ -113,7 +116,6 @@ import { TriageColourBadge } from "@/shared/components/TriageColourBadge";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 
-const EMPTY_ITEM: PrescriptionItemInput = { drugName: "", dosage: "", quantity: 1 };
 
 const VISIT_TYPE_OPTIONS: { value: VisitType; label: string }[] = [
   { value: "NEW", label: "New visit" },
@@ -500,8 +502,6 @@ function PatientPrescriptionsTab({ patientId }: { patientId: string }) {
                     <StatusPill tone="success">Fully collected</StatusPill>
                   ) : rx.status === "PARTIALLY_DISPENSED" ? (
                     <StatusPill tone="warning">Partially collected</StatusPill>
-                  ) : rx.status === "DECLINED" ? (
-                    <StatusPill tone="danger">Dispensing declined</StatusPill>
                   ) : rx.status === "OUT_OF_STOCK" ? (
                     <StatusPill tone="danger">Not collected — out of stock</StatusPill>
                   ) : (
@@ -526,15 +526,12 @@ function PatientPrescriptionsTab({ patientId }: { patientId: string }) {
                       </span>
                       {item.status === "DISPENSED" ? (
                         <StatusPill tone="success">Taken</StatusPill>
-                      ) : item.status === "DECLINED" ? (
-                        <StatusPill tone="danger">Dispensing declined</StatusPill>
                       ) : item.status === "OUT_OF_STOCK" ? (
                         <StatusPill tone="danger">Not collected — out of stock</StatusPill>
                       ) : (
                         <StatusPill tone="warning">Not yet taken</StatusPill>
                       )}
                     </div>
-                    {item.status === "DECLINED" && <p className="mt-1 text-[12px] text-danger-600">Reason: {item.declineReason?.replaceAll("_", " ").toLowerCase()}. {item.declineNote} Previously supplied: {item.dispensedQuantity} units.{item.declinedAt && ` Recorded ${formatDateTime(item.declinedAt)}.`}</p>}
                     {item.status === "DISPENSED" && item.dispensedAt && (
                       <p className="mt-1 text-[12px] text-success-600">
                         Dispensed by {item.dispensedByName ?? "unknown"} on {formatDateTime(item.dispensedAt)}
@@ -730,6 +727,7 @@ export function PatientDetailPage() {
   const patientId = id ?? "";
   const { user } = useAuth();
   const isOrgAdmin = user?.role === "ORG_ADMIN";
+  const canCaptureVitals = canTakeVitals(user?.role);
   // Starting a visit stays outside the tabs below — it's a primary action
   // relevant no matter which tab someone's looking at, not "content" that
   // should hide when the Vitals tab (a different, cross-visit view of the
@@ -744,7 +742,7 @@ export function PatientDetailPage() {
   const [visitError, setVisitError] = useState<string | null>(null);
   const [startedVisit, setStartedVisit] = useState<VisitWithToken | null>(null);
   const [isPrescribing, setIsPrescribing] = useState(false);
-  const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItemInput[]>([{ ...EMPTY_ITEM }]);
+  const [prescriptionDraft, setPrescriptionDraft] = useState<PrescriptionDraft>(EMPTY_DRAFT);
   const [prescriptionError, setPrescriptionError] = useState<string | null>(null);
   const [createdPrescription, setCreatedPrescription] = useState<Prescription | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
@@ -894,7 +892,8 @@ export function PatientDetailPage() {
   // capture (form dismissed and reopened) gets a fresh key, while retrying
   // the same submission (the mutation firing again for the same click)
   // reuses it, which is the whole point of idempotencyKey server-side.
-  const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => crypto.randomUUID());
+  //const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => generateUUID());
 
   const vitalsHistoryQuery = useQuery({
     queryKey: ["triage-history", activeVisitId],
@@ -919,7 +918,8 @@ export function PatientDetailPage() {
     onSuccess: () => {
       setIsCapturingVitals(false);
       setVitalsForm(EMPTY_VITALS_FORM);
-      setVitalsIdempotencyKey(crypto.randomUUID());
+      //setVitalsIdempotencyKey(crypto.randomUUID());
+      setVitalsIdempotencyKey(generateUUID());
       queryClient.invalidateQueries({ queryKey: ["triage-history", activeVisitId] });
       queryClient.invalidateQueries({ queryKey: ["patient-vitals-history"] });
     },
@@ -1011,7 +1011,10 @@ export function PatientDetailPage() {
   };
 
   const prescribe = useMutation({
-    mutationFn: (visitId: string) => createPrescription({ visitId, items: prescriptionItems }),
+    mutationFn: (visitId: string) => {
+      const { pharmacyItems, purchaseItems } = toPayload(prescriptionDraft);
+      return createPrescription({ visitId, items: pharmacyItems, purchaseItems });
+    },
     onSuccess: (result) => {
       setCreatedPrescription(result);
       setIsPrescribing(false);
@@ -1024,16 +1027,12 @@ export function PatientDetailPage() {
   const handlePrescribe = () => {
     setPrescriptionError(null);
     if (!startedVisit) return;
-    const incomplete = prescriptionItems.some((item) => !item.drugName.trim() || !item.dosage.trim());
-    if (incomplete) {
-      setPrescriptionError("Every item needs a drug name and dosage.");
+    const problems = draftProblems(prescriptionDraft);
+    if (problems.length > 0) {
+      setPrescriptionError(problems.join(" "));
       return;
     }
     prescribe.mutate(startedVisit.visit.id);
-  };
-
-  const updateItem = (index: number, patch: Partial<PrescriptionItemInput>) => {
-    setPrescriptionItems((items) => items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
   };
 
   const patient = patientQuery.data;
@@ -1364,14 +1363,14 @@ export function PatientDetailPage() {
                     >
                       Print ticket
                     </Button>
-                    <Button
+                    {canCaptureVitals && <Button
                       variant="secondary"
                       size="md"
                       icon={<HeartPulse className="size-3.5" aria-hidden />}
                       onClick={() => setIsCapturingVitals(true)}
                     >
                       Take vitals
-                    </Button>
+                    </Button>}
                     {!isPrescribing && !createdPrescription && (
                       <Button
                         variant="secondary"
@@ -1487,7 +1486,7 @@ export function PatientDetailPage() {
                   <p className="text-[13.5px] text-text-secondary">
                     Start a visit before recording vitals so the readings are linked to the correct consultation.
                   </p>
-                  {!isStartingVisit && (
+                  {!isStartingVisit && canCaptureVitals && (
                     <Button
                       className="mt-3"
                       variant="secondary"
@@ -1765,14 +1764,14 @@ export function PatientDetailPage() {
                     <p className="text-[13.5px] text-text-secondary">No vitals captured yet for this visit.</p>
                   )}
                   <div className="mt-4 flex items-center gap-2">
-                    <Button
+                    {canCaptureVitals && <Button
                       variant="secondary"
                       size="md"
                       icon={<HeartPulse className="size-3.5" aria-hidden />}
                       onClick={() => setIsCapturingVitals(true)}
                     >
                       {latestVitals ? "Take new reading" : "Take vitals"}
-                    </Button>
+                    </Button>}
                     {earlierVitals.length > 0 && (
                       <button
                         type="button"
@@ -1834,56 +1833,9 @@ export function PatientDetailPage() {
                       {prescriptionError}
                     </p>
                   )}
-                  <div className="flex flex-col gap-3">
-                    {prescriptionItems.map((item, index) => (
-                      <div key={index} className="grid grid-cols-1 gap-3 sm:grid-cols-[2fr_2fr_1fr_auto]">
-                        <Input
-                          label="Drug name"
-                          required={index === 0}
-                          placeholder="Paracetamol"
-                          value={item.drugName}
-                          onChange={(e) => updateItem(index, { drugName: e.target.value })}
-                        />
-                        <Input
-                          label="Dosage"
-                          required={index === 0}
-                          placeholder="500mg twice daily"
-                          value={item.dosage}
-                          onChange={(e) => updateItem(index, { dosage: e.target.value })}
-                        />
-                        <Input
-                          label="Quantity"
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={(e) => updateItem(index, { quantity: Number(e.target.value) || 1 })}
-                        />
-                        <div className="flex items-end">
-                          <button
-                            type="button"
-                            disabled={prescriptionItems.length === 1}
-                            onClick={() =>
-                              setPrescriptionItems((items) => items.filter((_, i) => i !== index))
-                            }
-                            className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary transition-colors duration-150 hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-40"
-                            aria-label="Remove item"
-                          >
-                            <Trash2 className="size-4" aria-hidden />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setPrescriptionItems((items) => [...items, { ...EMPTY_ITEM }])}
-                    className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-600 hover:text-brand-700"
-                  >
-                    <Plus className="size-3.5" aria-hidden />
-                    Add another item
-                  </button>
+                  <PrescriptionBuilder draft={prescriptionDraft} onChange={setPrescriptionDraft} />
                   <div className="mt-4 flex gap-2">
-                    <Button loading={prescribe.isPending} onClick={handlePrescribe}>
+                    <Button loading={prescribe.isPending} disabled={draftProblems(prescriptionDraft).length > 0} onClick={handlePrescribe}>
                       Create prescription
                     </Button>
                     <Button variant="secondary" onClick={() => setIsPrescribing(false)}>

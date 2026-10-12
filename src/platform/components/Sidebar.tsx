@@ -1,11 +1,12 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Building2, ClipboardList, Gauge, LogOut, Users as UsersIcon } from "lucide-react";
+import { Building2, ClipboardList, Gauge, KeyRound, LogOut, Users as UsersIcon } from "lucide-react";
 import { usePlatformAuth } from "../PlatformAuthContext";
 
 const NAV_ITEMS = [
   { to: "/platform", label: "Overview", icon: Gauge, end: true },
   { to: "/platform/organizations", label: "Organizations", icon: Building2, end: false },
+  { to: "/platform/modules", label: "Entitlements", icon: KeyRound, end: false },
   { to: "/platform/users", label: "Users", icon: UsersIcon, end: false },
   { to: "/platform/audit", label: "Audit trail", icon: ClipboardList, end: false },
 ] as const;

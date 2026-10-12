@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { Check, Copy, KeyRound, LogOut, Plus, Search, ShieldOff, ShieldCheck, Briefcase } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Check, Copy, KeyRound, LogIn, LogOut, Pencil, Plus, Search, ShieldOff, ShieldCheck, Briefcase } from "lucide-react";
 import {
   listStaff,
   resetStaffPassword,
   setStaffEnabled,
   offboardStaff,
+  reboardStaff,
   updateStaffEmploymentType,
   EMPLOYMENT_TYPE_OPTIONS,
   employmentTypeLabel,
@@ -77,6 +78,7 @@ function CopyButton({ text }: { text: string }) {
 // small enough that a second round trip here is cheaper than adding a
 // cross-module name-resolution path on the backend for one column.
 export function StaffListPage() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -169,6 +171,18 @@ export function StaffListPage() {
     },
   });
 
+  // The reverse of offboard above — clears employmentEndDate and re-enables
+  // login in one call (reboardStaff()'s own why-note on why this isn't just
+  // toggleEnabled(true, ...)).
+  const reboard = useMutation({
+    mutationFn: (id: string) => reboardStaff(id),
+    onMutate: () => setActionError(null),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "list"] }),
+    onError: (error) => {
+      setActionError(error instanceof ApiError ? error.message : "Couldn't reboard that staff member. Try again.");
+    },
+  });
+
   return (
     <div>
       <PageHeader
@@ -251,7 +265,7 @@ export function StaffListPage() {
                 {filtered.map((s) => (
                   <tr key={s.id} className="transition-colors duration-150 hover:bg-surface-sunken">
                     <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-3">
+                      <Link to={`/app/staff/${s.id}/edit`} className="flex items-center gap-3">
                         <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-brand-500/25 bg-brand-50 text-[12px] font-semibold text-brand-600">
                           {initials(s.firstName, s.lastName)}
                         </span>
@@ -261,7 +275,7 @@ export function StaffListPage() {
                           </p>
                           <p className="truncate text-[12.5px] text-text-secondary">{s.email}</p>
                         </div>
-                      </div>
+                      </Link>
                     </td>
                     <td className="px-5 py-3.5 text-[13.5px] text-text-primary">
                       {s.roles.length > 0 ? s.roles.join(", ") : "—"}
@@ -361,6 +375,12 @@ export function StaffListPage() {
                           const alreadyOffboarded = !!s.employmentEndDate;
                           const items: RowActionItem[] = [
                             {
+                              key: "edit-details",
+                              label: "Edit details",
+                              icon: <Pencil className="size-4" aria-hidden />,
+                              onClick: () => navigate(`/app/staff/${s.id}/edit`),
+                            },
+                            {
                               key: "reset-password",
                               label: "Reset password",
                               icon: <KeyRound className="size-4" aria-hidden />,
@@ -369,17 +389,28 @@ export function StaffListPage() {
                                 setConfirmResetId(s.id);
                               },
                             },
-                            {
-                              key: "toggle-enabled",
-                              label: s.status === "DISABLED" ? "Enable" : "Disable",
-                              icon:
-                                s.status === "DISABLED" ? (
-                                  <ShieldCheck className="size-4" aria-hidden />
-                                ) : (
-                                  <ShieldOff className="size-4" aria-hidden />
-                                ),
-                              onClick: () => toggleEnabled.mutate({ id: s.id, enabled: s.status === "DISABLED" }),
-                            },
+                            // Hidden once alreadyOffboarded — a bare login
+                            // toggle on someone who left would re-enable
+                            // sign-in while leaving a stale employmentEndDate
+                            // in place; "Reboard" below is the one complete
+                            // way back, same "one lever per fact" reasoning
+                            // as reboardStaff()'s own why-note.
+                            ...(alreadyOffboarded
+                              ? []
+                              : [
+                                  {
+                                    key: "toggle-enabled",
+                                    label: s.status === "DISABLED" ? "Enable" : "Disable",
+                                    icon:
+                                      s.status === "DISABLED" ? (
+                                        <ShieldCheck className="size-4" aria-hidden />
+                                      ) : (
+                                        <ShieldOff className="size-4" aria-hidden />
+                                      ),
+                                    onClick: () =>
+                                      toggleEnabled.mutate({ id: s.id, enabled: s.status === "DISABLED" }),
+                                  },
+                                ]),
                             {
                               key: "change-employment-type",
                               label: "Change employment type",
@@ -390,18 +421,27 @@ export function StaffListPage() {
                                 setEmploymentTypeEditId(s.id);
                               },
                             },
-                            {
-                              key: "offboard",
-                              label: alreadyOffboarded ? "Already offboarded" : "Offboard",
-                              icon: <LogOut className="size-4" aria-hidden />,
-                              disabled: alreadyOffboarded,
-                              variant: "danger",
-                              onClick: () => {
-                                closeAllRowEditors();
-                                setOffboardDateDraft(todayIsoDate());
-                                setOffboardId(s.id);
-                              },
-                            },
+                            alreadyOffboarded
+                              ? {
+                                  key: "reboard",
+                                  label: "Reboard",
+                                  icon: <LogIn className="size-4" aria-hidden />,
+                                  onClick: () => {
+                                    closeAllRowEditors();
+                                    reboard.mutate(s.id);
+                                  },
+                                }
+                              : {
+                                  key: "offboard",
+                                  label: "Offboard",
+                                  icon: <LogOut className="size-4" aria-hidden />,
+                                  variant: "danger",
+                                  onClick: () => {
+                                    closeAllRowEditors();
+                                    setOffboardDateDraft(todayIsoDate());
+                                    setOffboardId(s.id);
+                                  },
+                                },
                           ];
                           return (
                             <div className="flex justify-end">
