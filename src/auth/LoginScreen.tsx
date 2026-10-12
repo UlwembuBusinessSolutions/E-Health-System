@@ -12,6 +12,7 @@ import { ApiError, apiOrigin } from "@/shared/api/client";
 import { useAuth } from "./AuthContext";
 import { Input } from "@/shared/components/Input";
 import { Button } from "@/shared/components/Button";
+import { useOffline } from "@/offline/OfflineContext"; // OFFLINE
 
 // MicrosoftSsoService's own error codes, turned into something a person
 // signing in can actually make sense of — every one of these is a query
@@ -37,6 +38,7 @@ export function LoginScreen() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { setUser } = useAuth();
+  const offline = useOffline(); // OFFLINE
   const [formError, setFormError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -73,8 +75,11 @@ export function LoginScreen() {
   });
   const mutation = useMutation({
     mutationFn: login,
-    onSuccess: (user) => {
+    // OFFLINE: the password typed here is the only moment it is available,
+    // so the encrypted offline vault is created/unlocked now, with no extra prompt.
+    onSuccess: (user, variables) => {
       setUser(user);
+      void offline.provisionAfterLogin(user.id, variables.password);
       navigate("/app", { replace: true });
     },
     onError: (error) =>
