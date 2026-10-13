@@ -15,7 +15,9 @@ public class Appointment {
     @Column(name = "appointment_time", nullable = false) LocalTime appointmentTime;
     @Column(name = "starts_at", nullable = false) Instant startsAt;
     @Column(nullable = false) String status = "CONFIRMED";
-    @Column(name = "created_by", nullable = false) UUID createdBy;
+    @Column(name = "created_by") UUID createdBy;
+    @Column(name = "created_by_patient_account_id") UUID createdByPatientAccountId;
+    @Column(name = "service_code", nullable = false) String serviceCode = "GENERAL_CONSULTATION";
     @Column(name = "created_at", nullable = false) Instant createdAt;
     @Column(name = "cancel_reason") String cancelReason;
     @Column(name = "notes") String notes;
@@ -26,5 +28,13 @@ public class Appointment {
         this.id = id; this.facilityId = facilityId; this.patientId = patientId;
         this.appointmentDate = date; this.appointmentTime = time;
         this.startsAt = startsAt; this.createdBy = actor; this.createdAt = now;
+    }
+
+    Appointment(UUID id, UUID facilityId, UUID patientId, LocalDate date, LocalTime time,
+                Instant startsAt, UUID patientAccountId, String serviceCode, Instant now) {
+        this.id = id; this.facilityId = facilityId; this.patientId = patientId;
+        this.appointmentDate = date; this.appointmentTime = time;
+        this.startsAt = startsAt; this.createdBy = null;
+        this.createdByPatientAccountId = patientAccountId; this.serviceCode = serviceCode; this.createdAt = now;
     }
 }

@@ -89,12 +89,12 @@ public class PatientJwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        // /api/v1/patient/register and /api/v1/patient/auth/login are how
-        // a patient gets a token (or an account) in the first place — can't
-        // require one to reach either. Every other path on this filter
+        // These routes establish or recover a patient session and must be
+        // reachable before a patient token exists. Every other path on this filter
         // (including everything outside /api/v1/patient/**) is skipped
         // entirely, mirroring PlatformJwtAuthenticationFilter's own scoping.
         return !uri.startsWith("/api/v1/patient/") || uri.equals("/api/v1/patient/register")
-                || uri.equals("/api/v1/patient/auth/login");
+                || uri.equals("/api/v1/patient/verify-email") || uri.equals("/api/v1/patient/auth/login")
+                || uri.startsWith("/api/v1/patient/auth/password-reset/");
     }
 }

@@ -65,7 +65,9 @@ public class SecurityConfig {
                 // endpoints — must be listed before the broader
                 // /api/v1/patient/** rule below, since Spring Security
                 // matches requestMatchers in declaration order.
-                .requestMatchers("/api/v1/patient/register", "/api/v1/patient/auth/login").permitAll()
+                .requestMatchers("/api/v1/patient/register", "/api/v1/patient/verify-email",
+                        "/api/v1/patient/auth/login",
+                        "/api/v1/patient/auth/password-reset/**").permitAll()
                 // Everything else under /platform/** needs a real,
                 // ACTIVE, correctly-signed operator token — PlatformJwtAuthenticationFilter
                 // is what actually populates that Authentication; this

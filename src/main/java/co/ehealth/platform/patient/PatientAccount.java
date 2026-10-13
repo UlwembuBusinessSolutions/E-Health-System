@@ -123,6 +123,17 @@ public class PatientAccount {
         this.lastLoginAt = at;
     }
 
+    public void resetPassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+        this.tokenVersion++;
+        this.failedLoginCount = 0;
+        this.lastFailedLoginAt = null;
+        if (this.status == PatientAccountStatus.LOCKED) {
+            this.status = PatientAccountStatus.ACTIVE;
+            this.lockedAt = null;
+        }
+    }
+
     public UUID getId() {
         return id;
     }

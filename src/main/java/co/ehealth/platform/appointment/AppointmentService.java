@@ -65,7 +65,8 @@ public class AppointmentService {
     // until a second (patient self-service) booking path actually exists.
     public record Entry(UUID id, UUID patientId, String patientName, String mpiNumber, LocalDate date,
             LocalTime time, Instant startsAt, String status, String cancelReason, String notes, long version,
-            UUID assignedStaffId, String assignedStaffName, String createdByName, Instant createdAt) {}
+            UUID assignedStaffId, String assignedStaffName, String createdByName, Instant createdAt,
+            String serviceCode) {}
     public record Diary(List<Entry> items, long totalItems, boolean hasMore, LocalDate date,
             String timezone, long booked, Integer dailyLimit, Long remaining, boolean canManage) {}
 
@@ -135,7 +136,7 @@ public class AppointmentService {
         var existing = appointments.findById(requestId);
         if (existing.isPresent()) {
             Appointment a = existing.get();
-            if (!a.facilityId.equals(facilityId) || !a.patientId.equals(patientId) || !a.createdBy.equals(actor)
+            if (!a.facilityId.equals(facilityId) || !a.patientId.equals(patientId) || !Objects.equals(a.createdBy, actor)
                     || !a.appointmentDate.equals(date) || !a.appointmentTime.equals(time) || !Objects.equals(a.assignedStaffId, assignedStaffId)
                     || !Objects.equals(a.notes, normalizedNotes))
                 throw new AppointmentException(409, "This booking request has already been used. Refresh and try again.");
@@ -155,6 +156,92 @@ public class AppointmentService {
         Entry entry = view(a, patient);
         sendConfirmationAfterCommit(a, patient, facility, entry.assignedStaffName(), false);
         return entry;
+    }
+
+    @Transactional
+    public Entry bookFromPatientPortal(UUID facilityId, UUID requestId, UUID patientId, UUID patientAccountId,
+                                       LocalDate date, LocalTime time, UUID assignedStaffId, String serviceCode) {
+        if (!Set.of("GENERAL_CONSULTATION", "FOLLOW_UP", "CHRONIC_CARE", "MATERNAL_CHILD",
+                "OCCUPATIONAL_HEALTH").contains(serviceCode)) {
+            throw new AppointmentException(400, "Choose a valid appointment service.");
+        }
+        Facility facility = lock(facilityId);
+        requirePatientBookableFacility(facility);
+        var existing = appointments.findById(requestId);
+        if (existing.isPresent()) {
+            Appointment a = existing.get();
+            if (!a.facilityId.equals(facilityId) || !a.patientId.equals(patientId)
+                    || !Objects.equals(a.createdByPatientAccountId, patientAccountId)
+                    || !a.appointmentDate.equals(date) || !a.appointmentTime.equals(time)
+                    || !Objects.equals(a.assignedStaffId, assignedStaffId) || !a.serviceCode.equals(serviceCode)) {
+                throw new AppointmentException(409, "This booking request has already been used. Refresh and try again.");
+            }
+            return view(a, patient(a.patientId));
+        }
+        Patient patient = patient(patientId);
+        if (patient.isArchived()) throw new AppointmentException(400, "Appointments can only be booked for active registered patients.");
+        Instant start = validateTime(facility, date, time);
+        validateStaff(facilityId, assignedStaffId);
+        checkStaffAvailability(facilityId, assignedStaffId, date, time, requestId);
+        checkCapacity(facility, date);
+        Appointment appointment = new Appointment(requestId, facilityId, patientId, date, time, start,
+                patientAccountId, serviceCode, clock.instant());
+        appointment.assignedStaffId = assignedStaffId;
+        appointments.saveAndFlush(appointment);
+        audit.append(null, facilityId, "PATIENT_APPOINTMENT_BOOKED", "Appointment", appointment.id.toString(),
+                null, scheduleJson(appointment));
+        Entry entry = view(appointment, patient);
+        sendConfirmationAfterCommit(appointment, patient, facility, entry.assignedStaffName(), false);
+        return entry;
+    }
+
+    @Transactional(readOnly = true)
+    public List<LocalTime> patientBookingSlots(UUID facilityId, UUID assignedStaffId, LocalDate date) {
+        Facility facility = facilities.findById(facilityId).filter(Facility::isActive)
+                .orElseThrow(FacilityNotFoundException::new);
+        requirePatientBookableFacility(facility);
+        if (date == null || !date.isAfter(LocalDate.now(clock.withZone(ZoneId.of(facility.getTimezone()))))) {
+            throw new AppointmentException(400, "Choose a future appointment date.");
+        }
+        if (assignedStaffId != null) validateStaff(facilityId, assignedStaffId);
+        Integer limit = facility.getDailyAppointmentLimit();
+        if (limit != null && count(facilityId, date) >= limit) return List.of();
+        Set<LocalTime> busy = assignedStaffId == null ? Set.of()
+                : appointments.findByFacilityIdAndAssignedStaffIdAndAppointmentDateAndStatusNot(
+                        facilityId, assignedStaffId, date, "CANCELLED").stream()
+                        .map(a -> a.appointmentTime).collect(java.util.stream.Collectors.toSet());
+        List<LocalTime> slots = new ArrayList<>();
+        for (LocalTime slot = LocalTime.of(8, 0); slot.isBefore(LocalTime.of(17, 0)); slot = slot.plusMinutes(30)) {
+            LocalTime candidate = slot;
+            LocalDateTime local = LocalDateTime.of(date, slot);
+            if (ZoneId.of(facility.getTimezone()).getRules().getValidOffsets(local).size() != 1) continue;
+            if (!local.atZone(ZoneId.of(facility.getTimezone())).toInstant().isAfter(clock.instant())) continue;
+            boolean conflict = busy.stream().anyMatch(booked -> Duration.between(booked, candidate).abs()
+                    .compareTo(MIN_STAFF_GAP) < 0);
+            if (!conflict) slots.add(slot);
+        }
+        return slots;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AppointmentStaffRepository.StaffOption> patientBookingProviders(UUID facilityId) {
+        Facility facility = facilities.findById(facilityId).filter(Facility::isActive)
+                .orElseThrow(FacilityNotFoundException::new);
+        requirePatientBookableFacility(facility);
+        return staff.findPatientBookingOptions(facilityId);
+    }
+
+    private void requirePatientBookableFacility(Facility facility) {
+        if (facility.getType() != FacilityType.CLINIC && facility.getType() != FacilityType.HOSPITAL) {
+            throw new AppointmentException(400, "Patient appointments are only available at clinics and hospitals.");
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<Entry> patientBookings(UUID patientId) {
+        return appointments.findByPatientIdOrderByAppointmentDateAscAppointmentTimeAsc(patientId).stream()
+                .filter(appointment -> !appointment.status.equals("CANCELLED"))
+                .map(appointment -> view(appointment, patient(appointment.patientId))).toList();
     }
 
     @Transactional
@@ -257,7 +344,8 @@ public class AppointmentService {
     private void requireAdmin() { permissions.requireAnyRole(Set.of("ORG_ADMIN"), "Only organization administrators can change appointment settings."); }
     private String scheduleJson(Appointment a) {
         return com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode().put("date", a.appointmentDate.toString())
-                .put("time", a.appointmentTime.toString()).put("assignedStaffId", a.assignedStaffId == null ? null : a.assignedStaffId.toString()).toString();
+                .put("time", a.appointmentTime.toString()).put("assignedStaffId", a.assignedStaffId == null ? null : a.assignedStaffId.toString())
+                .put("serviceCode", a.serviceCode).toString();
     }
     private void validateStaff(UUID facilityId, UUID staffId) {
         if (staffId != null && staff.findAvailable(facilityId).stream().noneMatch(s -> s.getId().equals(staffId)))
@@ -315,13 +403,15 @@ public class AppointmentService {
     private Entry view(Appointment a, Patient p) {
         return new Entry(a.id, a.patientId, p == null ? "Unknown patient" : p.getFirstName() + " " + p.getLastName(),
                 p == null ? "" : p.getMpiNumber(), a.appointmentDate, a.appointmentTime, a.startsAt, a.status, a.cancelReason,
-                a.notes, a.version, a.assignedStaffId, staffDisplayName(a.assignedStaffId), staffDisplayName(a.createdBy), a.createdAt);
+                a.notes, a.version, a.assignedStaffId, staffDisplayName(a.assignedStaffId), staffDisplayName(a.createdBy), a.createdAt,
+                a.serviceCode);
     }
     // diary()'s own batched variant — staffNames already covers both
     // assignedStaffId and createdBy in one lookup, so no per-row query here.
     private Entry view(Appointment a, Patient p, Map<UUID, String> staffNames) {
         return new Entry(a.id, a.patientId, p == null ? "Unknown patient" : p.getFirstName() + " " + p.getLastName(),
                 p == null ? "" : p.getMpiNumber(), a.appointmentDate, a.appointmentTime, a.startsAt, a.status, a.cancelReason,
-                a.notes, a.version, a.assignedStaffId, staffNames.get(a.assignedStaffId), staffNames.get(a.createdBy), a.createdAt);
+                a.notes, a.version, a.assignedStaffId, staffNames.get(a.assignedStaffId), staffNames.get(a.createdBy), a.createdAt,
+                a.serviceCode);
     }
 }

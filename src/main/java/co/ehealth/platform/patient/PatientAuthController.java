@@ -3,10 +3,10 @@ package co.ehealth.platform.patient;
 import co.ehealth.platform.core.security.PatientJwtService;
 import co.ehealth.platform.core.security.PatientPrincipal;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Email;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,14 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-// The patient portal's own /api/v1/auth-shaped surface — mirrors
-// identity.AuthController field-for-field (register/login/logout/me),
-// just with an extra self-service /register endpoint staff accounts don't
-// need (StaffController/PlatformOperatorController create accounts for
-// someone else; here the patient creates their own). Covered by
-// SecurityConfig's /api/v1/patient/register + /api/v1/patient/auth/login
-// permitAll rules and the PatientJwtAuthenticationFilter for everything
-// else under /api/v1/patient/**.
+// The patient portal has its own authentication surface, including the public registration and email confirmation steps.
 @RestController
 @RequestMapping("/api/v1/patient")
 public class PatientAuthController {
@@ -39,20 +32,40 @@ public class PatientAuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        PatientAuthService.RegistrationResult result = patientAuthService.register(
+    public ResponseEntity<RegistrationStartedResponse> register(@Valid @RequestBody RegisterRequest request) {
+        PatientAuthService.RegistrationStarted result = patientAuthService.register(
                 new PatientAuthService.RegisterAccountCommand(request.firstName(), request.lastName(),
                         request.idNumber(), request.address(), request.contactNumber(), request.email(),
                         request.password()));
+        return ResponseEntity.ok(new RegistrationStartedResponse(true, result.email(), result.expiresInMinutes()));
+    }
+
+    @PostMapping("/verify-email")
+    public ResponseEntity<AuthResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        PatientAuthService.RegistrationResult result = patientAuthService.verifyRegistration(
+                request.email(), request.code());
         return ResponseEntity.ok(new AuthResponse(result.token().token(), result.token().expiresAt().toString(),
                 toSummary(result.account())));
     }
 
     @PostMapping("/auth/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        PatientJwtService.IssuedToken issued = patientAuthService.login(request.email(), request.password());
-        PatientAccount account = patientAccountRepository.findByEmail(request.email()).orElseThrow();
+        PatientJwtService.IssuedToken issued = patientAuthService.login(request.identifier(), request.password());
+        PatientAccount account = patientAuthService.accountForLogin(request.identifier());
         return ResponseEntity.ok(new AuthResponse(issued.token(), issued.expiresAt().toString(), toSummary(account)));
+    }
+
+    @PostMapping("/auth/password-reset/request")
+    public ResponseEntity<Void> requestPasswordReset(@Valid @RequestBody PatientPasswordResetRequest request,
+                                                        jakarta.servlet.http.HttpServletRequest httpRequest) {
+        patientAuthService.requestPasswordReset(request.identifier(), httpRequest.getRemoteAddr());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/auth/password-reset/confirm")
+    public ResponseEntity<Void> confirmPasswordReset(@Valid @RequestBody PatientPasswordResetConfirm request) {
+        patientAuthService.confirmPasswordReset(request.identifier(), request.code(), request.newPassword());
+        return ResponseEntity.noContent().build();
     }
 
     // Same rehydration role as AuthController.me()/PlatformAuthController's
@@ -83,7 +96,19 @@ public class PatientAuthController {
             @NotBlank @Email String email, @NotBlank @Size(min = 8, max = 100) String password) {
     }
 
-    public record LoginRequest(@NotBlank @Email String email, @NotBlank String password) {
+    public record LoginRequest(@NotBlank @Size(max = 255) String identifier, @NotBlank String password) { }
+
+    public record PatientPasswordResetRequest(@NotBlank @Size(max = 255) String identifier) { }
+
+    public record PatientPasswordResetConfirm(@NotBlank @Size(max = 255) String identifier,
+                                              @NotBlank @Pattern(regexp = "^\\d{6}$") String code,
+                                              @NotBlank @Size(min = 8, max = 100) String newPassword) { }
+
+    public record VerifyEmailRequest(@NotBlank @Email String email,
+                                     @NotBlank @Pattern(regexp = "^\\d{6}$") String code) {
+    }
+
+    public record RegistrationStartedResponse(boolean verificationRequired, String email, long expiresInMinutes) {
     }
 
     public record AuthResponse(String accessToken, String expiresAt, PatientAccountSummary account) {
