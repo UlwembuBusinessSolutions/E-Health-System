@@ -49,6 +49,7 @@ import { PlatformShell } from "@/platform/components/PlatformShell";
 import { OverviewPage } from "@/platform/OverviewPage";
 import { OrganizationsPage } from "@/platform/OrganizationsPage";
 import { OrganizationDetailPage } from "@/platform/OrganizationDetailPage";
+import { OrganizationRolePermissionsPage } from "@/platform/OrganizationRolePermissionsPage";
 import { ProvisionOrganizationScreen } from "@/platform/ProvisionOrganizationScreen";
 import { AddOrganizationAdminScreen } from "@/platform/AddOrganizationAdminScreen";
 import { AddClinicScreen } from "@/platform/AddClinicScreen";
@@ -214,6 +215,7 @@ export function AppRouter() {
           <Route path="organizations" element={<OrganizationsPage />} />
           <Route path="organizations/new" element={<ProvisionOrganizationScreen />} />
           <Route path="organizations/:id" element={<OrganizationDetailPage />} />
+          <Route path="organizations/:id/roles" element={<OrganizationRolePermissionsPage />} />
           <Route path="organizations/:id/admins/new" element={<AddOrganizationAdminScreen />} />
           <Route path="organizations/:id/facilities/new" element={<AddClinicScreen />} />
           <Route path="users" element={<UsersPage />} />
