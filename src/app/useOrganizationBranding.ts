@@ -5,6 +5,21 @@ import { getOrganizationSelf } from "@/shared/api/organization";
 const DEFAULT_TITLE = document.title;
 const DEFAULT_FAVICON_HREF = "/favicon.svg";
 const DEFAULT_FAVICON_TYPE = "image/svg+xml";
+const BRAND_SHADES = ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900"];
+
+function applyPrimaryColor(color: string | null) {
+  const root = document.documentElement;
+  if (!color || !/^#[\da-f]{6}$/i.test(color)) {
+    BRAND_SHADES.forEach(shade => root.style.removeProperty("--color-brand-" + shade));
+    return;
+  }
+  const rgb = color.match(/[\da-f]{2}/gi)!.map(value => parseInt(value, 16));
+  const hex = (channel: number) => channel.toString(16).padStart(2, "0");
+  const tint = (amount: number) => "#" + rgb.map(channel => hex(Math.round(channel + (255 - channel) * amount))).join("");
+  const shade = (amount: number) => "#" + rgb.map(channel => hex(Math.round(channel * (1 - amount)))).join("");
+  [tint(.95), tint(.85), tint(.70), tint(.50), tint(.25), color, shade(.12), shade(.25), shade(.38), shade(.50)]
+    .forEach((value, index) => root.style.setProperty("--color-brand-" + BRAND_SHADES[index], value));
+}
 
 // SADM-US-014's own AC, narrowed to the two things that don't need a new
 // endpoint or a colour system: the browser tab already carries the
@@ -23,6 +38,7 @@ export function useOrganizationBranding() {
     if (!org) return;
 
     document.title = org.displayName;
+    applyPrimaryColor(org.primaryColor);
 
     const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (link && org.logoUrl) {
@@ -41,6 +57,7 @@ export function useOrganizationBranding() {
     // renders next.
     return () => {
       document.title = DEFAULT_TITLE;
+      applyPrimaryColor(null);
       if (link) {
         link.href = DEFAULT_FAVICON_HREF;
         link.type = DEFAULT_FAVICON_TYPE;

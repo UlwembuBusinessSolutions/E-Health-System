@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { Mail, LockKeyhole, Eye, EyeOff, ArrowRight, ArrowLeft, HeartPulse } from "lucide-react";
+import { UserRound, LockKeyhole, Eye, EyeOff, ArrowRight, ArrowLeft, HeartPulse } from "lucide-react";
 import { getPublicOrganization } from "@/shared/api/publicOrganization";
 import "./patient-login.css";
 import { patientLogin } from "@/shared/api/patientAuth";
@@ -13,7 +13,7 @@ import { usePatientAuth } from "./PatientAuthContext";
 import { Button } from "@/shared/components/Button";
 
 const loginSchema = z.object({
-  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
+  identifier: z.string().trim().min(1, "Enter your email address or South African ID number"),
   password: z.string().min(1, "Password is required"),
 });
 type LoginValues = z.infer<typeof loginSchema>;
@@ -36,7 +36,7 @@ export function PatientLoginScreen() {
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { identifier: "", password: "" },
   });
 
   const mutation = useMutation({
@@ -79,9 +79,9 @@ export function PatientLoginScreen() {
           {formError && <div role="alert" className="pl-error-banner">{formError}</div>}
           <fieldset disabled={busy}>
             <div className="pl-field">
-              <label htmlFor="patient-email">Email address</label>
-              <div className={`pl-input-wrap ${errors.email ? "pl-invalid" : ""}`}><Mail size={19} aria-hidden /><input id="patient-email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="you@example.com" aria-required="true" aria-invalid={!!errors.email} aria-describedby={errors.email ? "patient-email-error" : undefined} {...register("email")} /></div>
-              {errors.email && <p role="alert" id="patient-email-error" className="pl-field-error">{errors.email.message}</p>}
+              <label htmlFor="patient-identifier">Email or South African ID number</label>
+              <div className={`pl-input-wrap ${errors.identifier ? "pl-invalid" : ""}`}><UserRound size={19} aria-hidden /><input id="patient-identifier" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="you@example.com or 13-digit ID" aria-required="true" aria-invalid={!!errors.identifier} aria-describedby={errors.identifier ? "patient-identifier-error" : undefined} {...register("identifier")} /></div>
+              {errors.identifier && <p role="alert" id="patient-identifier-error" className="pl-field-error">{errors.identifier.message}</p>}
             </div>
             <div className="pl-field">
               <label htmlFor="patient-password">Password</label>
@@ -91,6 +91,7 @@ export function PatientLoginScreen() {
           </fieldset>
           <Button type="submit" size="lg" loading={busy} className="pl-submit" icon={!busy ? <ArrowRight size={18} aria-hidden /> : undefined}>{busy ? "Signing in..." : "Sign in to your portal"}</Button>
         </form>
+        <p className="pl-help"><Link to={`${base}/patient/forgot-password`}>Forgot your password?</Link></p>
         <p className="pl-help">Need help signing in? {orgQuery.data?.contactEmail ? <a href={`mailto:${orgQuery.data.contactEmail}`}>Contact your clinic</a> : <Link to={`${base}#contact`}>Contact your clinic</Link>}</p>
         <div className="pl-register"><span>New to the patient portal?</span><Link to={`${base}/patient/register`}>Create an account <ArrowRight size={16} aria-hidden /></Link></div>
         <div className="pl-staff"><span>Here as a staff member?</span> <Link to={`${base}/login`}>Staff sign in</Link></div>

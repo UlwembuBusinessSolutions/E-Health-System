@@ -20,8 +20,10 @@ import { OrganizationSettingsPage } from "@/settings/OrganizationSettingsPage";
 import { AuditTrailPage } from "@/audit/AuditTrailPage";
 import { AppointmentsPage } from "@/appointments/AppointmentsPage";
 import { PatientLoginScreen } from "@/patient-portal/PatientLoginScreen";
+import { PatientForgotPasswordScreen } from "@/patient-portal/PatientForgotPasswordScreen";
 import { PatientRegisterScreen } from "@/patient-portal/PatientRegisterScreen";
 import { PatientPortalPage } from "@/patient-portal/PatientPortalPage";
+import { PatientBookingPage } from "@/patient-portal/PatientBookingPage";
 import { RequirePatientPortalAuth } from "@/patient-portal/RequirePatientPortalAuth";
 import { TenantHomePage } from "@/tenant-site/TenantHomePage";
 import { AppShell } from "./AppShell";
@@ -76,7 +78,9 @@ export function AppRouter() {
       <Route path="/org/:tenantSlug/forgot-password" element={<ForgotPasswordScreen />} />
       {/* The patient portal's own identity space. */}
       <Route path="/org/:tenantSlug/patient/login" element={<PatientLoginScreen />} />
+      <Route path="/org/:tenantSlug/patient/forgot-password" element={<PatientForgotPasswordScreen />} />
       <Route path="/org/:tenantSlug/patient/register" element={<PatientRegisterScreen />} />
+      <Route path="/org/:tenantSlug/patient/book" element={<RequirePatientPortalAuth><PatientBookingPage /></RequirePatientPortalAuth>} />
       <Route
         path="/org/:tenantSlug/patient/portal"
         element={

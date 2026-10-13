@@ -1,4 +1,4 @@
-import { Blocks, Building2, Fingerprint, Mail, MapPin, Search, Settings2, ChevronRight, type LucideIcon } from "lucide-react";
+import { Blocks, Building2, Fingerprint, Mail, MapPin, Search, Settings2, ChevronRight, Palette, type LucideIcon } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FacilitiesSettingsSection } from "./FacilitiesSettingsSection";
@@ -8,6 +8,7 @@ import { ModulesSettingsSection } from "./ModulesSettingsSection";
 import { SsoSettingsSection } from "./SsoSettingsSection";
 import { AppointmentsSettingsSection } from "./AppointmentsSettingsSection";
 import { CalendarDays } from "lucide-react";
+import { BrandingSettingsSection } from "./BrandingSettingsSection";
 
 type OrganizationSettingsSection = {
   id: string;
@@ -21,6 +22,10 @@ type OrganizationSettingsSection = {
 
 // Register future sections here. Each section owns its form and persistence.
 const sections: OrganizationSettingsSection[] = [{
+  id: "branding", title: "Branding", group: "Organization",
+  description: "Set the logo, primary color and name shown across your organization workspace.",
+  keywords: "logo brand color theme identity", icon: Palette, component: BrandingSettingsSection,
+}, {
   id: "email", title: "Email", group: "Communication",
   description: "Manage the outgoing email used for your organization's notifications.",
   keywords: "smtp server sender password notifications mail", icon: Mail, component: EmailSettingsSection,
