@@ -28,7 +28,6 @@ public class ItemFactsLoader {
 
     private final DispensingRecordRepository dispensingRecordRepository;
     private final PrescriptionOutOfStockRecordRepository outOfStockRecordRepository;
-    private final DrugMappingService drugMappingService;
     private final SubstitutionLookup substitutionLookup;
     private final PharmacyProductRepository productRepository;
     private final PrescriptionReturnRepository returnRepository;
@@ -37,13 +36,12 @@ public class ItemFactsLoader {
 
     public ItemFactsLoader(DispensingRecordRepository dispensingRecordRepository,
                             PrescriptionOutOfStockRecordRepository outOfStockRecordRepository,
-                            DrugMappingService drugMappingService, SubstitutionLookup substitutionLookup,
+                            SubstitutionLookup substitutionLookup,
                             PharmacyProductRepository productRepository,
                             PrescriptionReturnRepository returnRepository, ProductScheduleLookup scheduleLookup,
                             StockLotReader lotReader) {
         this.dispensingRecordRepository = dispensingRecordRepository;
         this.outOfStockRecordRepository = outOfStockRecordRepository;
-        this.drugMappingService = drugMappingService;
         this.substitutionLookup = substitutionLookup;
         this.productRepository = productRepository;
         this.returnRepository = returnRepository;
@@ -56,11 +54,10 @@ public class ItemFactsLoader {
             return ItemFacts.NONE;
         }
         List<UUID> itemIds = items.stream().map(PrescriptionItem::getId).toList();
-        Map<UUID, UUID> suggestions = drugMappingService.suggestedProductIds(items);
         Map<UUID, PrescriptionSubstitution> substitutions = substitutionLookup.latestByItem(itemIds);
 
-        Set<UUID> productIds = relevantProductIds(items, suggestions, substitutions);
-        Set<UUID> dispensingProductIds = dispensingProductIds(items, suggestions, substitutions);
+        Set<UUID> productIds = relevantProductIds(items, substitutions);
+        Set<UUID> dispensingProductIds = dispensingProductIds(items, substitutions);
         Set<UUID> facilityIds = prescriptions.stream().map(Prescription::getFacilityId).collect(Collectors.toSet());
 
         return new ItemFacts(
@@ -68,28 +65,27 @@ public class ItemFactsLoader {
                         DispensingRecord::getPrescriptionItemId),
                 indexBy(outOfStockRecordRepository.findByPrescriptionItemIdIn(itemIds),
                         PrescriptionOutOfStockRecord::getPrescriptionItemId),
-                suggestions, substitutions, indexBy(productRepository.findAllById(productIds), PharmacyProduct::getId),
+                substitutions, indexBy(productRepository.findAllById(productIds), PharmacyProduct::getId),
                 returnedQuantityByItem(itemIds), scheduleLookup.schedulesFor(productIds),
                 lotReader.snapshot(facilityIds, dispensingProductIds));
     }
 
     // Every product whose name or schedule a response may show.
-    private Set<UUID> relevantProductIds(List<PrescriptionItem> items, Map<UUID, UUID> suggestions,
+    private Set<UUID> relevantProductIds(List<PrescriptionItem> items,
                                          Map<UUID, PrescriptionSubstitution> substitutions) {
-        Set<UUID> productIds = new HashSet<>(dispensingProductIds(items, suggestions, substitutions));
+        Set<UUID> productIds = new HashSet<>(dispensingProductIds(items, substitutions));
         items.stream().map(PrescriptionItem::getProductId).filter(id -> id != null).forEach(productIds::add);
         substitutions.values().forEach(substitution -> productIds.add(substitution.getSubstituteProductId()));
         return productIds;
     }
 
-    private Set<UUID> dispensingProductIds(List<PrescriptionItem> items, Map<UUID, UUID> suggestions,
+    private Set<UUID> dispensingProductIds(List<PrescriptionItem> items,
                                            Map<UUID, PrescriptionSubstitution> substitutions) {
         Set<UUID> productIds = new HashSet<>();
         for (PrescriptionItem item : items) {
             UUID productId = SubstitutionLookup.dispensingProductId(item, substitutions.get(item.getId()));
-            UUID effective = productId != null ? productId : suggestions.get(item.getId());
-            if (effective != null) {
-                productIds.add(effective);
+            if (productId != null) {
+                productIds.add(productId);
             }
         }
         return productIds;

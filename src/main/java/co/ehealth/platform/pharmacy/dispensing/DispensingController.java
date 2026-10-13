@@ -72,16 +72,6 @@ public class DispensingController {
         this.permissionService = permissionService;
     }
 
-    // Confirms or overrides the stock product behind a line. Returns the
-    // whole prescription so the screen can redraw the item with its lots.
-    @PutMapping("/api/v1/prescriptions/{id}/items/{itemId}/product")
-    public ResponseEntity<PrescriptionResponse> confirmProduct(@PathVariable UUID id, @PathVariable UUID itemId,
-                                                                @Valid @RequestBody ConfirmProductRequest request,
-                                                                @AuthenticationPrincipal AuthenticatedPrincipal staff) {
-        var prescription = prescriptionService.confirmProduct(id, itemId, request.productId(), staff.userId());
-        return ResponseEntity.ok(viewAssembler.assemble(prescription));
-    }
-
     @PostMapping("/api/v1/prescriptions/{id}/collect")
     public ResponseEntity<CollectResponse> collect(@PathVariable UUID id,
                                                     @Valid @RequestBody CollectRequest request,
@@ -161,9 +151,6 @@ public class DispensingController {
     public ResponseEntity<Map<String, List<DispensingHistoryRow>>> patientDispensing(
             @PathVariable UUID patientId) {
         return ResponseEntity.ok(Map.of("items", historyService.historyFor(patientId)));
-    }
-
-    public record ConfirmProductRequest(@NotNull UUID productId) {
     }
 
     public record ProofUploadResponse(String proofRef) {

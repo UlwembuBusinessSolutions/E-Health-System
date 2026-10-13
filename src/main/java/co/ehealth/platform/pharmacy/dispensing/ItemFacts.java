@@ -17,21 +17,18 @@ import java.util.UUID;
 // the database again.
 public record ItemFacts(Map<UUID, DispensingRecord> dispensingRecords,
                         Map<UUID, PrescriptionOutOfStockRecord> outOfStockRecords,
-                        Map<UUID, UUID> suggestedProductIds,
                         Map<UUID, PrescriptionSubstitution> latestSubstitutions,
                         Map<UUID, PharmacyProduct> products, Map<UUID, Integer> returnedByItem,
                         Map<UUID, DrugSchedule> schedules, StockSnapshot stock) {
 
-    static final ItemFacts NONE = new ItemFacts(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
+    static final ItemFacts NONE = new ItemFacts(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
             new StockSnapshot(List.of(), LocalDate.EPOCH));
 
-    // The product stock is checked against: an approved substitute, else the
-    // confirmed product, else the remembered-name suggestion (so the pharmacist
-    // sees availability before confirming). Null when nothing is known.
+    // The product stock is checked against: a substitute the prescriber approved,
+    // else the product the prescriber chose. Null for a legacy line the prescriber
+    // never matched to a product.
     public UUID dispensingProductId(PrescriptionItem item) {
-        UUID confirmedOrSubstitute = SubstitutionLookup.dispensingProductId(item,
-                latestSubstitutions.get(item.getId()));
-        return confirmedOrSubstitute != null ? confirmedOrSubstitute : suggestedProductIds.get(item.getId());
+        return SubstitutionLookup.dispensingProductId(item, latestSubstitutions.get(item.getId()));
     }
 
     public StockPicture shelf(Prescription prescription, PrescriptionItem item) {
@@ -40,10 +37,7 @@ public record ItemFacts(Map<UUID, DispensingRecord> dispensingRecords,
     }
 
     public MappingStatus mappingStatus(PrescriptionItem item) {
-        if (item.getProductId() != null) {
-            return MappingStatus.CONFIRMED;
-        }
-        return suggestedProductIds.containsKey(item.getId()) ? MappingStatus.SUGGESTED : MappingStatus.UNMAPPED;
+        return item.getProductId() != null ? MappingStatus.CONFIRMED : MappingStatus.UNMAPPED;
     }
 
     public String productName(UUID productId) {

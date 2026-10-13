@@ -2,6 +2,7 @@ package co.ehealth.platform.consultation;
 
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import co.ehealth.platform.identity.StaffService;
+import co.ehealth.platform.pharmacy.MedicineDirections;
 import co.ehealth.platform.pharmacy.PrescriptionService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -44,8 +45,13 @@ public class ConsultationController {
 
     @PostMapping("/api/v1/visits/{visitId}/consultations")
     public ResponseEntity<ConsultationResponse> createDraft(@PathVariable UUID visitId,
+                                                              @RequestBody(required = false) StartConsultationRequest request,
                                                               @AuthenticationPrincipal AuthenticatedPrincipal staff) {
-        Consultation consultation = consultationService.createDraft(visitId, staff.userId());
+        VitalsBypassReason reason = request == null ? null : request.vitalsBypassReason();
+        String note = request == null ? null : request.vitalsBypassNote();
+        UUID continueFrom = request == null ? null : request.continueFromConsultationId();
+        Consultation consultation = consultationService.createDraft(visitId, staff.userId(), reason, note,
+                continueFrom);
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(consultation));
     }
 
@@ -72,13 +78,48 @@ public class ConsultationController {
         return ResponseEntity.ok(body);
     }
 
+    // The signed-in clinician's unsigned consultations, for picking up where they left off.
+    @GetMapping("/api/v1/consultations/in-progress")
+    public ResponseEntity<Map<String, Object>> inProgress(@AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        var items = consultationService.getInProgress(staff.userId()).stream()
+                .map(e -> new InProgressConsultationResponse(e.consultation().getId(), e.visit().getId(),
+                        e.patient().getId(), e.patient().getFirstName() + " " + e.patient().getLastName(),
+                        e.patient().getMpiNumber(), e.facilityName(), e.visit().getVisitDateTime(),
+                        e.consultation().getCreatedAt(), e.consultation().getUpdatedAt()))
+                .toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    // The patient's consultations across all their visits, newest first, each with the visit it belongs to.
+    @GetMapping("/api/v1/patients/{patientId}/consultations")
+    public ResponseEntity<Map<String, Object>> patientConsultations(@PathVariable UUID patientId) {
+        List<ConsultationService.PatientConsultation> entries = consultationService.getPatientConsultations(patientId);
+        Map<UUID, String> names = resolveNames(entries.stream().map(ConsultationService.PatientConsultation::consultation).toList());
+        var items = entries.stream()
+                .map(e -> new PatientConsultationResponse(toResponse(e.consultation(), names), e.visitDateTime(),
+                        e.facilityName()))
+                .toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    // The earlier consultation of this episode the doctor can carry on from, for a visit made when the
+    // patient was transferred and came back. Null when there is nothing to continue.
+    @GetMapping("/api/v1/visits/{visitId}/consultations/continuable")
+    public ResponseEntity<Map<String, Object>> continuable(@PathVariable UUID visitId) {
+        var item = consultationService.findContinuable(visitId).map(this::toEarlierResponse).orElse(null);
+        Map<String, Object> body = new HashMap<>();
+        body.put("item", item);
+        return ResponseEntity.ok(body);
+    }
+
     @PatchMapping("/api/v1/consultations/{id}")
     public ResponseEntity<ConsultationResponse> updateDraft(@PathVariable UUID id,
                                                               @Valid @RequestBody UpdateConsultationRequest request,
                                                               @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         var cmd = new ConsultationService.UpdateConsultationCommand(request.relevantHistory(),
                 request.currentMedications(), request.allergyStatus(), request.allergyDetail(),
-                request.examinationNotes(), request.investigationsNotes(), request.treatmentPlan());
+                request.examinationNotes(), request.investigationsNotes(), request.treatmentPlan(),
+                request.prescriptionDraft());
         Consultation consultation = consultationService.updateDraft(id, cmd, staff.userId());
         return ResponseEntity.ok(toResponse(consultation));
     }
@@ -87,8 +128,8 @@ public class ConsultationController {
     public ResponseEntity<DiagnosisResponse> addDiagnosis(@PathVariable UUID id,
                                                             @Valid @RequestBody DiagnosisRequest request,
                                                             @AuthenticationPrincipal AuthenticatedPrincipal staff) {
-        ConsultationDiagnosis diagnosis = consultationService.addDiagnosis(id, request.diagnosisText(),
-                request.isPrimary(), request.certainty(), staff.userId());
+        ConsultationDiagnosis diagnosis = consultationService.addDiagnosis(id, request.diagnosisId(),
+                request.diagnosisText(), request.isPrimary(), request.certainty(), staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(DiagnosisResponse.from(diagnosis));
     }
 
@@ -114,7 +155,8 @@ public class ConsultationController {
                                                         @Valid @RequestBody AmendConsultationRequest request,
                                                         @AuthenticationPrincipal AuthenticatedPrincipal staff) {
         var diagnoses = request.diagnoses().stream()
-                .map(d -> new ConsultationService.DiagnosisInput(d.diagnosisText(), d.isPrimary(), d.certainty()))
+                .map(d -> new ConsultationService.DiagnosisInput(d.diagnosisText(), d.isPrimary(), d.certainty(),
+                        d.diagnosisId()))
                 .toList();
         var cmd = new ConsultationService.AmendConsultationCommand(request.relevantHistory(),
                 request.currentMedications(), request.allergyStatus(), request.allergyDetail(),
@@ -134,14 +176,14 @@ public class ConsultationController {
             List<PharmacyItemRequest> items) {
         return items == null ? null
                 : items.stream().map(i -> new PrescriptionService.PrescriptionItemInput(i.drugName(), i.dosage(),
-                        i.quantity(), i.productId())).toList();
+                        i.quantity(), i.productId(), i.directions())).toList();
     }
 
     private static List<PrescriptionService.PrescriptionPurchaseItemInput> toPurchaseItems(
             List<PurchaseItemRequest> items) {
         return items == null ? List.of()
                 : items.stream().map(i -> new PrescriptionService.PrescriptionPurchaseItemInput(i.drugName(),
-                        i.dosage(), i.quantity(), i.productId(), i.note())).toList();
+                        i.dosage(), i.quantity(), i.productId(), i.note(), i.directions())).toList();
     }
 
     @PostMapping("/api/v1/consultations/{id}/entered-in-error")
@@ -158,8 +200,18 @@ public class ConsultationController {
 
     private ConsultationResponse toResponse(Consultation c, Map<UUID, String> names) {
         var diagnoses = consultationService.getDiagnoses(c.getId()).stream().map(DiagnosisResponse::from).toList();
+        var continuedFrom = consultationService.findContinuedFrom(c).map(this::toEarlierResponse).orElse(null);
         return ConsultationResponse.from(c, diagnoses, names.get(c.getAuthorUserId()),
-                c.getSignedByUserId() == null ? null : names.get(c.getSignedByUserId()));
+                c.getSignedByUserId() == null ? null : names.get(c.getSignedByUserId()), continuedFrom);
+    }
+
+    private EarlierConsultationResponse toEarlierResponse(ConsultationService.EarlierConsultation earlier) {
+        Consultation c = earlier.consultation();
+        var diagnoses = consultationService.getDiagnoses(c.getId()).stream().map(DiagnosisResponse::from).toList();
+        Map<UUID, String> names = resolveNames(List.of(c));
+        return new EarlierConsultationResponse(c.getId(), earlier.visitId(), earlier.facilityName(), c.getSignedAt(),
+                c.getSignedByUserId() == null ? null : names.get(c.getSignedByUserId()), c.getOutcome(), diagnoses,
+                earlier.vitalsVisitId());
     }
 
     private Map<UUID, String> resolveNames(List<Consultation> consultations) {
@@ -176,25 +228,35 @@ public class ConsultationController {
     public record UpdateConsultationRequest(String relevantHistory, String currentMedications,
                                               @NotNull AllergyStatus allergyStatus, String allergyDetail,
                                               String examinationNotes, String investigationsNotes,
-                                              String treatmentPlan) {
+                                              String treatmentPlan, @Size(max = 100000) String prescriptionDraft) {
     }
 
-    public record DiagnosisRequest(@NotBlank String diagnosisText, boolean isPrimary,
-                                    DiagnosisCertainty certainty) {
+    // Both optional: only needed when the visit has no vitals on record.
+    public record StartConsultationRequest(VitalsBypassReason vitalsBypassReason,
+                                           @Size(max = 300) String vitalsBypassNote,
+                                           UUID continueFromConsultationId) {
+    }
+
+    // Either diagnosisId (picked from the catalogue) or diagnosisText (typed) is needed; a typed name that is
+    // not in the catalogue is added to it.
+    public record DiagnosisRequest(@Size(max = 200) String diagnosisText, boolean isPrimary,
+                                    DiagnosisCertainty certainty, UUID diagnosisId) {
     }
 
     // Required only when outcome is SEND_TO_PHARMACY (ConsultationService.
     // requirePharmacyItemsIfNeeded()) — omitted/null for every other
     // outcome, same as PrescriptionController.ItemRequest's own shape.
-    public record PharmacyItemRequest(@NotBlank String drugName, @NotBlank String dosage,
-                                       @Positive int quantity, UUID productId) {
+    public record PharmacyItemRequest(@NotBlank String drugName, @NotBlank @Size(max = 300) String dosage,
+                                       @Positive int quantity, UUID productId,
+                                       @Valid MedicineDirections directions) {
     }
 
     // A medicine the patient should buy rather than receive from the pharmacy
     // (out of stock, short, or not stocked). productId is set when it was
     // picked from the pharmacy's list.
-    public record PurchaseItemRequest(@NotBlank String drugName, @NotBlank String dosage, @Positive int quantity,
-                                       UUID productId, @Size(max = 300) String note) {
+    public record PurchaseItemRequest(@NotBlank String drugName, @NotBlank @Size(max = 300) String dosage,
+                                       @Positive int quantity, UUID productId, @Size(max = 300) String note,
+                                       @Valid MedicineDirections directions) {
     }
 
     public record SignConsultationRequest(@NotNull ConsultationOutcome outcome, String outcomeNotes,
@@ -219,10 +281,11 @@ public class ConsultationController {
 
     public record DiagnosisResponse(UUID id, String diagnosisText, boolean isPrimary, DiagnosisCertainty certainty,
                                      int sortOrder, String codingSystem, String catalogueVersion, String code,
-                                     String displayText) {
+                                     String displayText, UUID diagnosisId) {
         static DiagnosisResponse from(ConsultationDiagnosis d) {
             return new DiagnosisResponse(d.getId(), d.getDiagnosisText(), d.isPrimary(), d.getCertainty(),
-                    d.getSortOrder(), d.getCodingSystem(), d.getCatalogueVersion(), d.getCode(), d.getDisplayText());
+                    d.getSortOrder(), d.getCodingSystem(), d.getCatalogueVersion(), d.getCode(), d.getDisplayText(),
+                    d.getDiagnosisId());
         }
     }
 
@@ -233,6 +296,21 @@ public class ConsultationController {
     // authorUserId/signedByUserId to real names — "who consulted this
     // patient," same reasoning PrescriptionResponse already applies to
     // prescriberName/dispensedByName.
+    public record InProgressConsultationResponse(UUID consultationId, UUID visitId, UUID patientId,
+                                                  String patientName, String patientMpi, String facilityName,
+                                                  Instant visitDateTime, Instant startedAt, Instant updatedAt) {
+    }
+
+    public record PatientConsultationResponse(ConsultationResponse consultation, Instant visitDateTime,
+                                               String facilityName) {
+    }
+
+    // An earlier signed consultation of the same episode of care, and where the patient's vitals are.
+    public record EarlierConsultationResponse(UUID consultationId, UUID visitId, String facilityName,
+                                               Instant signedAt, String signedByName, ConsultationOutcome outcome,
+                                               List<DiagnosisResponse> diagnoses, UUID vitalsVisitId) {
+    }
+
     public record ConsultationResponse(UUID id, UUID visitId, ConsultationStatus status,
                                         UUID supersedesConsultationId, String amendmentReason, UUID authorUserId,
                                         String authorName, UUID signedByUserId, String signedByName,
@@ -240,15 +318,18 @@ public class ConsultationController {
                                         AllergyStatus allergyStatus, String allergyDetail, String examinationNotes,
                                         String investigationsNotes, String treatmentPlan,
                                         ConsultationOutcome outcome, String outcomeNotes, Instant createdAt,
-                                        Instant updatedAt, List<DiagnosisResponse> diagnoses) {
+                                        Instant updatedAt, List<DiagnosisResponse> diagnoses,
+                                        VitalsBypassReason vitalsBypassReason, String vitalsBypassNote,
+                                        String prescriptionDraft, EarlierConsultationResponse continuedFrom) {
         static ConsultationResponse from(Consultation c, List<DiagnosisResponse> diagnoses, String authorName,
-                                          String signedByName) {
+                                          String signedByName, EarlierConsultationResponse continuedFrom) {
             return new ConsultationResponse(c.getId(), c.getVisitId(), c.getStatus(),
                     c.getSupersedesConsultationId(), c.getAmendmentReason(), c.getAuthorUserId(), authorName,
                     c.getSignedByUserId(), signedByName, c.getSignedAt(), c.getRelevantHistory(),
                     c.getCurrentMedications(), c.getAllergyStatus(), c.getAllergyDetail(), c.getExaminationNotes(),
                     c.getInvestigationsNotes(), c.getTreatmentPlan(), c.getOutcome(), c.getOutcomeNotes(),
-                    c.getCreatedAt(), c.getUpdatedAt(), diagnoses);
+                    c.getCreatedAt(), c.getUpdatedAt(), diagnoses, c.getVitalsBypassReason(),
+                    c.getVitalsBypassNote(), c.getPrescriptionDraft(), continuedFrom);
         }
     }
 }

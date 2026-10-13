@@ -112,7 +112,7 @@ public class PrescriptionViewAssembler {
                 purchases.stream().map(purchase -> new PrescriptionPurchaseItemResponse(purchase.getId(),
                         purchase.getDrugName(), purchase.getDosage(), purchase.getQuantity(), purchase.getProductId(),
                         purchaseProductNames.get(purchase.getProductId()), purchase.getReason(),
-                        purchase.getNote())).toList(),
+                        purchase.getNote(), purchase.directions())).toList(),
                 prescription.getCreatedAt());
     }
 
@@ -121,8 +121,7 @@ public class PrescriptionViewAssembler {
         DispensingRecord dispensing = facts.dispensingRecords().get(item.getId());
         PrescriptionOutOfStockRecord outOfStock = facts.outOfStockRecords().get(item.getId());
         PrescriptionSubstitution substitution = facts.latestSubstitutions().get(item.getId());
-        UUID productId = item.getProductId() != null ? item.getProductId()
-                : facts.suggestedProductIds().get(item.getId());
+        UUID productId = item.getProductId();
         UUID dispensingProductId = facts.dispensingProductId(item);
         StockFigures stock = stockFigures(prescription, item, facts);
         DrugSchedule schedule = dispensingProductId == null ? null : facts.schedules().get(dispensingProductId);
@@ -139,7 +138,8 @@ public class PrescriptionViewAssembler {
                 stock.suggestedLot(), stock.usableLots(), stock.expiredLots(), schedule != null, schedule,
                 substitution == null ? null : substitution.getStatus(),
                 substitution == null ? null : substitution.getSubstituteProductId(),
-                substitution == null ? null : facts.productName(substitution.getSubstituteProductId()));
+                substitution == null ? null : facts.productName(substitution.getSubstituteProductId()),
+                item.directions());
     }
 
     private String nameOf(Map<UUID, User> users, UUID userId) {

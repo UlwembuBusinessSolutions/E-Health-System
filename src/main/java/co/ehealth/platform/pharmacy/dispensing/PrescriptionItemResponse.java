@@ -3,6 +3,8 @@ package co.ehealth.platform.pharmacy.dispensing;
 import co.ehealth.platform.pharmacy.stock.DrugSchedule;
 import co.ehealth.platform.pharmacy.PrescriptionStatus;
 
+import co.ehealth.platform.pharmacy.MedicineDirections;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -11,8 +13,7 @@ import java.util.UUID;
 // One prescription line as the pharmacy screens see it. The first ten
 // fields are the original shape; the rest describe the stock behind the line.
 //
-// productId is the confirmed product, or the remembered-name suggestion while
-// mappingStatus is SUGGESTED (stock is only deducted after confirmation).
+// productId is the product the prescriber chose (null for a legacy free-text line).
 // dispensingProductId differs from productId only when the prescriber
 // approved a substitute; every lot and stock figure below refers to
 // dispensingProductId. Stock fields are empty/null once the line is fully
@@ -27,7 +28,8 @@ public record PrescriptionItemResponse(UUID id, String drugName, String dosage, 
                                        LotView suggestedLot, List<LotView> usableLots,
                                        List<LotView> skippedExpiredLots, boolean isScheduled,
                                        DrugSchedule schedule, SubstitutionStatus substitutionStatus,
-                                       UUID substituteProductId, String substituteProductName) {
+                                       UUID substituteProductId, String substituteProductName,
+                                       MedicineDirections directions) {
 
     public record LotView(UUID batchId, String lot, LocalDate expiryDate, long available) {
         static LotView of(LotAvailability lot) {
