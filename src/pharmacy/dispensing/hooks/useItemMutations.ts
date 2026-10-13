@@ -5,7 +5,6 @@ import {
   markPrescriptionItemOutOfStock,
   requestSubstitution,
   returnPrescriptionItem,
-  setPrescriptionItemProduct,
   type DispenseItemPayload,
   type ReturnItemPayload,
   type SubstitutionStatus,
@@ -41,13 +40,6 @@ export function useMarkOutOfStock(prescriptionId: string, itemId: string) {
   return useMutation({
     mutationFn: (note: string) => markPrescriptionItemOutOfStock(prescriptionId, itemId, note || undefined),
     ...useItemMutationCallbacks("Couldn't mark that item out of stock. Try again."),
-  });
-}
-
-export function useMapProduct(prescriptionId: string, itemId: string) {
-  return useMutation({
-    mutationFn: (productId: string) => setPrescriptionItemProduct(prescriptionId, itemId, productId),
-    ...useItemMutationCallbacks("Couldn't link that product. Try again."),
   });
 }
 

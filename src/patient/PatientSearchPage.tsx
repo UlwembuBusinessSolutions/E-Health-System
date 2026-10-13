@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { InProgressConsultations } from "./InProgressConsultations";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
@@ -310,6 +311,8 @@ export function PatientSearchPage() {
           </Link>
         }
       />
+
+      <InProgressConsultations />
 
       <div className="mb-4">
         <Input

@@ -1,5 +1,3 @@
-import { PrescriptionBuilder } from "@/prescribing/PrescriptionBuilder";
-import { EMPTY_DRAFT, draftProblems, toPayload, type PrescriptionDraft } from "@/prescribing/prescriptionDraft";
 import { generateUUID } from "../utils/uuid";
 import { PatientVisitsTab } from "./PatientVisitsTab";
 import { createPortal } from "react-dom";
@@ -32,7 +30,6 @@ import {
   Loader2,
   Pencil,
   PenLine,
-  Pill,
   Plus,
   Printer,
   Ticket,
@@ -73,9 +70,7 @@ import {
   type VisitWithToken,
 } from "@/shared/api/visits";
 import {
-  createPrescription,
   getPatientPrescriptions,
-  type Prescription,
 } from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
 import { printQueueTicket } from "@/shared/lib/printTicket";
@@ -732,8 +727,10 @@ export function PatientDetailPage() {
   // relevant no matter which tab someone's looking at, not "content" that
   // should hide when the Vitals tab (a different, cross-visit view of the
   // same clinical data) is selected.
+  // ?tab=consultation opens straight onto the consultation, e.g. from the list of unsigned ones.
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(
-    "overview",
+    searchParams.get("tab") === "consultation" ? "consultation" : "overview",
   );
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const [facilityId, setFacilityId] = useState("");
@@ -741,10 +738,6 @@ export function PatientDetailPage() {
   const [serviceStream, setServiceStream] = useState<ServiceStream | "">("");
   const [visitError, setVisitError] = useState<string | null>(null);
   const [startedVisit, setStartedVisit] = useState<VisitWithToken | null>(null);
-  const [isPrescribing, setIsPrescribing] = useState(false);
-  const [prescriptionDraft, setPrescriptionDraft] = useState<PrescriptionDraft>(EMPTY_DRAFT);
-  const [prescriptionError, setPrescriptionError] = useState<string | null>(null);
-  const [createdPrescription, setCreatedPrescription] = useState<Prescription | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [archiveReason, setArchiveReason] = useState("");
   const [archiveDeceasedDate, setArchiveDeceasedDate] = useState("");
@@ -881,7 +874,6 @@ export function PatientDetailPage() {
   // here with ?visitId=, since a nurse capturing vitals is very often
   // visiting a patient's page for a visit someone else (or an earlier
   // page load) already started, not one they're starting right now.
-  const [searchParams] = useSearchParams();
   const linkedVisitId = searchParams.get("visitId");
   const activeVisitId = startedVisit?.visit.id ?? linkedVisitId ?? null;
 
@@ -1010,31 +1002,6 @@ export function PatientDetailPage() {
     }));
   };
 
-  const prescribe = useMutation({
-    mutationFn: (visitId: string) => {
-      const { pharmacyItems, purchaseItems } = toPayload(prescriptionDraft);
-      return createPrescription({ visitId, items: pharmacyItems, purchaseItems });
-    },
-    onSuccess: (result) => {
-      setCreatedPrescription(result);
-      setIsPrescribing(false);
-    },
-    onError: (error) => {
-      setPrescriptionError(error instanceof ApiError ? error.message : "Couldn't create that prescription. Try again.");
-    },
-  });
-
-  const handlePrescribe = () => {
-    setPrescriptionError(null);
-    if (!startedVisit) return;
-    const problems = draftProblems(prescriptionDraft);
-    if (problems.length > 0) {
-      setPrescriptionError(problems.join(" "));
-      return;
-    }
-    prescribe.mutate(startedVisit.visit.id);
-  };
-
   const patient = patientQuery.data;
 
   // Same query key PatientDocumentsCard's own documents list uses further
@@ -1087,6 +1054,333 @@ export function PatientDetailPage() {
     }
     photoMutation.mutate(file);
   };
+
+  // The vitals / triage card: shows the latest reading with a Take vitals button, and the capture
+  // form. It is shown on both the Overview and the Vitals tab, so vitals can be taken from either.
+  const vitalsCard = patient && !patient.archived ? (
+    <Card className="mb-6 p-6">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h2 className="text-[14.5px] font-semibold text-text-primary">Vitals / triage</h2>
+                  {latestVitals && !isCapturingVitals && <TriageColourBadge colour={latestVitals.finalColour} />}
+                </div>
+  
+                {!activeVisitId ? (
+                  <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
+                    <p className="text-[13.5px] text-text-secondary">
+                      Start a visit before recording vitals so the readings are linked to the correct consultation.
+                    </p>
+                    {!isStartingVisit && canCaptureVitals && (
+                      <Button
+                        className="mt-3"
+                        variant="secondary"
+                        size="md"
+                        icon={<HeartPulse className="size-3.5" aria-hidden />}
+                        onClick={() => setIsStartingVisit(true)}
+                      >
+                        Start visit to take vitals
+                      </Button>
+                    )}
+                  </div>
+                ) : isCapturingVitals ? (
+                  <>
+                    {vitalsError && (
+                      <p role="alert" className="mb-4 text-[13.5px] text-danger-600">
+                        {vitalsError}
+                      </p>
+                    )}
+  
+                    <label className="mb-4 flex items-center gap-3 rounded-lg border border-danger-500/25 bg-danger-50 px-3.5 py-3">
+                      <Switch
+                        checked={vitalsForm.emergencySign}
+                        onChange={(checked) => setVitalsForm((f) => ({ ...f, emergencySign: checked }))}
+                        label="Emergency sign present"
+                      />
+                      <span className="text-[13.5px] font-medium text-danger-600">
+                        Emergency sign present — assigns Red immediately, skips the vitals below
+                      </span>
+                    </label>
+  
+                    {vitalsForm.emergencySign ? (
+                      <label className="flex flex-col gap-1.5">
+                        <span className="text-[13px] font-medium text-text-primary">
+                          What emergency sign was observed? <span className="text-danger-500">*</span>
+                        </span>
+                        <textarea
+                          className="min-h-[70px] rounded-lg border border-border-default bg-surface-base px-3 py-2 text-[13.5px] text-text-primary outline-none focus:border-brand-500"
+                          value={vitalsForm.emergencySignNote}
+                          onChange={(e) => setVitalsForm((f) => ({ ...f, emergencySignNote: e.target.value }))}
+                          placeholder="e.g. Airway obstruction, unresponsive, active seizure…"
+                        />
+                      </label>
+                    ) : (
+                      <div className="flex flex-col gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                          <Input
+                            label="Respiratory rate (breaths/min)"
+                            icon={<Wind className="size-4" aria-hidden />}
+                            required
+                            type="number"
+                            value={vitalsForm.respiratoryRate}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, respiratoryRate: e.target.value }))}
+                          />
+                          <Input
+                            label="Heart rate (bpm)"
+                            icon={<HeartPulse className="size-4" aria-hidden />}
+                            required
+                            type="number"
+                            value={vitalsForm.heartRate}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, heartRate: e.target.value }))}
+                          />
+                          <Input
+                            label="Temperature (°C)"
+                            required
+                            type="number"
+                            step="0.1"
+                            icon={<Thermometer className="size-4" aria-hidden />}
+                            value={vitalsForm.temperatureCelsius}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, temperatureCelsius: e.target.value }))}
+                          />
+                          <Input
+                            label="Systolic BP (mmHg)"
+                            icon={<Gauge className="size-4" aria-hidden />}
+                            required
+                            type="number"
+                            value={vitalsForm.systolicBp}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, systolicBp: e.target.value }))}
+                          />
+                          <Input
+                            label="Diastolic BP (mmHg)"
+                            icon={<Gauge className="size-4" aria-hidden />}
+                            type="number"
+                            value={vitalsForm.diastolicBp}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, diastolicBp: e.target.value }))}
+                          />
+                          <Input
+                            label="SpO2 (%)"
+                            icon={<Activity className="size-4" aria-hidden />}
+                            type="number"
+                            value={vitalsForm.spo2Percent}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, spo2Percent: e.target.value }))}
+                          />
+                          <Select
+                            label="AVPU"
+                            required
+                            options={AVPU_OPTIONS}
+                            value={vitalsForm.avpu}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, avpu: e.target.value as Avpu }))}
+                          />
+                          {(vitalsForm.scoringProfileOverride
+                            ? vitalsForm.scoringProfileOverride.startsWith("PAEDIATRIC")
+                            : isPaediatric(patient?.dateOfBirth)) && (
+                            <>
+                              <Select
+                                label="Clinician-confirmed final colour"
+                                options={TRIAGE_COLOUR_OPTIONS}
+                                value={vitalsForm.clinicianConfirmedColour}
+                                onChange={(e) => setVitalsForm((f) => ({
+                                  ...f,
+                                  clinicianConfirmedColour: e.target.value as TriageColour,
+                                }))}
+                              />
+                              <Input
+                                label="Paediatric colour reason"
+                                placeholder="Clinical basis for the selected colour"
+                                value={vitalsForm.colourConfirmationReason}
+                                onChange={(e) => setVitalsForm((f) => ({ ...f, colourConfirmationReason: e.target.value }))}
+                              />
+                            </>
+                          )}
+                          <Select
+                            label="Mobility"
+                            required
+                            options={MOBILITY_OPTIONS}
+                            value={vitalsForm.mobility}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, mobility: e.target.value as Mobility }))}
+                          />
+                          <Select
+                            label="Oxygen"
+                            options={OXYGEN_SUPPORT_OPTIONS}
+                            value={vitalsForm.oxygenSupport}
+                            onChange={(e) =>
+                              setVitalsForm((f) => ({ ...f, oxygenSupport: e.target.value as OxygenSupport }))
+                            }
+                          />
+                          {vitalsForm.oxygenSupport === "SUPPLEMENTAL" && (
+                            <>
+                              <Input
+                                label="Oxygen device"
+                                placeholder="Nasal cannula, face mask…"
+                                value={vitalsForm.oxygenDevice}
+                                onChange={(e) => setVitalsForm((f) => ({ ...f, oxygenDevice: e.target.value }))}
+                              />
+                              <Input
+                                label="Flow rate (L/min)"
+                                type="number"
+                                step="0.1"
+                                value={vitalsForm.oxygenFlowLpm}
+                                onChange={(e) => setVitalsForm((f) => ({ ...f, oxygenFlowLpm: e.target.value }))}
+                              />
+                            </>
+                          )}
+                          <Input
+                            label="Pain score"
+                            type="number"
+                            value={vitalsForm.painScore}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, painScore: e.target.value }))}
+                          />
+                          <Input
+                            label="Pain scale used"
+                            placeholder="Numeric 0-10, Wong-Baker…"
+                            value={vitalsForm.painScale}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, painScale: e.target.value }))}
+                          />
+                          <Select
+                            label="Scoring profile"
+                            options={SCORING_PROFILE_OPTIONS}
+                            value={vitalsForm.scoringProfileOverride}
+                            onChange={(e) =>
+                              setVitalsForm((f) => ({ ...f, scoringProfileOverride: e.target.value as ScoringProfile }))
+                            }
+                          />
+                        </div>
+  
+                        <div>
+                          <p className="mb-2 text-[13px] font-medium text-text-primary">
+                            Clinical discriminators (if any apply)
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {DISCRIMINATOR_OPTIONS.map((option) => {
+                              const selected = vitalsForm.discriminators.includes(option.value);
+                              return (
+                                <button
+                                  type="button"
+                                  key={option.value}
+                                  aria-pressed={selected}
+                                  onClick={() => toggleDiscriminator(option.value)}
+                                  className={`rounded-full border px-3 py-1.5 text-[12.5px] font-medium ${
+                                    selected
+                                      ? "border-brand-500 bg-brand-50 text-brand-700"
+                                      : "border-border-strong bg-surface-raised text-text-secondary"
+                                  }`}
+                                >
+                                  {option.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+  
+                    <AdditionalVitalsForm value={vitalsForm.additional} onChange={additional => setVitalsForm(f => ({ ...f, additional }))} />
+                    <label className="mt-4 flex flex-col gap-1.5">
+                      <span className="text-[13px] font-medium text-text-primary">Presenting complaint</span>
+                      <textarea
+                        className="min-h-[60px] rounded-lg border border-border-default bg-surface-base px-3 py-2 text-[13.5px] text-text-primary outline-none focus:border-brand-500"
+                        value={vitalsForm.presentingComplaint}
+                        onChange={(e) => setVitalsForm((f) => ({ ...f, presentingComplaint: e.target.value }))}
+                        placeholder="Why is the patient here today?"
+                      />
+                    </label>
+  
+                    {unusualVitals(vitalsForm).length > 0 && (
+                      <label className="mt-4 flex items-start gap-2 rounded-lg border border-warning-500/30 bg-warning-50 p-3">
+                        <input
+                          type="checkbox"
+                          checked={vitalsForm.confirmOutOfRange}
+                          onChange={(e) => setVitalsForm((f) => ({ ...f, confirmOutOfRange: e.target.checked }))}
+                          className="mt-0.5 size-4"
+                        />
+                        <span className="text-[13px] text-text-primary">
+                          <span className="block font-semibold">Unusual measurement confirmation</span>
+                          I repeated or otherwise confirmed these values and want to save them as observed:
+                          {` ${unusualVitals(vitalsForm).join(", ")}`}.
+                        </span>
+                      </label>
+                    )}
+  
+                    <div className="mt-4 flex gap-2">
+                      <Button loading={captureVitals.isPending} onClick={handleCaptureVitals}>
+                        Save vitals
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setIsCapturingVitals(false);
+                          setVitalsError(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {latestVitals ? (
+                      <div className="flex flex-col gap-3">
+                        <VitalsOverview assessment={latestVitals} />
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                          <Field label="TEWS score" value={latestVitals.tewsScore == null ? "Not calculated" : String(latestVitals.tewsScore)} />
+                          <Field label="Consciousness" value={AVPU_OPTIONS.find(o => o.value === latestVitals.avpu)?.label ?? "Not recorded"} />
+                          <Field label="Mobility" value={MOBILITY_OPTIONS.find(o => o.value === latestVitals.mobility)?.label ?? "Not recorded"} />
+                        </div>
+                        <AdditionalVitalsSummary value={latestVitals.additionalObservations} />
+                        {latestVitals.presentingComplaint && (
+                          <Field label="Presenting complaint" value={latestVitals.presentingComplaint} />
+                        )}
+                        {latestVitals.outOfRangeConfirmed && latestVitals.validationWarnings && (
+                          <div className="rounded-lg border border-warning-500/30 bg-warning-50 px-3 py-2 text-[12.5px] text-text-primary">
+                            Confirmed unusual measurements: {latestVitals.validationWarnings}
+                          </div>
+                        )}
+                        <p className="text-[12.5px] text-text-secondary">
+                          Captured {formatDateTime(latestVitals.observedAt)}
+                          {latestVitals.overrideReason && " · colour manually overridden"}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[13.5px] text-text-secondary">No vitals captured yet for this visit.</p>
+                    )}
+                    <div className="mt-4 flex items-center gap-2">
+                      {canCaptureVitals && <Button
+                        variant="secondary"
+                        size="md"
+                        icon={<HeartPulse className="size-3.5" aria-hidden />}
+                        onClick={() => setIsCapturingVitals(true)}
+                      >
+                        {latestVitals ? "Take new reading" : "Take vitals"}
+                      </Button>}
+                      {earlierVitals.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowVitalsHistory((s) => !s)}
+                          className="inline-flex items-center gap-1 text-[12.5px] font-medium text-text-secondary transition-colors duration-150 hover:text-text-primary"
+                        >
+                          <ChevronDown
+                            className={clsx("size-3.5 transition-transform duration-150", showVitalsHistory && "rotate-180")}
+                            aria-hidden
+                          />
+                          {showVitalsHistory ? "Hide" : "Show"} {earlierVitals.length} earlier{" "}
+                          {earlierVitals.length === 1 ? "reading" : "readings"}
+                        </button>
+                      )}
+                    </div>
+                    {showVitalsHistory && earlierVitals.length > 0 && (
+                      <div className="mt-3 flex flex-col gap-2 border-t border-border-subtle pt-3">
+                        {earlierVitals.map((assessment) => (
+                          <VitalsHistoryRow
+                            key={assessment.id}
+                            assessment={assessment}
+                            patientName={`${patient.firstName} ${patient.lastName}`}
+                            patientMpi={patient.mpiNumber}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </Card>
+  ) : null;
 
   return (
     <div>
@@ -1371,16 +1665,6 @@ export function PatientDetailPage() {
                     >
                       Take vitals
                     </Button>}
-                    {!isPrescribing && !createdPrescription && (
-                      <Button
-                        variant="secondary"
-                        size="md"
-                        icon={<Pill className="size-3.5" aria-hidden />}
-                        onClick={() => setIsPrescribing(true)}
-                      >
-                        Prescribe
-                      </Button>
-                    )}
                     <Button variant="secondary" size="md" onClick={() => setStartedVisit(null)}>
                       Dismiss
                     </Button>
@@ -1461,391 +1745,23 @@ export function PatientDetailPage() {
           {activeTab === "visits" && <PatientVisitsTab patientId={patient.id} />}
 
           {activeTab === "vitals" && (
+            <>
+            {vitalsCard}
             <PatientVitalsHistoryTab
               patientId={patient.id}
               patientName={`${patient.firstName} ${patient.lastName}`}
               patientMpi={patient.mpiNumber}
             />
+            </>
           )}
 
-          {activeTab === "consultation" && <PatientConsultationTab visitId={activeVisitId} />}
+          {activeTab === "consultation" && <PatientConsultationTab patientId={patient.id} visitId={activeVisitId} onTakeVitals={() => setActiveTab("vitals")} />}
 
           {activeTab === "medication" && <PatientPrescriptionsTab patientId={patient.id} />}
 
           {activeTab === "overview" && (
             <>
-          {!patient.archived && (
-            <Card className="mb-6 p-6">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-[14.5px] font-semibold text-text-primary">Vitals / triage</h2>
-                {latestVitals && !isCapturingVitals && <TriageColourBadge colour={latestVitals.finalColour} />}
-              </div>
-
-              {!activeVisitId ? (
-                <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
-                  <p className="text-[13.5px] text-text-secondary">
-                    Start a visit before recording vitals so the readings are linked to the correct consultation.
-                  </p>
-                  {!isStartingVisit && canCaptureVitals && (
-                    <Button
-                      className="mt-3"
-                      variant="secondary"
-                      size="md"
-                      icon={<HeartPulse className="size-3.5" aria-hidden />}
-                      onClick={() => setIsStartingVisit(true)}
-                    >
-                      Start visit to take vitals
-                    </Button>
-                  )}
-                </div>
-              ) : isCapturingVitals ? (
-                <>
-                  {vitalsError && (
-                    <p role="alert" className="mb-4 text-[13.5px] text-danger-600">
-                      {vitalsError}
-                    </p>
-                  )}
-
-                  <label className="mb-4 flex items-center gap-3 rounded-lg border border-danger-500/25 bg-danger-50 px-3.5 py-3">
-                    <Switch
-                      checked={vitalsForm.emergencySign}
-                      onChange={(checked) => setVitalsForm((f) => ({ ...f, emergencySign: checked }))}
-                      label="Emergency sign present"
-                    />
-                    <span className="text-[13.5px] font-medium text-danger-600">
-                      Emergency sign present — assigns Red immediately, skips the vitals below
-                    </span>
-                  </label>
-
-                  {vitalsForm.emergencySign ? (
-                    <label className="flex flex-col gap-1.5">
-                      <span className="text-[13px] font-medium text-text-primary">
-                        What emergency sign was observed? <span className="text-danger-500">*</span>
-                      </span>
-                      <textarea
-                        className="min-h-[70px] rounded-lg border border-border-default bg-surface-base px-3 py-2 text-[13.5px] text-text-primary outline-none focus:border-brand-500"
-                        value={vitalsForm.emergencySignNote}
-                        onChange={(e) => setVitalsForm((f) => ({ ...f, emergencySignNote: e.target.value }))}
-                        placeholder="e.g. Airway obstruction, unresponsive, active seizure…"
-                      />
-                    </label>
-                  ) : (
-                    <div className="flex flex-col gap-4">
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <Input
-                          label="Respiratory rate (breaths/min)"
-                          icon={<Wind className="size-4" aria-hidden />}
-                          required
-                          type="number"
-                          value={vitalsForm.respiratoryRate}
-                          onChange={(e) => setVitalsForm((f) => ({ ...f, respiratoryRate: e.target.value }))}
-                        />
-                        <Input
-                          label="Heart rate (bpm)"
-                          icon={<HeartPulse className="size-4" aria-hidden />}
-                          required
-                          type="number"
-                          value={vitalsForm.heartRate}
-                          onChange={(e) => setVitalsForm((f) => ({ ...f, heartRate: e.target.value }))}
-                        />
-                        <Input
-                          label="Temperature (°C)"
-                          required
-                          type="number"
-                          step="0.1"
-                          icon={<Thermometer className="size-4" aria-hidden />}
-                          value={vitalsForm.temperatureCelsius}
-                          onChange={(e) => setVitalsForm((f) => ({ ...f, temperatureCelsius: e.target.value }))}
-                        />
-                        <Input
-                          label="Systolic BP (mmHg)"
-                          icon={<Gauge className="size-4" aria-hidden />}
-                          required
-                          type="number"
-                          value={vitalsForm.systolicBp}
-                          onChange={(e) => setVitalsForm((f) => ({ ...f, systolicBp: e.target.value }))}
-                        />
-                        <Input
-                          label="Diastolic BP (mmHg)"
-                          icon={<Gauge className="size-4" aria-hidden />}
-                          type="number"
-                          value={vitalsForm.diastolicBp}
-                          onChange={(e) => setVitalsForm((f) => ({ ...f, diastolicBp: e.target.value }))}
-                        />
-                        <Input
-                          label="SpO2 (%)"
-                          icon={<Activity className="size-4" aria-hidden />}
-                          type="number"
-                          value={vitalsForm.spo2Percent}
-                          onChange={(e) => setVitalsForm((f) => ({ ...f, spo2Percent: e.target.value }))}
-                        />
-                        <Select
-                          label="AVPU"
-                          required
-                          options={AVPU_OPTIONS}
-                          value={vitalsForm.avpu}
-                          onChange={(e) => setVitalsForm((f) => ({ ...f, avpu: e.target.value as Avpu }))}
-                        />
-                        {(vitalsForm.scoringProfileOverride
-                          ? vitalsForm.scoringProfileOverride.startsWith("PAEDIATRIC")
-                          : isPaediatric(patient?.dateOfBirth)) && (
-                          <>
-                            <Select
-                              label="Clinician-confirmed final colour"
-                              options={TRIAGE_COLOUR_OPTIONS}
-                              value={vitalsForm.clinicianConfirmedColour}
-                              onChange={(e) => setVitalsForm((f) => ({
-                                ...f,
-                                clinicianConfirmedColour: e.target.value as TriageColour,
-                              }))}
-                            />
-                            <Input
-                              label="Paediatric colour reason"
-                              placeholder="Clinical basis for the selected colour"
-                              value={vitalsForm.colourConfirmationReason}
-                              onChange={(e) => setVitalsForm((f) => ({ ...f, colourConfirmationReason: e.target.value }))}
-                            />
-                          </>
-                        )}
-                        <Select
-                          label="Mobility"
-                          required
-                          options={MOBILITY_OPTIONS}
-                          value={vitalsForm.mobility}
-                          onChange={(e) => setVitalsForm((f) => ({ ...f, mobility: e.target.value as Mobility }))}
-                        />
-                        <Select
-                          label="Oxygen"
-                          options={OXYGEN_SUPPORT_OPTIONS}
-                          value={vitalsForm.oxygenSupport}
-                          onChange={(e) =>
-                            setVitalsForm((f) => ({ ...f, oxygenSupport: e.target.value as OxygenSupport }))
-                          }
-                        />
-                        {vitalsForm.oxygenSupport === "SUPPLEMENTAL" && (
-                          <>
-                            <Input
-                              label="Oxygen device"
-                              placeholder="Nasal cannula, face mask…"
-                              value={vitalsForm.oxygenDevice}
-                              onChange={(e) => setVitalsForm((f) => ({ ...f, oxygenDevice: e.target.value }))}
-                            />
-                            <Input
-                              label="Flow rate (L/min)"
-                              type="number"
-                              step="0.1"
-                              value={vitalsForm.oxygenFlowLpm}
-                              onChange={(e) => setVitalsForm((f) => ({ ...f, oxygenFlowLpm: e.target.value }))}
-                            />
-                          </>
-                        )}
-                        <Input
-                          label="Pain score"
-                          type="number"
-                          value={vitalsForm.painScore}
-                          onChange={(e) => setVitalsForm((f) => ({ ...f, painScore: e.target.value }))}
-                        />
-                        <Input
-                          label="Pain scale used"
-                          placeholder="Numeric 0-10, Wong-Baker…"
-                          value={vitalsForm.painScale}
-                          onChange={(e) => setVitalsForm((f) => ({ ...f, painScale: e.target.value }))}
-                        />
-                        <Select
-                          label="Scoring profile"
-                          options={SCORING_PROFILE_OPTIONS}
-                          value={vitalsForm.scoringProfileOverride}
-                          onChange={(e) =>
-                            setVitalsForm((f) => ({ ...f, scoringProfileOverride: e.target.value as ScoringProfile }))
-                          }
-                        />
-                      </div>
-
-                      <div>
-                        <p className="mb-2 text-[13px] font-medium text-text-primary">
-                          Clinical discriminators (if any apply)
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {DISCRIMINATOR_OPTIONS.map((option) => {
-                            const selected = vitalsForm.discriminators.includes(option.value);
-                            return (
-                              <button
-                                type="button"
-                                key={option.value}
-                                aria-pressed={selected}
-                                onClick={() => toggleDiscriminator(option.value)}
-                                className={`rounded-full border px-3 py-1.5 text-[12.5px] font-medium ${
-                                  selected
-                                    ? "border-brand-500 bg-brand-50 text-brand-700"
-                                    : "border-border-strong bg-surface-raised text-text-secondary"
-                                }`}
-                              >
-                                {option.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <AdditionalVitalsForm value={vitalsForm.additional} onChange={additional => setVitalsForm(f => ({ ...f, additional }))} />
-                  <label className="mt-4 flex flex-col gap-1.5">
-                    <span className="text-[13px] font-medium text-text-primary">Presenting complaint</span>
-                    <textarea
-                      className="min-h-[60px] rounded-lg border border-border-default bg-surface-base px-3 py-2 text-[13.5px] text-text-primary outline-none focus:border-brand-500"
-                      value={vitalsForm.presentingComplaint}
-                      onChange={(e) => setVitalsForm((f) => ({ ...f, presentingComplaint: e.target.value }))}
-                      placeholder="Why is the patient here today?"
-                    />
-                  </label>
-
-                  {unusualVitals(vitalsForm).length > 0 && (
-                    <label className="mt-4 flex items-start gap-2 rounded-lg border border-warning-500/30 bg-warning-50 p-3">
-                      <input
-                        type="checkbox"
-                        checked={vitalsForm.confirmOutOfRange}
-                        onChange={(e) => setVitalsForm((f) => ({ ...f, confirmOutOfRange: e.target.checked }))}
-                        className="mt-0.5 size-4"
-                      />
-                      <span className="text-[13px] text-text-primary">
-                        <span className="block font-semibold">Unusual measurement confirmation</span>
-                        I repeated or otherwise confirmed these values and want to save them as observed:
-                        {` ${unusualVitals(vitalsForm).join(", ")}`}.
-                      </span>
-                    </label>
-                  )}
-
-                  <div className="mt-4 flex gap-2">
-                    <Button loading={captureVitals.isPending} onClick={handleCaptureVitals}>
-                      Save vitals
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setIsCapturingVitals(false);
-                        setVitalsError(null);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {latestVitals ? (
-                    <div className="flex flex-col gap-3">
-                      {latestVitals.scoringVersion.includes("DRAFT") && (
-                        <div role="alert" className="rounded-lg border border-warning-500/30 bg-warning-50 px-3 py-2 text-[12.5px] text-text-primary">
-                          Draft SATS scoring table — for development only. Clinical validation is required before production use.
-                        </div>
-                      )}
-                      <VitalsOverview assessment={latestVitals} />
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        <Field label="TEWS score" value={latestVitals.tewsScore == null ? "Not calculated" : String(latestVitals.tewsScore)} />
-                        <Field label="Consciousness" value={AVPU_OPTIONS.find(o => o.value === latestVitals.avpu)?.label ?? "Not recorded"} />
-                        <Field label="Mobility" value={MOBILITY_OPTIONS.find(o => o.value === latestVitals.mobility)?.label ?? "Not recorded"} />
-                      </div>
-                      <AdditionalVitalsSummary value={latestVitals.additionalObservations} />
-                      {latestVitals.presentingComplaint && (
-                        <Field label="Presenting complaint" value={latestVitals.presentingComplaint} />
-                      )}
-                      {latestVitals.outOfRangeConfirmed && latestVitals.validationWarnings && (
-                        <div className="rounded-lg border border-warning-500/30 bg-warning-50 px-3 py-2 text-[12.5px] text-text-primary">
-                          Confirmed unusual measurements: {latestVitals.validationWarnings}
-                        </div>
-                      )}
-                      <p className="text-[12.5px] text-text-secondary">
-                        Captured {formatDateTime(latestVitals.observedAt)}
-                        {latestVitals.overrideReason && " · colour manually overridden"}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-[13.5px] text-text-secondary">No vitals captured yet for this visit.</p>
-                  )}
-                  <div className="mt-4 flex items-center gap-2">
-                    {canCaptureVitals && <Button
-                      variant="secondary"
-                      size="md"
-                      icon={<HeartPulse className="size-3.5" aria-hidden />}
-                      onClick={() => setIsCapturingVitals(true)}
-                    >
-                      {latestVitals ? "Take new reading" : "Take vitals"}
-                    </Button>}
-                    {earlierVitals.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowVitalsHistory((s) => !s)}
-                        className="inline-flex items-center gap-1 text-[12.5px] font-medium text-text-secondary transition-colors duration-150 hover:text-text-primary"
-                      >
-                        <ChevronDown
-                          className={clsx("size-3.5 transition-transform duration-150", showVitalsHistory && "rotate-180")}
-                          aria-hidden
-                        />
-                        {showVitalsHistory ? "Hide" : "Show"} {earlierVitals.length} earlier{" "}
-                        {earlierVitals.length === 1 ? "reading" : "readings"}
-                      </button>
-                    )}
-                  </div>
-                  {showVitalsHistory && earlierVitals.length > 0 && (
-                    <div className="mt-3 flex flex-col gap-2 border-t border-border-subtle pt-3">
-                      {earlierVitals.map((assessment) => (
-                        <VitalsHistoryRow
-                          key={assessment.id}
-                          assessment={assessment}
-                          patientName={`${patient.firstName} ${patient.lastName}`}
-                          patientMpi={patient.mpiNumber}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </Card>
-          )}
-
-          {(isPrescribing || createdPrescription) && (
-            <Card className="mb-6 p-6">
-              {createdPrescription ? (
-                <div className="flex flex-col items-center gap-2 text-center">
-                  <span className="flex size-11 items-center justify-center rounded-full bg-success-50 text-success-500">
-                    <Pill className="size-6" aria-hidden />
-                  </span>
-                  <h2 className="text-[16px] font-semibold text-text-primary">Prescription created</h2>
-                  <p className="rounded-lg bg-surface-sunken px-3 py-1.5 font-mono text-[15px] font-semibold text-text-primary">
-                    {createdPrescription.serialNumber}
-                  </p>
-                  <p className="text-[13.5px] text-text-secondary">
-                    Sent to the dispensing queue.{" "}
-                    <Link to="/app/pharmacy" className="font-medium text-brand-600 hover:text-brand-700">
-                      View pharmacy queue
-                    </Link>
-                  </p>
-                  <Button variant="secondary" size="md" className="mt-1" onClick={() => setCreatedPrescription(null)}>
-                    Dismiss
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <h2 className="mb-4 text-[14.5px] font-semibold text-text-primary">Prescribe</h2>
-                  {prescriptionError && (
-                    <p role="alert" className="mb-4 text-[13.5px] text-danger-600">
-                      {prescriptionError}
-                    </p>
-                  )}
-                  <PrescriptionBuilder draft={prescriptionDraft} onChange={setPrescriptionDraft} />
-                  <div className="mt-4 flex gap-2">
-                    <Button loading={prescribe.isPending} disabled={draftProblems(prescriptionDraft).length > 0} onClick={handlePrescribe}>
-                      Create prescription
-                    </Button>
-                    <Button variant="secondary" onClick={() => setIsPrescribing(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </>
-              )}
-            </Card>
-          )}
+          {vitalsCard}
 
           <DemographicsCard patient={patient} isOrgAdmin={isOrgAdmin} />
 

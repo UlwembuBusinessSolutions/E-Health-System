@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { StartConsultationPanel } from "./StartConsultationPanel";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { ChevronDown, ClipboardCheck, FlaskConical, Pill, Plus, Stethoscope, Trash2, TriangleAlert } from "lucide-react";
@@ -14,6 +16,7 @@ import {
   addConsultationDiagnosis,
   amendConsultation,
   createConsultationDraft,
+  getContinuableConsultation,
   getConsultationHistory,
   getCurrentConsultation,
   markConsultationEnteredInError,
@@ -25,11 +28,23 @@ import {
   type ConsultationDiagnosis,
   type ConsultationOutcome,
   type DiagnosisCertainty,
+  type EarlierConsultation,
   type PharmacyItemPayload,
   type PurchaseItemPayload,
+  type VitalsBypass,
 } from "@/shared/api/consultations";
-import { PrescriptionBuilder } from "@/prescribing/PrescriptionBuilder";
-import { EMPTY_DRAFT, draftProblems, toPayload, type PrescriptionDraft } from "@/prescribing/prescriptionDraft";
+import { PatientConsultationList } from "./PatientConsultationList";
+import { ContinuedFromNote, ContinueConsultation } from "./ContinueConsultation";
+import { DiagnosisSearchInput, type DiagnosisChoice } from "./DiagnosisSearchInput";
+import { PrescriptionWorkspace } from "@/prescribing/PrescriptionWorkspace";
+import {
+  EMPTY_PRESCRIPTION,
+  parse as parsePrescription,
+  problemsOf,
+  serialise as serialisePrescription,
+  toPayload,
+  type PrescriptionState,
+} from "@/prescribing/entries";
 
 const CERTAINTY_OPTIONS: { value: DiagnosisCertainty; label: string }[] = [
   { value: "PROVISIONAL", label: "Provisional" },
@@ -73,32 +88,100 @@ function outcomeLabel(outcome: ConsultationOutcome | null): string {
   return OUTCOME_CHOICES.find((o) => o.value === outcome)?.label ?? "—";
 }
 
-export function PatientConsultationTab({ visitId }: { visitId: string | null }) {
+// The Consultation tab: the consultation of the visit being worked on, and the patient's consultations
+// from every visit below it. Opening one from the list shows it here, with the same editing as the
+// current one: a draft can be carried on, a signed one amended.
+export function PatientConsultationTab({
+  patientId,
+  visitId,
+  onTakeVitals,
+}: {
+  patientId: string;
+  visitId: string | null;
+  onTakeVitals?: () => void;
+}) {
+  // Set when the doctor opens a consultation from another visit.
+  const [openedVisit, setOpenedVisit] = useState<{ visitId: string; label: string } | null>(null);
+  const shownVisitId = openedVisit?.visitId ?? visitId;
+
+  return (
+    <>
+      {openedVisit && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-500/30 bg-brand-50 px-3.5 py-2.5">
+          <p className="text-[13.5px] text-text-primary">
+            Showing the consultation from <strong>{openedVisit.label}</strong>.
+          </p>
+          <Button variant="secondary" size="md" onClick={() => setOpenedVisit(null)}>
+            {visitId ? "Back to this visit" : "Close"}
+          </Button>
+        </div>
+      )}
+      {shownVisitId ? (
+        <VisitConsultation key={shownVisitId} visitId={shownVisitId} onTakeVitals={openedVisit ? undefined : onTakeVitals} />
+      ) : (
+        <Card className="mb-6 p-6">
+          <h2 className="mb-3 text-[14.5px] font-semibold text-text-primary">Consultation</h2>
+          <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
+            <p className="text-[13.5px] text-text-secondary">
+              Start a visit from the Overview tab before beginning a consultation. Earlier consultations are listed below.
+            </p>
+          </div>
+        </Card>
+      )}
+      <PatientConsultationList
+        patientId={patientId}
+        shownVisitId={shownVisitId}
+        onOpen={(entry) => {
+          const label = `${entry.facilityName}, ${new Date(entry.visitDateTime).toLocaleDateString("en-ZA", { day: "2-digit", month: "short", year: "numeric" })}`;
+          setOpenedVisit(entry.consultation.visitId === visitId ? null : { visitId: entry.consultation.visitId, label });
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+      />
+    </>
+  );
+}
+
+function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeVitals?: () => void }) {
   const queryClient = useQueryClient();
 
   const currentQuery = useQuery({
     queryKey: ["consultation-current", visitId],
-    queryFn: () => getCurrentConsultation(visitId as string),
-    enabled: !!visitId,
+    queryFn: () => getCurrentConsultation(visitId),
   });
   const historyQuery = useQuery({
     queryKey: ["consultation-history", visitId],
-    queryFn: () => getConsultationHistory(visitId as string),
-    enabled: !!visitId,
+    queryFn: () => getConsultationHistory(visitId),
   });
   const triageQuery = useQuery({
     queryKey: ["triage-latest", visitId],
-    queryFn: () => getLatestTriage(visitId as string),
-    enabled: !!visitId,
+    queryFn: () => getLatestTriage(visitId),
+  });
+
+  const noConsultationYet = currentQuery.isSuccess && currentQuery.data === null;
+  const continuableQuery = useQuery({
+    queryKey: ["consultation-continuable", visitId],
+    queryFn: () => getContinuableConsultation(visitId),
+    enabled: noConsultationYet,
+  });
+  // A consultation that carries on from an earlier one shows the vitals taken on the earlier visit.
+  const carriedVitalsVisitId = currentQuery.data?.continuedFrom?.vitalsVisitId ?? null;
+  const carriedVitalsQuery = useQuery({
+    queryKey: ["triage-latest", carriedVitalsVisitId],
+    queryFn: () => getLatestTriage(carriedVitalsVisitId as string),
+    enabled: !!carriedVitalsVisitId && carriedVitalsVisitId !== visitId,
   });
 
   const [startError, setStartError] = useState<string | null>(null);
   const startConsultation = useMutation({
-    mutationFn: () => createConsultationDraft(visitId as string),
+    mutationFn: ({ bypass, continueFrom }: { bypass?: VitalsBypass; continueFrom?: string }) =>
+      createConsultationDraft(visitId, bypass, continueFrom),
     onSuccess: () => {
       setStartError(null);
       queryClient.invalidateQueries({ queryKey: ["consultation-current", visitId] });
       queryClient.invalidateQueries({ queryKey: ["consultation-history", visitId] });
+      queryClient.invalidateQueries({ queryKey: ["consultation-continuable", visitId] });
+      queryClient.invalidateQueries({ queryKey: ["patient-consultations"] });
+      queryClient.invalidateQueries({ queryKey: ["in-progress-consultations"] });
     },
     onError: (error) => {
       setStartError(error instanceof ApiError ? error.message : "Couldn't start a consultation. Try again.");
@@ -108,20 +191,9 @@ export function PatientConsultationTab({ visitId }: { visitId: string | null }) 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["consultation-current", visitId] });
     queryClient.invalidateQueries({ queryKey: ["consultation-history", visitId] });
+    queryClient.invalidateQueries({ queryKey: ["patient-consultations"] });
+      queryClient.invalidateQueries({ queryKey: ["in-progress-consultations"] });
   };
-
-  if (!visitId) {
-    return (
-      <Card className="mb-6 p-6">
-        <h2 className="mb-3 text-[14.5px] font-semibold text-text-primary">Consultation</h2>
-        <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
-          <p className="text-[13.5px] text-text-secondary">
-            Start a visit from the Overview tab before beginning a consultation.
-          </p>
-        </div>
-      </Card>
-    );
-  }
 
   const current = currentQuery.data ?? null;
   const history = (historyQuery.data ?? []).filter((c) => c.id !== current?.id);
@@ -140,38 +212,62 @@ export function PatientConsultationTab({ visitId }: { visitId: string | null }) 
       {currentQuery.isLoading ? (
         <p className="text-[13.5px] text-text-secondary">Loading…</p>
       ) : !current ? (
-        <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
-          <p className="text-[13.5px] text-text-secondary">
-            No consultation recorded yet for this visit.
-          </p>
-          {startError && (
-            <p role="alert" className="mt-2 text-[13px] text-danger-600">
-              {startError}
-            </p>
-          )}
-          <Button
-            className="mt-3"
-            variant="secondary"
-            size="md"
-            icon={<Stethoscope className="size-3.5" aria-hidden />}
+        continuableQuery.isLoading ? (
+          <p className="text-[13.5px] text-text-secondary">Loading…</p>
+        ) : (
+          <ConsultationStart
+            earlier={continuableQuery.data ?? null}
+            panel={
+              <StartConsultationPanel
+                vitalsMissing={triageQuery.isSuccess && triageQuery.data === null}
+                loading={startConsultation.isPending}
+                error={startError}
+                onStart={(bypass) => startConsultation.mutate({ bypass })}
+                onTakeVitals={onTakeVitals}
+              />
+            }
             loading={startConsultation.isPending}
-            onClick={() => startConsultation.mutate()}
-          >
-            Start consultation
-          </Button>
-        </div>
+            error={startError}
+            onContinue={(continueFrom) => startConsultation.mutate({ continueFrom })}
+          />
+        )
       ) : (
-        <ConsultationRecord
-          key={current.id}
-          consultation={current}
-          presentingComplaint={triageQuery.data?.presentingComplaint ?? null}
-          onChanged={invalidate}
-        />
+        <>
+          {current.vitalsBypassReason && <VitalsSkippedNote consultation={current} />}
+          {current.continuedFrom && (
+            <ContinuedFromNote earlier={current.continuedFrom} vitals={carriedVitalsQuery.data ?? triageQuery.data ?? null} />
+          )}
+          <ConsultationRecord
+            key={current.id}
+            consultation={current}
+            presentingComplaint={triageQuery.data?.presentingComplaint ?? carriedVitalsQuery.data?.presentingComplaint ?? null}
+            onChanged={invalidate}
+          />
+        </>
       )}
 
       {history.length > 0 && <ConsultationHistorySection entries={history} />}
     </Card>
   );
+}
+
+// Where a consultation starts. When the patient was seen earlier for the same episode, the doctor first chooses
+// between carrying on from that consultation and a new problem.
+function ConsultationStart({
+  earlier,
+  panel,
+  loading,
+  error,
+  onContinue,
+}: {
+  earlier: EarlierConsultation | null;
+  panel: ReactNode;
+  loading: boolean;
+  error: string | null;
+  onContinue: (consultationId: string) => void;
+}) {
+  if (!earlier) return <>{panel}</>;
+  return <ContinueConsultation earlier={earlier} newProblem={panel} loading={loading} error={error} onContinue={onContinue} />;
 }
 
 function ConsultationRecord({
@@ -187,6 +283,26 @@ function ConsultationRecord({
     return <DraftView consultation={consultation} presentingComplaint={presentingComplaint} onChanged={onChanged} />;
   }
   return <SignedView consultation={consultation} presentingComplaint={presentingComplaint} onChanged={onChanged} />;
+}
+
+const BYPASS_LABELS: Record<NonNullable<Consultation["vitalsBypassReason"]>, string> = {
+  EMERGENCY: "Emergency",
+  FOLLOW_UP_NO_CHANGE: "Follow-up, nothing has changed",
+  OTHER: "Another reason",
+};
+
+// Stays on the record even if vitals are taken later: it says the consultation began without them.
+function VitalsSkippedNote({ consultation }: { consultation: Consultation }) {
+  if (!consultation.vitalsBypassReason) return null;
+  return (
+    <div role="note" className="mb-4 rounded-lg border border-amber-500/40 bg-amber-50 px-3.5 py-2.5">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-amber-600">Started without vitals</p>
+      <p className="mt-0.5 text-[13.5px] text-text-primary">
+        {BYPASS_LABELS[consultation.vitalsBypassReason]}
+        {consultation.vitalsBypassNote ? `: ${consultation.vitalsBypassNote}` : ""}
+      </p>
+    </div>
+  );
 }
 
 function PresentingComplaint({ value }: { value: string | null }) {
@@ -349,20 +465,26 @@ function OutcomePicker({
   onChoose,
   loading,
   onCancel,
+  prescription,
 }: {
   outcomeNotes: string;
   onChangeNotes: (v: string) => void;
   onChoose: (outcome: ConsultationOutcome, medicines?: PrescribedMedicines, destinationFacilityId?: string) => void;
   loading: boolean;
   onCancel: () => void;
+  /** The prescription written in the Prescription section above; it travels with "Send to pharmacy". */
+  prescription: PrescriptionState;
 }) {
-  // Send to pharmacy is the one outcome that needs more than a click — a
-  // real prescription (drug/dose/qty) is what actually shows up in the
-  // pharmacy facility's dispensing queue; the queue-token transfer alone
-  // moves the patient's ticket but leaves nothing there to dispense.
-  const [expandPharmacy, setExpandPharmacy] = useState(false);
-  const [draft, setDraft] = useState<PrescriptionDraft>(EMPTY_DRAFT);
-  const prescriptionReady = draftProblems(draft).length === 0;
+  // Send to pharmacy needs a real prescription — that is what shows up in the pharmacy's dispensing
+  // queue; the queue-token transfer alone moves the patient's ticket but leaves nothing to dispense.
+  const prescribed = prescription.prescribe && prescription.entries.length > 0;
+  const prescriptionProblems = problemsOf(prescription);
+  const pharmacyReady = prescribed && prescriptionProblems.length === 0;
+  const pharmacyHint = !prescription.prescribe
+    ? "Switch on Prescribe above and add the medicines first."
+    : prescription.entries.length === 0
+      ? "Add at least one medicine in the Prescription section above."
+      : prescriptionProblems[0] ?? null;
 
   // Refer/transfer is the other outcome that needs more than a click — a
   // real destination facility, picked from whatever this org has actually
@@ -382,6 +504,11 @@ function OutcomePicker({
     <div className="rounded-xl border border-brand-500 bg-brand-50 p-4">
       <p className="mb-3 text-[13.5px] font-semibold text-text-primary">Choose next step</p>
       <TextAreaField label="Notes for this outcome (optional)" value={outcomeNotes} onChange={onChangeNotes} />
+      {prescribed && (
+        <p role="note" className="mt-3 rounded-lg bg-surface-raised px-3.5 py-2.5 text-[12.5px] text-text-secondary">
+          You wrote a prescription. It is only sent when you choose <strong>Send to pharmacy</strong>.
+        </p>
+      )}
       <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {OUTCOME_CHOICES.map((choice) => {
           const Icon = choice.icon;
@@ -392,7 +519,7 @@ function OutcomePicker({
               key={choice.value}
               className={clsx(
                 "flex flex-col gap-2 rounded-lg border border-border-subtle bg-surface-raised p-3.5",
-                ((isPharmacy && expandPharmacy) || (isTransfer && expandTransfer)) && "sm:col-span-2",
+                isTransfer && expandTransfer && "sm:col-span-2",
               )}
             >
               <div className="flex items-center gap-2 text-brand-600">
@@ -401,24 +528,7 @@ function OutcomePicker({
               </div>
               <p className="flex-1 text-[12px] text-text-secondary">{choice.description}</p>
 
-              {isPharmacy && expandPharmacy ? (
-                <div className="flex flex-col gap-2">
-                  <PrescriptionBuilder draft={draft} onChange={setDraft} />
-                  <div className="mt-1 flex gap-2">
-                    <Button
-                      size="md"
-                      loading={loading}
-                      disabled={!prescriptionReady}
-                      onClick={() => onChoose("SEND_TO_PHARMACY", toPayload(draft))}
-                    >
-                      Confirm & send to pharmacy
-                    </Button>
-                    <Button variant="secondary" size="md" onClick={() => setExpandPharmacy(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : isTransfer && expandTransfer ? (
+              {isTransfer && expandTransfer ? (
                 <div className="flex flex-col gap-2">
                   <Select
                     label="Destination facility"
@@ -444,18 +554,22 @@ function OutcomePicker({
                   </div>
                 </div>
               ) : (
-                <Button
-                  variant={isPharmacy ? "primary" : "secondary"}
-                  size="md"
-                  loading={loading}
-                  onClick={() => {
-                    if (isPharmacy) setExpandPharmacy(true);
-                    else if (isTransfer) setExpandTransfer(true);
-                    else onChoose(choice.value);
-                  }}
-                >
-                  {choice.label}
-                </Button>
+                <>
+                  <Button
+                    variant={isPharmacy ? "primary" : "secondary"}
+                    size="md"
+                    loading={loading}
+                    disabled={isPharmacy && !pharmacyReady}
+                    onClick={() => {
+                      if (isPharmacy) onChoose("SEND_TO_PHARMACY", toPayload(prescription));
+                      else if (isTransfer) setExpandTransfer(true);
+                      else onChoose(choice.value);
+                    }}
+                  >
+                    {choice.label}
+                  </Button>
+                  {isPharmacy && !pharmacyReady && pharmacyHint && <p className="text-[12px] text-text-secondary">{pharmacyHint}</p>}
+                </>
               )}
             </div>
           );
@@ -470,6 +584,15 @@ function OutcomePicker({
       </button>
     </div>
   );
+}
+
+// How long after the last change the draft is saved by itself.
+const AUTOSAVE_DELAY_MS = 1500;
+
+/** One line about a recorded allergy for the prescribing area, or null when none is recorded. */
+function allergyNoteOf(fields: { allergyStatus: AllergyStatus; allergyDetail: string }): string | null {
+  if (fields.allergyStatus !== "KNOWN") return null;
+  return fields.allergyDetail.trim() ? `Allergy recorded: ${fields.allergyDetail.trim()}.` : "An allergy is recorded.";
 }
 
 interface ConsultationFieldsState {
@@ -503,12 +626,16 @@ function DraftView({
   presentingComplaint: string | null;
   onChanged: () => void;
 }) {
+  const navigate = useNavigate();
   const [fields, setFields] = useState<ConsultationFieldsState>(() => toFieldsState(consultation));
+  const [prescription, setPrescription] = useState<PrescriptionState>(() => parsePrescription(consultation.prescriptionDraft));
   const [showOutcomePicker, setShowOutcomePicker] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [savedNote, setSavedNote] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const saveErrorRef = useRef<HTMLParagraphElement>(null);
+  // Set by any edit, so autosave only runs after the doctor changed something.
+  const unsaved = useRef(false);
 
   // The error banner renders at the top of a long form, but a sign failure
   // (e.g. "no pharmacy facility configured yet") happens while the doctor
@@ -520,28 +647,46 @@ function DraftView({
 
   const set = <K extends keyof ConsultationFieldsState>(key: K, value: ConsultationFieldsState[K]) => {
     setFields((f) => ({ ...f, [key]: value }));
-    setSavedNote(false);
+    unsaved.current = true;
   };
 
+  const changePrescription = (next: PrescriptionState) => {
+    setPrescription(next);
+    unsaved.current = true;
+  };
+
+  // Everything the doctor has written, notes and prescription together, so one save keeps it all.
+  const draftPayload = () => ({
+    relevantHistory: fields.relevantHistory || undefined,
+    currentMedications: fields.currentMedications || undefined,
+    allergyStatus: fields.allergyStatus,
+    allergyDetail: fields.allergyStatus === "KNOWN" ? fields.allergyDetail || undefined : undefined,
+    examinationNotes: fields.examinationNotes || undefined,
+    investigationsNotes: fields.investigationsNotes || undefined,
+    treatmentPlan: fields.treatmentPlan || undefined,
+    prescriptionDraft: serialisePrescription(prescription),
+  });
+
   const saveDraft = useMutation({
-    mutationFn: () =>
-      updateConsultationDraft(consultation.id, {
-        relevantHistory: fields.relevantHistory || undefined,
-        currentMedications: fields.currentMedications || undefined,
-        allergyStatus: fields.allergyStatus,
-        allergyDetail: fields.allergyStatus === "KNOWN" ? fields.allergyDetail || undefined : undefined,
-        examinationNotes: fields.examinationNotes || undefined,
-        investigationsNotes: fields.investigationsNotes || undefined,
-        treatmentPlan: fields.treatmentPlan || undefined,
-      }),
+    mutationFn: () => updateConsultationDraft(consultation.id, draftPayload()),
     onSuccess: () => {
+      unsaved.current = false;
       setSaveError(null);
-      setSavedNote(true);
+      setSavedAt(new Date());
     },
     onError: (error) => {
       setSaveError(error instanceof ApiError ? error.message : "Couldn't save this draft. Try again.");
     },
   });
+
+  // Autosave: a moment after the doctor stops typing, the draft is saved, so closing the record
+  // never loses work.
+  useEffect(() => {
+    if (!unsaved.current) return;
+    const timer = window.setTimeout(() => saveDraft.mutate(), AUTOSAVE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fields, prescription]);
 
   const sign = useMutation({
     // Signing must not silently drop whatever's currently in the form —
@@ -561,15 +706,7 @@ function DraftView({
       medicines?: PrescribedMedicines;
       destinationFacilityId?: string;
     }) => {
-      await updateConsultationDraft(consultation.id, {
-        relevantHistory: fields.relevantHistory || undefined,
-        currentMedications: fields.currentMedications || undefined,
-        allergyStatus: fields.allergyStatus,
-        allergyDetail: fields.allergyStatus === "KNOWN" ? fields.allergyDetail || undefined : undefined,
-        examinationNotes: fields.examinationNotes || undefined,
-        investigationsNotes: fields.investigationsNotes || undefined,
-        treatmentPlan: fields.treatmentPlan || undefined,
-      });
+      await updateConsultationDraft(consultation.id, draftPayload());
       if (newDiagnosisText.trim()) {
         await addConsultationDiagnosis(consultation.id, {
           diagnosisText: newDiagnosisText.trim(),
@@ -599,9 +736,9 @@ function DraftView({
   const [newDiagnosisCertainty, setNewDiagnosisCertainty] = useState<DiagnosisCertainty>("PROVISIONAL");
 
   const addDiagnosis = useMutation({
-    mutationFn: () =>
+    mutationFn: (choice: DiagnosisChoice) =>
       addConsultationDiagnosis(consultation.id, {
-        diagnosisText: newDiagnosisText.trim(),
+        ...("diagnosisId" in choice ? { diagnosisId: choice.diagnosisId } : { diagnosisText: choice.diagnosisText }),
         isPrimary: newDiagnosisPrimary,
         certainty: newDiagnosisCertainty,
       }),
@@ -674,11 +811,12 @@ function DraftView({
           )}
         </div>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[2fr_auto_auto_auto] sm:items-end">
-          <Input
+          <DiagnosisSearchInput
             label="Add diagnosis"
-            placeholder="e.g. Upper respiratory tract infection"
+            placeholder="Search by name or ICD-10 code, e.g. bronchitis or J20"
             value={newDiagnosisText}
-            onChange={(e) => setNewDiagnosisText(e.target.value)}
+            onChangeText={setNewDiagnosisText}
+            onChoose={(choice) => addDiagnosis.mutate(choice)}
           />
           <label className="flex items-center gap-1.5 pb-3 text-[12.5px] text-text-secondary">
             <input
@@ -700,7 +838,7 @@ function DraftView({
             icon={<Plus className="size-3.5" aria-hidden />}
             loading={addDiagnosis.isPending}
             disabled={!newDiagnosisText.trim()}
-            onClick={() => addDiagnosis.mutate()}
+            onClick={() => addDiagnosis.mutate({ diagnosisText: newDiagnosisText.trim() })}
           >
             Add
           </Button>
@@ -718,8 +856,16 @@ function DraftView({
         onChange={(v) => set("treatmentPlan", v)}
       />
 
+      <PrescriptionWorkspace
+        state={prescription}
+        onChange={changePrescription}
+        allergyNote={allergyNoteOf(fields)}
+        patientLabel="Prescription for this visit"
+      />
+
       {showOutcomePicker ? (
         <OutcomePicker
+          prescription={prescription}
           outcomeNotes={outcomeNotes}
           onChangeNotes={setOutcomeNotes}
           loading={sign.isPending}
@@ -729,14 +875,23 @@ function DraftView({
           onCancel={() => setShowOutcomePicker(false)}
         />
       ) : (
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button size="md" onClick={() => setShowOutcomePicker(true)}>
             Sign & choose next step
           </Button>
           <Button variant="secondary" size="md" loading={saveDraft.isPending} onClick={() => saveDraft.mutate()}>
             Save draft
           </Button>
-          {savedNote && <span className="text-[12.5px] text-success-600">Draft saved</span>}
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => saveDraft.mutate(undefined, { onSuccess: () => navigate("/app/patients") })}
+          >
+            Close and continue later
+          </Button>
+          <span role="status" className="text-[12.5px] text-text-secondary">
+            {saveDraft.isPending ? "Saving…" : savedAt ? `Draft saved at ${savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. It saves as you type.` : "It saves as you type."}
+          </span>
           <div className="ml-auto">
             <EnteredInErrorAction consultationId={consultation.id} onChanged={onChanged} />
           </div>
@@ -749,7 +904,14 @@ function DraftView({
 function DiagnosisRow({ diagnosis, onRemove }: { diagnosis: ConsultationDiagnosis; onRemove?: () => void }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-surface-sunken/40 px-3.5 py-2.5">
-      <span className="text-[13.5px] text-text-primary">{diagnosis.diagnosisText}</span>
+      <span className="flex min-w-0 items-center gap-2 text-[13.5px] text-text-primary">
+        {diagnosis.code && (
+          <span className="shrink-0 rounded bg-brand-50 px-1.5 py-0.5 font-mono text-[11.5px] font-semibold text-brand-600">
+            {diagnosis.code}
+          </span>
+        )}
+        <span className="min-w-0">{diagnosis.diagnosisText}</span>
+      </span>
       <div className="flex items-center gap-2">
         <span
           className={clsx(
@@ -856,9 +1018,15 @@ function AmendForm({
 }) {
   const [fields, setFields] = useState<ConsultationFieldsState>(() => toFieldsState(consultation));
   const [diagnoses, setDiagnoses] = useState(
-    () => consultation.diagnoses.map((d) => ({ diagnosisText: d.diagnosisText, isPrimary: d.isPrimary, certainty: d.certainty })),
+    () => consultation.diagnoses.map((d) => ({
+      diagnosisText: d.diagnosisText,
+      diagnosisId: d.diagnosisId ?? undefined,
+      isPrimary: d.isPrimary,
+      certainty: d.certainty,
+    })),
   );
   const [amendmentReason, setAmendmentReason] = useState("");
+  const [prescription, setPrescription] = useState<PrescriptionState>(EMPTY_PRESCRIPTION);
   const [showOutcomePicker, setShowOutcomePicker] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState(consultation.outcomeNotes ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -952,10 +1120,20 @@ function AmendForm({
         <div className="flex flex-col gap-2">
           {diagnoses.map((d, index) => (
             <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_auto_auto_auto] sm:items-end">
-              <Input
+              <DiagnosisSearchInput
                 label="Diagnosis"
+                placeholder="Search by name or ICD-10 code"
                 value={d.diagnosisText}
-                onChange={(e) => updateDiagnosis(index, { diagnosisText: e.target.value })}
+                // Typing again means it is no longer the catalogue entry that was picked.
+                onChangeText={(text) => updateDiagnosis(index, { diagnosisText: text, diagnosisId: undefined })}
+                onChoose={(choice) =>
+                  updateDiagnosis(
+                    index,
+                    "diagnosisId" in choice
+                      ? { diagnosisText: choice.name, diagnosisId: choice.diagnosisId }
+                      : { diagnosisText: choice.diagnosisText, diagnosisId: undefined },
+                  )
+                }
               />
               <label className="flex items-center gap-1.5 pb-3 text-[12.5px] text-text-secondary">
                 <input type="checkbox" checked={d.isPrimary} onChange={(e) => updateDiagnosis(index, { isPrimary: e.target.checked })} />
@@ -980,7 +1158,7 @@ function AmendForm({
         </div>
         <button
           type="button"
-          onClick={() => setDiagnoses((items) => [...items, { diagnosisText: "", isPrimary: false, certainty: "PROVISIONAL" }])}
+          onClick={() => setDiagnoses((items) => [...items, { diagnosisText: "", diagnosisId: undefined, isPrimary: false, certainty: "PROVISIONAL" }])}
           className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-600 hover:text-brand-700"
         >
           <Plus className="size-3.5" aria-hidden />
@@ -991,8 +1169,16 @@ function AmendForm({
       <TextAreaField label="Investigations" value={fields.investigationsNotes} onChange={(v) => set("investigationsNotes", v)} />
       <TextAreaField label="Treatment plan & patient instructions" value={fields.treatmentPlan} onChange={(v) => set("treatmentPlan", v)} />
 
+      <PrescriptionWorkspace
+        state={prescription}
+        onChange={setPrescription}
+        allergyNote={allergyNoteOf(fields)}
+        patientLabel="Prescription for this amendment"
+      />
+
       {showOutcomePicker ? (
         <OutcomePicker
+          prescription={prescription}
           outcomeNotes={outcomeNotes}
           onChangeNotes={setOutcomeNotes}
           loading={amend.isPending}

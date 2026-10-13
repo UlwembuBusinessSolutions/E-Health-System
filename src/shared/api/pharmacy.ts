@@ -1,3 +1,4 @@
+import type { MedicineDirections } from "./consultations";
 import { apiClient, apiOrigin, ApiError } from "./client";
 import { tenantAuthHeaders } from "./auth";
 import { queryString } from "./queryString";
@@ -11,9 +12,9 @@ import type { DrugSchedule } from "./pharmacyStock";
 export type PrescriptionStatus = "PENDING" | "DISPENSED" | "OUT_OF_STOCK" | "PARTIALLY_DISPENSED";
 
 export type ItemStockStatus = "IN_STOCK" | "LOW" | "NONE";
-// SUGGESTED: the drug name matches a mapping remembered from earlier, and
-// `productId` holds that guess until a pharmacist confirms it.
-export type MappingStatus = "CONFIRMED" | "SUGGESTED" | "UNMAPPED";
+// CONFIRMED: the prescriber chose the stock product. UNMAPPED: an older free-text
+// line, which cannot be dispensed until the prescriber corrects it.
+export type MappingStatus = "CONFIRMED" | "UNMAPPED";
 // Absent (null) means nobody has asked about a substitute for this item.
 export type SubstitutionStatus = "REQUESTED" | "APPROVED" | "REJECTED";
 
@@ -46,7 +47,7 @@ export interface PrescriptionItem {
   markedOutOfStockAt: string | null;
   outOfStockNote: string | null;
   // The stock product this line is filled from, or the remembered guess when
-  // `mappingStatus` is SUGGESTED. Stock is only deducted once CONFIRMED.
+  // `mappingStatus` is UNMAPPED. Stock is only deducted from a CONFIRMED product.
   productId: string | null;
   mappingStatus: MappingStatus;
   mappedProductName: string | null;
@@ -67,6 +68,8 @@ export interface PrescriptionItem {
   substitutionStatus: SubstitutionStatus | null;
   substituteProductId: string | null;
   substituteProductName: string | null;
+  // How the prescriber wrote the directions; null for a line written before they were recorded.
+  directions: MedicineDirections | null;
 }
 
 /** Why a medicine is on the "patient buys this" list. Worked out by the server from the shelf at the time. */
@@ -81,6 +84,7 @@ export interface PurchasePrescriptionItem {
   productName: string | null;
   reason: PurchaseReason;
   note: string | null;
+  directions: MedicineDirections | null;
 }
 
 export interface Prescription {
@@ -115,6 +119,7 @@ export interface Prescription {
 }
 
 export interface PrescriptionItemInput {
+  directions?: MedicineDirections;
   drugName: string;
   dosage: string;
   quantity: number;
@@ -124,6 +129,7 @@ export interface PrescriptionItemInput {
 
 /** A medicine the patient buys instead of receiving it from the pharmacy. */
 export interface PurchaseItemInput {
+  directions?: MedicineDirections;
   drugName: string;
   dosage: string;
   quantity: number;
@@ -314,19 +320,6 @@ export async function searchMappableProducts(query: string): Promise<ProductRef[
     { headers: tenantAuthHeaders() },
   );
   return response.items.map((product) => ({ id: product.id, name: product.displayName }));
-}
-
-// Confirms or overrides which stock product an item is filled from; the server
-// remembers the choice so the same drug name is pre-selected next time.
-// Answers with the whole prescription, but the screen refetches it anyway.
-export async function setPrescriptionItemProduct(
-  prescriptionId: string,
-  itemId: string,
-  productId: string,
-): Promise<void> {
-  await apiClient.put<Prescription>(`/api/v1/prescriptions/${prescriptionId}/items/${itemId}/product`, { productId }, {
-    headers: tenantAuthHeaders(),
-  });
 }
 
 // ---- Collection (hand-over) ----

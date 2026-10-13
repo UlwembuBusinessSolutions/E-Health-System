@@ -2,14 +2,13 @@ import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import type { DispenseItemPayload, Prescription, PrescriptionItem, ProductRef, WitnessCredentials } from "@/shared/api/pharmacy";
 import { describeError, isWitnessRequired } from "../lib/problem";
-import { useDispenseItem, useMapProduct, useMarkOutOfStock, useRecordReturn } from "./hooks/useItemMutations";
+import { useDispenseItem, useMarkOutOfStock, useRecordReturn } from "./hooks/useItemMutations";
 import { ChangeLotPicker } from "./ChangeLotPicker";
 import { ItemActions, type ItemPanel } from "./ItemActions";
 import { ItemBadges, itemStatusNote } from "./ItemBadges";
-import { activeLot, isMapped, lotAdvice, returnableQuantity, suggestedProductOf } from "./itemState";
+import { activeLot, isMapped, lotAdvice, returnableQuantity } from "./itemState";
 import { OutOfStockForm } from "./OutOfStockForm";
 import { PartialDispenseForm } from "./PartialDispenseForm";
-import { ProductPicker } from "./ProductPicker";
 import { RecordReturnForm } from "./RecordReturnForm";
 import { StockLine } from "./StockLine";
 import { SubstitutionAnswer } from "./SubstitutionAnswer";
@@ -32,7 +31,6 @@ export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
 
   const dispense = useDispenseItem(prescription.id, item.id);
   const markOutOfStock = useMarkOutOfStock(prescription.id, item.id);
-  const mapProduct = useMapProduct(prescription.id, item.id);
   const recordReturn = useRecordReturn(prescription.id, item.id);
 
   const lot = activeLot(item, chosenBatchId);
@@ -83,12 +81,12 @@ export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
       )}
 
       {!isMapped(item) ? (
-        <ProductPicker
-          drugName={item.drugName}
-          suggestion={suggestedProductOf(item)}
-          loading={mapProduct.isPending}
-          onConfirm={(productId) => mapProduct.mutate(productId)}
-        />
+        // Only the prescriber chooses the medicine, so there is nothing to pick here:
+        // the pharmacist asks the prescriber to correct the prescription instead.
+        <p role="note" className="mt-3 rounded-lg border border-amber-500/40 bg-amber-50 p-3 text-[13.5px] text-text-primary">
+          The prescriber did not choose a stock medicine for this line, so it cannot be dispensed. Use
+          &quot;Message prescriber&quot; to ask for a corrected prescription.
+        </p>
       ) : (
         <ItemActions
           item={item}
