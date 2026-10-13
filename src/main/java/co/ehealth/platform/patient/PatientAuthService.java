@@ -113,8 +113,9 @@ public class PatientAuthService {
     @Transactional(noRollbackFor = InvalidPatientVerificationCodeException.class)
     public RegistrationResult verifyRegistration(String email, String code) {
         Instant now = clock.instant();
+        String normalizedEmail = normalizeEmail(email);
         Optional<PatientRegistrationVerification> maybePending = verificationRepository
-                .findTopByEmailAndConsumedAtIsNullOrderByCreatedAtDesc(email)
+                .findTopByEmailAndConsumedAtIsNullOrderByCreatedAtDesc(normalizedEmail)
                 .filter(pending -> !pending.isExpired(now)
                         && pending.getAttemptCount() < MAX_REGISTRATION_CODE_ATTEMPTS);
         String hashToCheck = maybePending.map(PatientRegistrationVerification::getCodeHash).orElse(DummyHash.VALUE);
