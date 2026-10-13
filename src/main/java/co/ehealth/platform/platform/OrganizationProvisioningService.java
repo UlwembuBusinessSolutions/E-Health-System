@@ -1,5 +1,7 @@
 package co.ehealth.platform.platform;
 
+import co.ehealth.platform.core.audit.AuditDetails;
+import co.ehealth.platform.identity.RolePermissionService;
 import co.ehealth.platform.core.audit.AuditLog;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.notification.EmailService;
@@ -47,8 +49,7 @@ import java.util.stream.Collectors;
 public class OrganizationProvisioningService {
 
     private static final Pattern SLUG_PATTERN = Pattern.compile("^[a-z][a-z0-9-]{1,61}[a-z0-9]$");
-    private static final String TEMP_PASSWORD_CHARS =
-            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    private static final String TEMP_PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     // What a brand-new tenant gets switched on by default, before any
@@ -106,6 +107,10 @@ public class OrganizationProvisioningService {
     // module-boundary rule as staffService above.
     private final FacilityService facilityService;
 
+    // identity.RolePermissionService, not RoleRepository/PermissionRepository
+    // directly — same module-boundary rule as staffService above.
+    private final RolePermissionService rolePermissionService;
+
     public OrganizationProvisioningService(OrganizationRepository organizationRepository,
             TenantMigrationRunner migrationRunner, StaffService staffService, AuditLogService auditLogService,
             PlatformAuditLogRepository platformAuditLogRepository, EmailService emailService,
@@ -113,7 +118,7 @@ public class OrganizationProvisioningService {
             OrganizationMailSettingsService organizationMailSettingsService,
             ModuleEntitlementRepository moduleEntitlementRepository,
             ModuleEntitlementQueryService moduleEntitlementQueryService,
-            FacilityService facilityService) {
+            FacilityService facilityService, RolePermissionService rolePermissionService) {
         this.organizationRepository = organizationRepository;
         this.migrationRunner = migrationRunner;
         this.staffService = staffService;
@@ -125,6 +130,7 @@ public class OrganizationProvisioningService {
         this.moduleEntitlementRepository = moduleEntitlementRepository;
         this.moduleEntitlementQueryService = moduleEntitlementQueryService;
         this.facilityService = facilityService;
+        this.rolePermissionService = rolePermissionService;
     }
 
     // Deliberately not one @Transactional: the Organization row lives in
@@ -369,7 +375,7 @@ public class OrganizationProvisioningService {
     // reading this later shouldn't have to guess whether a field that
     // looks unchanged really was.
     public void updateDetails(UUID organizationId, String displayName, OrganizationSector sector,
-                               UUID actingOperatorId) {
+            UUID actingOperatorId) {
         Organization organization = organizationRepository.findById(organizationId)
                 .orElseThrow(OrganizationNotFoundException::new);
         String previousName = organization.getDisplayName();
@@ -415,8 +421,8 @@ public class OrganizationProvisioningService {
     }
 
     public OrganizationMailSettings updateMailSettings(UUID organizationId, String host, Integer port,
-                                                         String username, String password, String fromAddress,
-                                                         UUID actingOperatorId) {
+            String username, String password, String fromAddress,
+            UUID actingOperatorId) {
         Organization organization = organizationRepository.findById(organizationId)
                 .orElseThrow(OrganizationNotFoundException::new);
         OrganizationMailSettings updated = organizationMailSettingsService.updateMailSettingsForOrganization(
@@ -472,6 +478,43 @@ public class OrganizationProvisioningService {
         } finally {
             TenantContext.clear();
         }
+    }
+
+    // IAM-F02 / BR-IAM-020 — read half: every role in this tenant with its
+    // current permission codes, plus the full permission catalogue.
+    public RolePermissionService.RoleCatalogue listRolePermissions(UUID organizationId) {
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(OrganizationNotFoundException::new);
+        TenantContext.setCurrentTenant(organization.getSchemaName());
+        try {
+            return rolePermissionService.catalogue();
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    // Write half. Affects only this organization's schema, so other tenants
+    // with a same-named role are untouched. Audited platform-side with full
+    // before/after sets (and tenant-side inside RolePermissionService).
+    public RolePermissionService.PermissionChange updateRolePermissions(UUID organizationId, UUID roleId,
+            List<String> permissionCodes,
+            UUID actingOperatorId) {
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(OrganizationNotFoundException::new);
+        RolePermissionService.PermissionChange change;
+        TenantContext.setCurrentTenant(organization.getSchemaName());
+        try {
+            change = rolePermissionService.replacePermissions(roleId, permissionCodes, actingOperatorId);
+        } finally {
+            TenantContext.clear();
+        }
+        if (change.changed()) {
+            String detail = AuditDetails.of("role", change.roleName(), "before", change.before(),
+                    "after", change.after());
+            platformAuditLogRepository.save(new PlatformAuditLog(actingOperatorId,
+                    "ROLE_PERMISSIONS_CUSTOMISED", organizationId, detail, Instant.now()));
+        }
+        return change;
     }
 
     // SADM-US-010 — the full 20-module picture for one organization, not
@@ -541,7 +584,8 @@ public class OrganizationProvisioningService {
     private void seedDefaultModuleEntitlements(UUID organizationId, OrganizationSector sector) {
         Set<ModuleCode> defaults = SECTOR_DEFAULT_MODULES.get(sector);
         for (ModuleCode code : ModuleCode.values()) {
-            if (code.isFoundation()) continue;
+            if (code.isFoundation())
+                continue;
             moduleEntitlementRepository.save(
                     new ModuleEntitlement(organizationId, code, defaults.contains(code)));
         }
@@ -600,8 +644,8 @@ public class OrganizationProvisioningService {
     // creation is still all-or-nothing (StaffService.createOrgAdmin()
     // runs inside its own @Transactional).
     private List<ProvisionedAdmin> createAdmins(List<AdminInput> adminInputs, String schemaName,
-                                                 String organizationDisplayName, String organizationSlug,
-                                                 String auditAction, UUID auditEntityId) {
+            String organizationDisplayName, String organizationSlug,
+            String auditAction, UUID auditEntityId) {
         List<ProvisionedAdmin> created = new ArrayList<>(adminInputs.size());
         for (AdminInput input : adminInputs) {
             String temporaryPassword = generateTemporaryPassword();
@@ -624,8 +668,8 @@ public class OrganizationProvisioningService {
     // users. Writing it here, before TenantContext.clear() runs, is what
     // keeps the entry inside the tenant it's supposed to belong to.
     private User createAdminUser(AdminInput details, String schemaName, String temporaryPassword,
-                                  String organizationDisplayName, String organizationSlug, String auditAction,
-                                  UUID auditEntityId) {
+            String organizationDisplayName, String organizationSlug, String auditAction,
+            UUID auditEntityId) {
         TenantContext.setCurrentTenant(schemaName);
         try {
             User admin = staffService.createOrgAdmin(details.firstName(), details.lastName(),
@@ -675,14 +719,14 @@ public class OrganizationProvisioningService {
     // constraint, predates this story), so it's collected the same way
     // FacilityController's own tenant-side create form already does.
     public record AddClinicCommand(String name, String code, FacilityType type, String address, String phone,
-                                    String operatingHours) {
+            String operatingHours) {
     }
 
     // What createAdminUser() needs for one admin, independent of whether
     // it's one of an organization's first batch (provisionOrganization) or
     // added to one that already exists (addAdmins).
     public record AdminInput(String firstName, String lastName, String employeeNumber, String email,
-                              String contactNumber, Gender gender) {
+            String contactNumber, Gender gender) {
     }
 
     // temporaryPassword is returned exactly once, in this response — never
@@ -706,6 +750,6 @@ public class OrganizationProvisioningService {
     }
 
     public record TenantAuditPage(List<TenantAuditEntryView> items, int page, int size, long totalItems,
-                                   boolean hasMore) {
+            boolean hasMore) {
     }
 }
