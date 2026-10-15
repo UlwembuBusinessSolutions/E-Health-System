@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { getPatient } from "@/shared/api/patients";
 import { Button } from "@/shared/components/Button";
-import { downloadPatientLabel, renderPatientLabel } from "./patientLabel";
+import { downloadPatientLabel, renderPatientLabel, type LabelPaper } from "./patientLabel";
 
 export function PatientLabelPrintPage() {
   const { patientId = "" } = useParams();
@@ -11,7 +11,7 @@ export function PatientLabelPrintPage() {
   const [label, setLabel] = useState<HTMLCanvasElement>();
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [paper, setPaper] = useState("a4");
+  const [paper, setPaper] = useState<LabelPaper>("a4");
   useEffect(() => {
     setLabel(undefined);
     setError("");
@@ -23,23 +23,23 @@ export function PatientLabelPrintPage() {
     if (!label || !patient.data) return;
     setSaving(true);
     setError("");
-    try { await downloadPatientLabel(label, patient.data.mpiNumber); }
+    try { await downloadPatientLabel(label, patient.data.mpiNumber, paper); }
     catch { setError("Could not download PDF. Please try again."); }
     finally { setSaving(false); }
   }
   return <main className="min-h-screen bg-white p-6 text-black print:p-0">
-    <style>{`@media print { @page { size: ${paper === "label" ? "100mm 65mm" : "A4"}; margin: ${paper === "label" ? "0" : "10mm"}; } body { margin: 0; } .patient-label { width: 100mm !important; height: 65mm !important; max-width: none !important; } }`}</style>
+    <style>{`@media print { @page { size: ${paper === "label" ? "100mm 65mm" : "A4"}; margin: ${paper === "label" ? "0" : "10mm"}; } html, body, #root { margin: 0; padding: 0; min-height: 0 !important; } main { min-height: 0 !important; padding: 0 !important; } .patient-label { width: 100mm !important; height: 65mm !important; max-width: none !important; display: block; break-inside: avoid; } }`}</style>
     <section className="mb-6 space-y-4 print:hidden">
       <Link to={`/app/patients/${patientId}`} className="underline">Back to patient</Link>
       <h1 className="text-xl font-semibold">Patient label</h1>
       <p>Confirm the identifiers before printing. Print at 100% / actual size with browser headers and footers disabled.</p>
       <p>No label printer? Download the A4 PDF and print it on a standard printer.</p>
-      <label className="block">Printer paper <select value={paper} onChange={e => setPaper(e.target.value)} className="ml-2 rounded border p-2">
+      <label className="block">Printer paper <select value={paper} onChange={e => setPaper(e.target.value as LabelPaper)} className="ml-2 rounded border p-2">
         <option value="a4">A4 / standard printer</option><option value="label">100 × 65 mm label</option>
       </select></label>
       <div className="flex gap-3">
         <Button disabled={!label} onClick={() => window.print()}>Print label</Button>
-        <Button variant="secondary" disabled={!label} loading={saving} onClick={download}>Download PDF (A4)</Button>
+        <Button variant="secondary" disabled={!label} loading={saving} onClick={download}>Download PDF ({paper === "a4" ? "A4" : "100 x 65 mm"})</Button>
       </div>
       {patient.isLoading && <p role="status">Loading patient…</p>}
       {patient.isError && <p role="alert">Could not load this patient. <button className="underline" onClick={() => patient.refetch()}>Retry</button></p>}

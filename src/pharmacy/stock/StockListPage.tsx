@@ -83,13 +83,23 @@ export function StockListPage() {
           onChange={(e) => setFacilityId(e.target.value)}
           className="sm:w-64"
         />
-        <Button
-          icon={<PackagePlus className="size-4" aria-hidden />}
-          disabled={!facilityId}
-          onClick={() => navigate(`/app/pharmacy/stock/receive?facilityId=${facilityId}`)}
-        >
-          Receive stock
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            icon={<PackagePlus className="size-4" aria-hidden />}
+            disabled={!facilityId}
+            onClick={() => navigate(`/app/pharmacy/stock/orders?facilityId=${facilityId}`)}
+          >
+            Raise stock order
+          </Button>
+          <Button
+            icon={<PackagePlus className="size-4" aria-hidden />}
+            disabled={!facilityId}
+            onClick={() => navigate(`/app/pharmacy/stock/receive?facilityId=${facilityId}`)}
+          >
+            Receive stock
+          </Button>
+        </div>
       </div>
 
       <Card className="overflow-hidden p-0">

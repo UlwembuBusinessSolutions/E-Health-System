@@ -135,6 +135,61 @@ export async function listStock(facilityId: string): Promise<StockRow[]> {
   return response.items;
 }
 
+export type StockOrderStatus = "DRAFT" | "AUTHORISED" | "SUBMITTED";
+
+export interface StockOrderLine {
+  productId: string;
+  productCode: string;
+  productName: string;
+  baseUnit: string;
+  quantity: number;
+}
+
+export interface StockOrder {
+  id: string;
+  facilityId: string;
+  status: StockOrderStatus;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  authorisedBy: string | null;
+  authorisedByName: string | null;
+  authorisedAt: string | null;
+  submittedAt: string | null;
+  lines: StockOrderLine[];
+}
+
+export interface CreateStockOrderPayload {
+  facilityId: string;
+  lines: Array<{ productId: string; quantity: number }>;
+}
+
+export async function createStockOrder(payload: CreateStockOrderPayload): Promise<StockOrder> {
+  return apiClient.post<StockOrder>("/api/v1/pharmacy/stock/orders", payload, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export async function listStockOrders(facilityId: string): Promise<StockOrder[]> {
+  const response = await apiClient.get<{ items: StockOrder[] }>(
+    `/api/v1/pharmacy/stock/orders?facilityId=${encodeURIComponent(facilityId)}`,
+    { headers: tenantAuthHeaders() },
+  );
+  return response.items;
+}
+
+export async function authoriseStockOrder(id: string): Promise<StockOrder> {
+  return apiClient.post<StockOrder>(`/api/v1/pharmacy/stock/orders/${id}/authorise`, undefined, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
+export async function submitStockOrder(id: string): Promise<StockOrder> {
+  return apiClient.post<StockOrder>(`/api/v1/pharmacy/stock/orders/${id}/submit`, undefined, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
 export interface BatchRow {
   batchId: string;
   lotNumber: string;

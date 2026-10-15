@@ -22,6 +22,7 @@ import { AddProductScreen } from "@/pharmacy/products/AddProductScreen";
 import { ProductDetailPage } from "@/pharmacy/products/ProductDetailPage";
 import { StockListPage } from "@/pharmacy/stock/StockListPage";
 import { ReceiveStockScreen } from "@/pharmacy/stock/ReceiveStockScreen";
+import { StockOrderScreen } from "@/pharmacy/stock/StockOrderScreen";
 import { LedgerPage } from "@/pharmacy/ledger/LedgerPage";
 import { OrganizationSettingsPage } from "@/settings/OrganizationSettingsPage";
 import { AuditTrailPage } from "@/audit/AuditTrailPage";
@@ -163,6 +164,7 @@ export function AppRouter() {
           <Route index element={<PharmacyQueuePage />} />
           <Route path="stock" element={<StockListPage />} />
           <Route path="stock/receive" element={<ReceiveStockScreen />} />
+          <Route path="stock/orders" element={<StockOrderScreen />} />
           <Route path="products" element={<ProductListPage />} />
           <Route path="products/new" element={<AddProductScreen />} />
           <Route path="products/:productId" element={<ProductDetailPage />} />

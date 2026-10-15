@@ -46,9 +46,17 @@ export function renderPatientLabel(patient: Patient): HTMLCanvasElement {
   return canvas;
 }
 
-export async function downloadPatientLabel(canvas: HTMLCanvasElement, mpi: string) {
+export type LabelPaper = "a4" | "label";
+
+export async function downloadPatientLabel(canvas: HTMLCanvasElement, mpi: string, paper: LabelPaper = "a4") {
   const { jsPDF } = await import("jspdf");
-  const pdf = new jsPDF({ unit: "mm", format: "a4" });
-  pdf.addImage(canvas.toDataURL("image/png"), "PNG", 10, 10, 100, 65);
+  const isLabel = paper === "label";
+  const pdf = new jsPDF({
+    unit: "mm",
+    format: isLabel ? [100, 65] : "a4",
+    orientation: isLabel ? "landscape" : "portrait",
+  });
+  const margin = isLabel ? 0 : 10;
+  pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, 100, 65);
   pdf.save(`patient-label-${mpi.replace(/[^a-zA-Z0-9-]/g, "_")}.pdf`);
 }
