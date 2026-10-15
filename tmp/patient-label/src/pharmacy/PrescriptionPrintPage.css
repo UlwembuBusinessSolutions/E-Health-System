@@ -1,0 +1,87 @@
+.rx-preview { min-height: 100svh; padding: 28px 24px 48px; background: #edf0f2; color: #202b35; color-scheme: light; }
+.rx-toolbar { max-width: 794px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.rx-toolbar-label { display: flex; align-items: center; gap: 12px; color: #546472; }
+.rx-toolbar-label strong { display: block; font-size: 14px; color: #263743; font-weight: 600; }
+.rx-toolbar-label span { display: block; font-size: 12px; margin-top: 2px; }
+.rx-print-button { display: inline-flex; justify-content: center; align-items: center; gap: 9px; border: 0; border-radius: 7px; background: #254d50; color: white; padding: 11px 17px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.rx-print-button:hover { background: #193b3e; }
+.rx-print-button:disabled { opacity: .5; cursor: wait; }
+.rx-print-button:focus-visible { outline: 3px solid #478b91; outline-offset: 3px; }
+.rx-paper { max-width: 794px; min-height: 1050px; margin: auto; padding: 48px 48px 28px; background: white; border: 1px solid #dce1e4; box-shadow: 0 6px 24px #2637430b; display: flex; flex-direction: column; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.rx-letterhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; border-bottom: 2px solid #254d50; padding-bottom: 26px; }
+.rx-practice { display: flex; gap: 14px; min-width: 0; }
+.rx-logo { width: 56px; height: 56px; object-fit: contain; flex-shrink: 0; }
+.rx-eyebrow, .rx-label { color: #596670; font-size: 10px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; }
+.rx-eyebrow { margin-bottom: 7px; color: #254d50; }
+.rx-practice h1 { font-size: 23px; line-height: 1.2; font-weight: 600; letter-spacing: -.6px; }
+.rx-facility { margin-top: 7px; font-size: 13px; font-weight: 500; }
+.rx-contact { margin-top: 5px; color: #596670; font-size: 11px; white-space: pre-line; }
+.rx-reference { text-align: right; flex: 0 0 168px; }
+.rx-reference > * { display: block; }
+.rx-reference strong { margin-top: 5px; font-family: var(--font-mono); font-size: 12px; font-weight: 500; }
+.rx-date-label { margin-top: 16px; margin-bottom: 4px; }
+.rx-reference time { font-size: 12px; }
+.rx-details { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; padding: 25px 0; border-bottom: 1px solid #dce1e4; }
+.rx-details > div + div { border-left: 1px solid #dce1e4; padding-left: 26px; }
+.rx-person { font-size: 17px; font-weight: 600; margin: 7px 0; line-height: 1.35; }
+.rx-detail-line { display: flex; flex-wrap: wrap; gap: 4px 9px; color: #596670; font-size: 11px; }
+.rx-mono { font-family: var(--font-mono); font-size: 10px; }
+.rx-medications { flex: 1; padding-top: 26px; padding-bottom: 40px; }
+.rx-section-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.rx-symbol { font-family: Georgia, serif; font-size: 47px; line-height: 1; color: #254d50; }
+.rx-section-heading h2 { font-size: 15px; font-weight: 600; }
+.rx-section-heading p { font-size: 11px; color: #596670; margin-top: 3px; }
+.rx-table { width: 100%; border-collapse: collapse; table-layout: fixed; text-align: left; }
+.rx-table th { border-top: 1px solid #dce1e4; border-bottom: 1px solid #dce1e4; padding: 10px 8px; background: #f5f7f7; color: #596670; font-size: 10px; font-weight: 600; letter-spacing: .7px; text-transform: uppercase; }
+.rx-table td { padding: 17px 8px; border-bottom: 1px solid #e4e8ea; vertical-align: top; }
+.rx-table .rx-number { width: 40px; padding-left: 0; color: #697780; font-size: 11px; }
+.rx-table .rx-quantity { width: 78px; text-align: right; padding-right: 0; font-variant-numeric: tabular-nums; }
+.rx-drug { font-size: 14px; font-weight: 600; }
+.rx-directions { margin-top: 5px; white-space: pre-wrap; }
+.rx-table .rx-directions { color: #4b5963; font-size: 12px; line-height: 1.6; }
+.rx-empty { padding: 20px 0; color: #596670; }
+.rx-signoff { display: grid; grid-template-columns: 1.3fr 1fr .7fr; align-items: end; gap: 26px; padding: 16px 0 28px; }
+.rx-signature { min-height: 61px; }
+.rx-signature-line { border-bottom: 1px solid #7f8b92; margin-bottom: 8px; }
+.rx-signature > p:last-child:not(.rx-label) { font-size: 11px; margin-top: 4px; color: #596670; }
+.rx-stamp { height: 92px; border: 1px dashed #aab4b9; display: flex; align-items: center; justify-content: center; color: #68767f; font-size: 10px; }
+.rx-dispensing { border-top: 1px solid #dce1e4; padding: 17px 0; }
+.rx-dispensing-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.rx-status { font-size: 10px; font-weight: 500; padding: 3px 8px; border: 1px solid #cbd3d7; border-radius: 3px; }
+.rx-status-dispensed { color: #235b42; border-color: #abc7b8; }
+.rx-status-out_of_stock { color: #865516; border-color: #d4be9e; }
+.rx-dispensing > p { font-size: 11px; color: #596670; margin-top: 7px; }
+.rx-footer { display: flex; justify-content: space-between; gap: 20px; border-top: 1px solid #dce1e4; padding-top: 14px; font-size: 9px; color: #68767f; }
+.rx-message { padding: 48px 24px; text-align: center; }
+.rx-message button { margin-top: 16px; }
+@media screen and (max-width: 600px) {
+  .rx-preview { padding: 16px 12px 24px; }
+  .rx-toolbar { align-items: flex-start; }
+  .rx-toolbar-label > svg { display: none; }
+  .rx-toolbar-label span { max-width: 130px; }
+  .rx-print-button { font-size: 12px; padding: 10px 12px; }
+  .rx-paper { padding: 28px 22px 22px; min-height: 900px; }
+  .rx-letterhead { flex-direction: column; gap: 22px; }
+  .rx-reference { flex-basis: auto; text-align: left; }
+  .rx-details { gap: 18px; }
+  .rx-details > div + div { padding-left: 18px; }
+  .rx-person { font-size: 15px; }
+  .rx-signoff { gap: 16px; grid-template-columns: 1fr 1fr; }
+  .rx-signature:last-child { grid-column: 1; margin-top: 20px; }
+}
+@page prescription { size: A4 portrait; margin: 15mm; }
+@media print {
+  html:has(.rx-preview), body:has(.rx-preview), #root:has(.rx-preview) { min-height: 0; height: auto; background: white; }
+  body:has(.rx-preview) { page: prescription; }
+  .rx-preview { padding: 0; min-height: 0; background: white; }
+  .rx-toolbar { display: none; }
+  .rx-paper { page: prescription; max-width: none; min-height: 260mm; padding: 0; border: 0; box-shadow: none; display: block; color: #111; }
+  .rx-medications { min-height: 115mm; }
+  .rx-letterhead, .rx-details, .rx-section-heading, .rx-table tr, .rx-signoff, .rx-dispensing, .rx-footer { break-inside: avoid; }
+  .rx-section-heading { break-after: avoid; }
+  .rx-table thead { display: table-header-group; }
+  .rx-table th { background: white; }
+  .rx-signoff { margin-top: 4mm; }
+  .rx-table td { padding-top: 12px; padding-bottom: 12px; }
+  .rx-footer { margin-top: 8px; }
+}

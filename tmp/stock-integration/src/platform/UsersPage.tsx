@@ -1,0 +1,210 @@
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { Check, Copy, KeyRound, Plus } from "lucide-react";
+import { listPlatformOperators, resetOperatorPassword, setOperatorEnabled } from "@/shared/api/platform";
+import { ApiError } from "@/shared/api/client";
+import { Card } from "@/shared/components/Card";
+import { Button } from "@/shared/components/Button";
+import { PageHeader } from "@/shared/components/PageHeader";
+import { StatusPill } from "@/shared/components/StatusPill";
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "Never";
+  return new Date(iso).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function initials(firstName: string, lastName: string): string {
+  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      className="flex size-6 shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors duration-150 hover:bg-surface-raised hover:text-text-primary"
+      aria-label="Copy password"
+      title="Copy"
+    >
+      {copied ? <Check className="size-3.5 text-success-500" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+    </button>
+  );
+}
+
+// "Users" here means platform operators specifically — the internal team
+// that can sign into /platform and provision client organizations. Staff
+// and org-admin accounts belong to a tenant and are managed from inside
+// that organization (OrganizationDetailPage's Admins panel), not here: this
+// roster is the one with no tenant_id at all, see PlatformOperator's own
+// why-note. Reset-password and enable/disable are the two levers that exist
+// for an operator's own account lifecycle today — no suspend-with-reason or
+// role tiers, since every operator has the exact same PLATFORM_OPERATOR
+// authority.
+export function UsersPage() {
+  const queryClient = useQueryClient();
+  const [confirmResetId, setConfirmResetId] = useState<string | null>(null);
+  const [revealedPassword, setRevealedPassword] = useState<{ id: string; password: string } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const operatorsQuery = useQuery({
+    queryKey: ["platform", "operators"],
+    queryFn: listPlatformOperators,
+  });
+
+  const operators = operatorsQuery.data ?? [];
+
+  const resetPassword = useMutation({
+    mutationFn: (id: string) => resetOperatorPassword(id),
+    onMutate: () => setActionError(null),
+    onSuccess: (result, id) => {
+      setConfirmResetId(null);
+      setRevealedPassword({ id, password: result.temporaryPassword });
+    },
+    onError: (error) => {
+      setConfirmResetId(null);
+      setActionError(error instanceof ApiError ? error.message : "Couldn't reset that password. Try again.");
+    },
+  });
+
+  const toggleEnabled = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => setOperatorEnabled(id, enabled),
+    onMutate: () => setActionError(null),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["platform", "operators"] }),
+    onError: (error) => {
+      setActionError(error instanceof ApiError ? error.message : "Couldn't update that account. Try again.");
+    },
+  });
+
+  return (
+    <div>
+      <PageHeader
+        title="Users"
+        description="Everyone who can sign into the platform console and provision client organizations."
+        action={
+          <Link
+            to="/platform/users/new"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 text-[14px] font-semibold text-white shadow-sm transition-colors duration-150 hover:bg-brand-600"
+          >
+            <Plus className="size-4" aria-hidden />
+            New operator
+          </Link>
+        }
+      />
+
+      <Card className="overflow-hidden p-0">
+        {actionError && (
+          <div role="alert" className="border-b border-danger-500/30 bg-danger-50 px-5 py-2.5 text-[13.5px] text-danger-600">
+            {actionError}
+          </div>
+        )}
+        {operatorsQuery.isLoading ? (
+          <p className="px-5 py-10 text-center text-[14px] text-text-secondary">Loading operators…</p>
+        ) : operators.length === 0 ? (
+          <p className="px-5 py-10 text-center text-[14px] text-text-secondary">No operators yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-border-subtle">
+                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
+                    Operator
+                  </th>
+                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
+                    Status
+                  </th>
+                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
+                    Last sign-in
+                  </th>
+                  <th className="px-5 py-3 text-[12px] font-medium uppercase tracking-wide text-text-secondary">
+                    Created
+                  </th>
+                  <th className="px-5 py-3 text-right text-[12px] font-medium uppercase tracking-wide text-text-secondary">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {operators.map((op) => (
+                  <tr key={op.id} className="transition-colors duration-150 hover:bg-surface-sunken">
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-brand-500/25 bg-brand-50 text-[12px] font-semibold text-brand-600">
+                          {initials(op.firstName, op.lastName)}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-[14px] font-semibold text-text-primary">
+                            {op.firstName} {op.lastName}
+                          </p>
+                          <p className="truncate text-[12.5px] text-text-secondary">{op.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <StatusPill tone={op.status === "ACTIVE" ? "success" : op.status === "LOCKED" ? "warning" : "neutral"}>
+                        {op.status === "ACTIVE" ? "Active" : op.status === "LOCKED" ? "Locked" : "Disabled"}
+                      </StatusPill>
+                    </td>
+                    <td className="px-5 py-3.5 font-mono text-[13px] text-text-secondary tabular-nums">
+                      {formatDateTime(op.lastLoginAt)}
+                    </td>
+                    <td className="px-5 py-3.5 font-mono text-[13px] text-text-secondary tabular-nums">
+                      {formatDateTime(op.createdAt)}
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      {revealedPassword?.id === op.id ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="rounded-md bg-surface-sunken px-2 py-1 font-mono text-[12.5px] text-text-primary">
+                            {revealedPassword.password}
+                          </span>
+                          <CopyButton text={revealedPassword.password} />
+                          <Button size="md" variant="secondary" onClick={() => setRevealedPassword(null)}>
+                            Done
+                          </Button>
+                        </div>
+                      ) : confirmResetId === op.id ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-[12.5px] text-text-secondary">Generate a new password?</span>
+                          <Button size="md" variant="secondary" onClick={() => setConfirmResetId(null)}>
+                            Cancel
+                          </Button>
+                          <Button size="md" loading={resetPassword.isPending} onClick={() => resetPassword.mutate(op.id)}>
+                            Confirm
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="secondary"
+                            size="md"
+                            icon={<KeyRound className="size-3.5" aria-hidden />}
+                            onClick={() => setConfirmResetId(op.id)}
+                          >
+                            Reset password
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="md"
+                            loading={toggleEnabled.isPending && toggleEnabled.variables?.id === op.id}
+                            onClick={() => toggleEnabled.mutate({ id: op.id, enabled: op.status === "DISABLED" })}
+                          >
+                            {op.status === "DISABLED" ? "Enable" : "Disable"}
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
