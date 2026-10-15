@@ -1,0 +1,14 @@
+To: t.sithole@democlinic.example
+From: no-reply@ulwembu.example
+Subject: Your staff account is ready — Demo Community Clinic
+
+Hi Thabo,
+
+A staff account has been created for you on Demo Community Clinic (employee number EMP-1005).
+
+Sign in at http://localhost:5173/login with:
+  Organization: demo-clinic
+  Email: t.sithole@democlinic.example
+  Temporary password: ChangeMe123!
+
+You'll be asked to choose a new password the first time you sign in — this temporary one stops working once you do.

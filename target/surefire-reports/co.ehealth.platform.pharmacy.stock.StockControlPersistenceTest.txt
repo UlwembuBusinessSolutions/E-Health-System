@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest
+-------------------------------------------------------------------------------
+Tests run: 11, Failures: 0, Errors: 0, Skipped: 11, Time elapsed: 0.005 s -- in co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest

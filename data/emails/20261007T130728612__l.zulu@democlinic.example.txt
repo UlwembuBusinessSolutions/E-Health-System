@@ -1,0 +1,13 @@
+To: l.zulu@democlinic.example
+From: no-reply@ulwembu.example
+Subject: Your password has been reset — Demo Community Clinic
+
+Hi Lindiwe,
+
+Your account password on Demo Community Clinic has been reset by an administrator.
+
+Sign in at http://localhost:5173/org/demo-clinic/login with:
+  Email: l.zulu@democlinic.example
+  Temporary password: VsaLKWtzC6iXjvT9
+
+You'll be asked to choose a new password the first time you sign in — this temporary one stops working once you do.

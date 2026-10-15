@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.005" tests="11" errors="0" skipped="11" failures="0">
+  <properties/>
+  <testcase name="concurrentCountsCannotOverwriteEachOther" classname="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.0">
+    <skipped message="Environment variable [STOCK_TEST_JDBC_URL] does not exist"/>
+  </testcase>
+  <testcase name="unlicensedOrNonPrescriberRolesCannotUseTheFallback" classname="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.0">
+    <skipped message="Environment variable [STOCK_TEST_JDBC_URL] does not exist"/>
+  </testcase>
+  <testcase name="countsAreAuditedIdempotentAndRejectStaleSnapshotsOrWrongClinic" classname="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.0">
+    <skipped message="Environment variable [STOCK_TEST_JDBC_URL] does not exist"/>
+  </testcase>
+  <testcase name="dutyLicencesAndReportDatesAreEnforced" classname="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.0">
+    <skipped message="Environment variable [STOCK_TEST_JDBC_URL] does not exist"/>
+  </testcase>
+  <testcase name="zeroBalancesAndReorderAlertsAreClinicScopedAndClearAfterReceipt" classname="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.0">
+    <skipped message="Environment variable [STOCK_TEST_JDBC_URL] does not exist"/>
+  </testcase>
+  <testcase name="dispensingSkipsExpiredLotsAndSplitsByEarliestExpiry" classname="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.0">
+    <skipped message="Environment variable [STOCK_TEST_JDBC_URL] does not exist"/>
+  </testcase>
+  <testcase name="dutyRegisterBlocksUnknownActiveExpiredAndWrongClinicAvailability" classname="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.0">
+    <skipped message="Environment variable [STOCK_TEST_JDBC_URL] does not exist"/>
+  </testcase>
+  <testcase name="bulkDispensingRollsBackStockStatusAndAuditWhenAnyItemCannotBeFilled" classname="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.0">
+    <skipped message="Environment variable [STOCK_TEST_JDBC_URL] does not exist"/>
+  </testcase>
+  <testcase name="prescriberDispensingStoresReportingFlagsAndAuditWithStockAtomically" classname="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.0">
+    <skipped message="Environment variable [STOCK_TEST_JDBC_URL] does not exist"/>
+  </testcase>
+  <testcase name="dutyChangesCannotRacePastPrescriberDispensing" classname="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.0">
+    <skipped message="Environment variable [STOCK_TEST_JDBC_URL] does not exist"/>
+  </testcase>
+  <testcase name="concurrentDispensePostsOnceAndCannotOversell" classname="co.ehealth.platform.pharmacy.stock.StockControlPersistenceTest" time="0.0">
+    <skipped message="Environment variable [STOCK_TEST_JDBC_URL] does not exist"/>
+  </testcase>
+</testsuite>

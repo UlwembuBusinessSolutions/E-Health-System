@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: co.ehealth.platform.triage.VitalsPersistenceTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 1, Time elapsed: 0 s -- in co.ehealth.platform.triage.VitalsPersistenceTest

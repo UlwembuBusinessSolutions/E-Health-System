@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: co.ehealth.platform.visit.QueueTokenTest
+-------------------------------------------------------------------------------
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in co.ehealth.platform.visit.QueueTokenTest

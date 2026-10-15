@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: co.ehealth.platform.pharmacy.stock.StockControlControllerTest
+-------------------------------------------------------------------------------
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.476 s -- in co.ehealth.platform.pharmacy.stock.StockControlControllerTest
