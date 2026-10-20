@@ -3,6 +3,7 @@ import clsx from "clsx";
 import {
   ClipboardCheck,
   FileUp,
+  LayoutDashboard,
   Package,
   PackagePlus,
   PackageOpen,
@@ -20,7 +21,7 @@ interface PharmacyTab {
   to: string;
   label: string;
   icon: LucideIcon;
-  /** Dispensing lives at the module root, so it must match exactly or it would stay active everywhere. */
+  /** Overview lives at the module root, so it must match exactly or it would stay active everywhere. */
   end?: boolean;
 }
 
@@ -28,7 +29,8 @@ interface PharmacyTab {
 // register, one-off opening stock) live under "More". Routes for pages that
 // aren't built yet are listed here on purpose: the integrator registers them.
 const TABS: PharmacyTab[] = [
-  { to: "/app/pharmacy", label: "Dispensing", icon: Pill, end: true },
+  { to: "/app/pharmacy", label: "Overview", icon: LayoutDashboard, end: true },
+  { to: "/app/pharmacy/dispensing", label: "Dispensing", icon: Pill },
   { to: "/app/pharmacy/stock", label: "Stock", icon: Package },
   { to: "/app/pharmacy/receive", label: "Receive", icon: PackagePlus },
   { to: "/app/pharmacy/reorder", label: "Reorder", icon: ShoppingCart },

@@ -34,6 +34,7 @@ import {
   ImportPage,
   OpeningStockPage,
   PharmacyLayout,
+  PharmacyOverviewPage,
   PrescriptionPrintPage,
   ReceiveStockPage,
   ReorderPage,
@@ -176,7 +177,8 @@ export function AppRouter() {
             </WithPageLoading>
           }
         >
-          <Route index element={<DispensingQueuePage />} />
+          <Route index element={<PharmacyOverviewPage />} />
+          <Route path="dispensing" element={<DispensingQueuePage />} />
           <Route path="stock" element={<StockPage />} />
           <Route path="products/new" element={<AddProductPage />} />
           <Route path="receive" element={<ReceiveStockPage />} />

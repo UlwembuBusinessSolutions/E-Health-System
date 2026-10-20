@@ -728,11 +728,13 @@ export function PatientDetailPage() {
   // relevant no matter which tab someone's looking at, not "content" that
   // should hide when the Vitals tab (a different, cross-visit view of the
   // same clinical data) is selected.
-  // ?tab=consultation opens straight onto the consultation, e.g. from the list of unsigned ones.
+  // ?tab=consultation opens straight onto the consultation, e.g. from the list of unsigned ones;
+  // ?tab=medication onto the prescriptions, e.g. from a pharmacy message on the Dashboard.
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(
-    searchParams.get("tab") === "consultation" ? "consultation" : "overview",
-  );
+  const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(() => {
+    const tab = searchParams.get("tab");
+    return tab === "consultation" || tab === "medication" ? tab : "overview";
+  });
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const [facilityId, setFacilityId] = useState("");
   const [visitType, setVisitType] = useState<VisitType | "">("");
@@ -899,7 +901,7 @@ export function PatientDetailPage() {
   // capture (form dismissed and reopened) gets a fresh key, while retrying
   // the same submission (the mutation firing again for the same click)
   // reuses it, which is the whole point of idempotencyKey server-side.
-  //const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => crypto.randomUUID());
+  //const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => generateUUID());
   const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => generateUUID());
 
   const vitalsHistoryQuery = useQuery({
@@ -930,7 +932,7 @@ export function PatientDetailPage() {
       showToast("Vitals saved.", "success");
       setIsCapturingVitals(false);
       setVitalsForm(EMPTY_VITALS_FORM);
-      //setVitalsIdempotencyKey(crypto.randomUUID());
+      //setVitalsIdempotencyKey(generateUUID());
       setVitalsIdempotencyKey(generateUUID());
       queryClient.invalidateQueries({ queryKey: ["triage-history", activeVisitId] });
       queryClient.invalidateQueries({ queryKey: ["patient-vitals-history"] });
@@ -1103,7 +1105,7 @@ export function PatientDetailPage() {
                   </div>
                 ) : isCapturingVitals ? (
                   <>
-
+  
                     <label className="mb-4 flex items-center gap-3 rounded-lg border border-danger-500/25 bg-danger-50 px-3.5 py-3">
                       <Switch
                         checked={vitalsForm.emergencySign}
