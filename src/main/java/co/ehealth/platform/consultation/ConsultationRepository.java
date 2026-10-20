@@ -12,6 +12,8 @@ import java.util.UUID;
 
 public interface ConsultationRepository extends JpaRepository<Consultation, UUID> {
 
+    List<Consultation> findByVisitIdIn(List<UUID> visitIds);
+
     // The full history for a visit, oldest first — ConsultationService.
     // getHistory() reads from this rather than a separate "current" query,
     // since DRAFT/SIGNED-vs-SUPERSEDED/ENTERED_IN_ERROR is a status filter

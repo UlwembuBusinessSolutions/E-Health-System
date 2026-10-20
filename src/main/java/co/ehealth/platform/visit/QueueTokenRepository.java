@@ -11,6 +11,8 @@ import java.util.UUID;
 
 public interface QueueTokenRepository extends JpaRepository<QueueToken, UUID> {
 
+    List<QueueToken> findByVisitIdIn(List<UUID> visitIds);
+
     // QueueService.nextTokenNumber()'s daily-reset-per-facility — counts
     // today's tokens for this facility so far, not a real sequence (this
     // entity's own why-note on that trade-off).
