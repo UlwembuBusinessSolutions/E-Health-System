@@ -1,3 +1,5 @@
+import { getPatientVisitTimings } from "@/shared/api/visitTiming";
+import { VisitTimingSummary } from "./VisitTimingPanel";
 import { useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRightLeft, Building2, CalendarDays, ChevronLeft, ChevronRight, Clock3, Search, History } from "lucide-react";
@@ -21,6 +23,8 @@ export function PatientVisitsTab({ patientId }: { patientId: string }) {
   const [order, setOrder] = useState("newest");
   const [page, setPage] = useState(1);
   const query = useQuery({ queryKey: ["patients", patientId, "visits"], queryFn: () => getPatientVisitHistory(patientId) });
+  const timing = useQuery({ queryKey: ["patient-visit-timings", patientId], queryFn: () => getPatientVisitTimings(patientId), refetchInterval: 10_000 });
+  const timingByVisit = new Map((timing.data ?? []).map(value => [value.visitId, value]));
   const visits = query.data ?? [];
   const filtered = visits.filter(visit => (!type || visit.visitType === type) &&
     `${visit.facilityName ?? "Unknown facility"} ${streams[visit.serviceStream] ?? visit.serviceStream} ${types[visit.visitType] ?? visit.visitType}`.toLowerCase().includes(search.trim().toLowerCase()),
@@ -71,6 +75,8 @@ export function PatientVisitsTab({ patientId }: { patientId: string }) {
                     </div>
                     <p className="mt-3 flex items-start gap-2 text-[15px] font-medium text-text-primary"><Building2 className="mt-0.5 size-4 shrink-0 text-text-secondary" aria-hidden /><span className="min-w-0 break-words">{visit.facilityName ?? "Unknown facility"}</span></p>
                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-text-secondary"><span>{streams[visit.serviceStream] ?? visit.serviceStream}</span><span className="inline-flex items-center gap-1.5"><Clock3 className="size-3.5" aria-hidden />{timeFormat.format(date)}</span></div>
+                    {timingByVisit.has(visit.id) && <VisitTimingSummary timing={timingByVisit.get(visit.id)!} receivedAt={timing.dataUpdatedAt} compact />}
+                    {timing.isError && <p role="alert" className="mt-3 text-[12px] text-danger-600">Visit timing is unavailable. <button className="underline" onClick={() => void timing.refetch()}>Retry</button></p>}
                     {visit.transferredFromVisitId && <p className="mt-3 flex items-center gap-2 border-t border-border-subtle pt-3 text-[12px] text-brand-600"><ArrowRightLeft className="size-3.5 shrink-0" aria-hidden />Transferred from {facilityNameByVisitId.get(visit.transferredFromVisitId) ?? "another facility"}</p>}
                   </article>
                 </li>;

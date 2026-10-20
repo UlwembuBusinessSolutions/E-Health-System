@@ -1,3 +1,4 @@
+import { VisitTimingPanel } from "./VisitTimingPanel";
 import { generateUUID } from "../utils/uuid";
 import { PatientVisitsTab } from "./PatientVisitsTab";
 import { createPortal } from "react-dom";
@@ -728,7 +729,7 @@ export function PatientDetailPage() {
   // should hide when the Vitals tab (a different, cross-visit view of the
   // same clinical data) is selected.
   // ?tab=consultation opens straight onto the consultation, e.g. from the list of unsigned ones.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(
     searchParams.get("tab") === "consultation" ? "consultation" : "overview",
   );
@@ -852,6 +853,13 @@ export function PatientDetailPage() {
       }),
     onSuccess: (result) => {
       setStartedVisit(result);
+      setSearchParams((previous) => {
+        const next = new URLSearchParams(previous);
+        next.set("visitId", result.visit.id);
+        return next;
+      }, { replace: true });
+      void queryClient.invalidateQueries({ queryKey: ["patients", patientId, "visits"] });
+      void queryClient.invalidateQueries({ queryKey: ["patient-visit-timings", patientId] });
       setIsStartingVisit(false);
     },
     onError: (error) => {
@@ -1716,6 +1724,8 @@ export function PatientDetailPage() {
               )}
             </Card>
           )}
+
+          {activeVisitId && <VisitTimingPanel key={activeVisitId} visitId={activeVisitId} />}
 
           <div role="tablist" aria-label="Patient record sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-border-subtle">
             {(["overview", "visits", "vitals", "consultation", "medication"] as const).map((tab) => (
