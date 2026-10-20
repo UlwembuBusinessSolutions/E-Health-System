@@ -888,6 +888,13 @@ export function PatientDetailPage() {
   const [isCapturingVitals, setIsCapturingVitals] = useState(false);
   const [vitalsForm, setVitalsForm] = useState<VitalsFormState>(EMPTY_VITALS_FORM);
   const [vitalsError, setVitalsError] = useState<string | null>(null);
+  const vitalsErrorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (vitalsError) {
+      vitalsErrorRef.current?.focus({ preventScroll: true });
+      vitalsErrorRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [vitalsError]);
   // One key per open of the form, not one per keystroke — a genuine new
   // capture (form dismissed and reopened) gets a fresh key, while retrying
   // the same submission (the mutation firing again for the same click)
@@ -915,7 +922,12 @@ export function PatientDetailPage() {
 
   const captureVitals = useMutation({
     mutationFn: (payload: CaptureTriagePayload) => captureTriage(activeVisitId as string, payload),
-    onSuccess: () => {
+    onSuccess: (assessment) => {
+      queryClient.setQueryData<TriageAssessment[]>(["triage-history", activeVisitId], (history = []) => [
+        ...history.filter((item) => item.id !== assessment.id), assessment,
+      ]);
+      setVitalsError(null);
+      showToast("Vitals saved.", "success");
       setIsCapturingVitals(false);
       setVitalsForm(EMPTY_VITALS_FORM);
       //setVitalsIdempotencyKey(crypto.randomUUID());
@@ -1091,12 +1103,7 @@ export function PatientDetailPage() {
                   </div>
                 ) : isCapturingVitals ? (
                   <>
-                    {vitalsError && (
-                      <p role="alert" className="mb-4 text-[13.5px] text-danger-600">
-                        {vitalsError}
-                      </p>
-                    )}
-  
+
                     <label className="mb-4 flex items-center gap-3 rounded-lg border border-danger-500/25 bg-danger-50 px-3.5 py-3">
                       <Switch
                         checked={vitalsForm.emergencySign}
@@ -1280,7 +1287,7 @@ export function PatientDetailPage() {
                       </div>
                     )}
   
-                    <AdditionalVitalsForm value={vitalsForm.additional} onChange={additional => setVitalsForm(f => ({ ...f, additional }))} />
+                    <AdditionalVitalsForm value={vitalsForm.additional} traumaRequired={!vitalsForm.emergencySign} onChange={additional => setVitalsForm(f => ({ ...f, additional }))} />
                     <label className="mt-4 flex flex-col gap-1.5">
                       <span className="text-[13px] font-medium text-text-primary">Presenting complaint</span>
                       <textarea
@@ -1307,11 +1314,24 @@ export function PatientDetailPage() {
                       </label>
                     )}
   
-                    <div className="mt-4 flex gap-2">
-                      <Button loading={captureVitals.isPending} onClick={handleCaptureVitals}>
-                        Save vitals
+                    {vitalsError && (
+                      <div
+                        ref={vitalsErrorRef}
+                        role="alert"
+                        tabIndex={-1}
+                        className="mt-4 scroll-mt-24 rounded-lg border border-danger-500/30 bg-danger-50 p-3 text-[13.5px] text-danger-600 outline-none focus-visible:ring-2 focus-visible:ring-danger-500"
+                      >
+                        <p className="font-semibold">Vitals were not saved.</p>
+                        <p>{vitalsError}</p>
+                      </div>
+                    )}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button type="button" loading={captureVitals.isPending} onClick={handleCaptureVitals}>
+                        {captureVitals.isPending ? "Saving vitals…" : "Save vitals"}
                       </Button>
                       <Button
+                        type="button"
+                        disabled={captureVitals.isPending}
                         variant="secondary"
                         onClick={() => {
                           setIsCapturingVitals(false);

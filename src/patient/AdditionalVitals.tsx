@@ -31,19 +31,21 @@ export function additionalPayload(state: AdditionalVitalsState): AdditionalObser
 }
 
 const inputClass = "h-11 w-full rounded-lg border border-border-strong bg-surface-raised px-3 text-sm text-text-primary outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
-export function AdditionalVitalsForm({ value, onChange }: { value: AdditionalVitalsState; onChange: (value: AdditionalVitalsState) => void }) {
+export function AdditionalVitalsForm({ value, onChange, traumaRequired = false }: { value: AdditionalVitalsState; onChange: (value: AdditionalVitalsState) => void; traumaRequired?: boolean }) {
   const prefix = useId();
   const update = (key: keyof AdditionalVitalsState, next: string) => onChange({ ...value, [key]: next });
   const bmi = Number(value.weightKg) > 0 && Number(value.heightCm) > 0 ? (Number(value.weightKg) / (Number(value.heightCm) / 100) ** 2).toFixed(1) : null;
-  return <section className="mt-5 space-y-5 rounded-xl border border-border-subtle bg-surface-sunken/30 p-4">
+  return <>
+    <div className="mt-5 flex max-w-sm flex-col gap-1.5 text-sm text-text-primary">
+      <label htmlFor={`${prefix}-trauma`} className="flex items-center gap-2"><Bandage className="size-4" aria-hidden /> Injury within the past 48 hours{traumaRequired && <span aria-hidden="true" className="text-danger-500"> *</span>}</label>
+      <select id={`${prefix}-trauma`} className={inputClass} required={traumaRequired} aria-describedby={`${prefix}-trauma-hint`} value={value.traumaPresent} onChange={e => update("traumaPresent", e.target.value)}>
+        <option value="">{traumaRequired ? "Select injury assessment…" : "Not assessed"}</option><option value="no">No trauma</option><option value="yes">Trauma present</option>
+      </select>
+      <p id={`${prefix}-trauma-hint`} className="text-xs text-text-secondary">{traumaRequired ? "Required before saving routine vitals. Other measurements below are optional." : "Record if assessed."}</p>
+    </div>
+  <section className="mt-5 space-y-5 rounded-xl border border-border-subtle bg-surface-sunken/30 p-4">
     <div><h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary"><FlaskConical className="size-4 text-text-accent" aria-hidden /> Additional measurements</h3>
       <p className="mt-1 text-xs text-text-secondary">Record when assessed. Leave unmeasured values blank.</p></div>
-    <div className="flex max-w-sm flex-col gap-1.5 text-sm text-text-primary">
-      <label htmlFor={`${prefix}-trauma`} className="flex items-center gap-2"><Bandage className="size-4" aria-hidden /> Injury within the past 48 hours</label>
-      <select id={`${prefix}-trauma`} className={inputClass} value={value.traumaPresent} onChange={e => update("traumaPresent", e.target.value)}>
-        <option value="">Not assessed</option><option value="no">No trauma</option><option value="yes">Trauma present</option>
-      </select>
-    </div>
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {MEASUREMENTS.map(({ key, label, unit, icon: Icon }) => <label key={key} className="flex flex-col gap-1.5 text-sm text-text-primary">
         <span className="flex items-center gap-1.5"><Icon className="size-4 text-text-accent" aria-hidden />{label} <span className="text-xs text-text-secondary">({unit})</span></span>
@@ -61,7 +63,8 @@ export function AdditionalVitalsForm({ value, onChange }: { value: AdditionalVit
         </div>)}
       </div>
     </details>
-  </section>;
+  </section>
+  </>;
 }
 
 function Tile({ icon: Icon, label, value, unit }: { icon: LucideIcon; label: string; value: string; unit?: string }) {
