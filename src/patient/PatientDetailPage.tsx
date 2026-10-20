@@ -1661,7 +1661,10 @@ export function PatientDetailPage() {
                       variant="secondary"
                       size="md"
                       icon={<HeartPulse className="size-3.5" aria-hidden />}
-                      onClick={() => setIsCapturingVitals(true)}
+                      onClick={() => {
+                        setActiveTab("vitals");
+                        setIsCapturingVitals(true);
+                      }}
                     >
                       Take vitals
                     </Button>}
