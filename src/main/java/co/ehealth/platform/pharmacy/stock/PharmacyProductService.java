@@ -1,0 +1,156 @@
+package co.ehealth.platform.pharmacy.stock;
+
+import co.ehealth.platform.pharmacy.supplier.PharmacySupplierRepository;
+import co.ehealth.platform.pharmacy.supplier.SupplierNotFoundException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+@Service
+public class PharmacyProductService {
+
+    public static final int MAX_PAGE_SIZE = 100;
+
+    private final PharmacyProductRepository productRepository;
+    private final PharmacyFacilityProductRepository facilityProductRepository;
+    private final PharmacyStockAccountRepository stockAccountRepository;
+    private final PharmacySupplierRepository supplierRepository;
+    private final Clock clock;
+    private final ReorderAlertService reorderAlerts;
+
+    public PharmacyProductService(PharmacyProductRepository productRepository,
+                                   PharmacyFacilityProductRepository facilityProductRepository,
+                                   PharmacyStockAccountRepository stockAccountRepository,
+                                   PharmacySupplierRepository supplierRepository, Clock clock, ReorderAlertService reorderAlerts) {
+        this.productRepository = productRepository;
+        this.facilityProductRepository = facilityProductRepository;
+        this.stockAccountRepository = stockAccountRepository;
+        this.supplierRepository = supplierRepository;
+        this.clock = clock;
+        this.reorderAlerts = reorderAlerts;
+    }
+
+    public Page<PharmacyProduct> search(String search, boolean activeOnly, int page, int size) {
+        int boundedSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        Pageable pageable = PageRequest.of(Math.max(page, 0), boundedSize, Sort.by(Sort.Direction.ASC, "displayName"));
+        return productRepository.search(search == null ? "" : search.trim(), activeOnly, pageable);
+    }
+
+    public PharmacyProduct get(UUID productId) {
+        return productRepository.findById(productId).orElseThrow(PharmacyProductNotFoundException::new);
+    }
+
+    // Product creation never moves quantity (rule 1) — a fresh product
+    // always starts with zero stock accounts. facilityId is required so
+    // the very first assortment entry exists immediately (plan section 4's
+    // add workflow step 5) rather than leaving a product uncatalogued
+    // anywhere until a second, separate call.
+    @Transactional
+    public PharmacyProduct create(String code, String displayName, String genericName, String strength,
+                                   String dosageForm, StockCategory category, StockBaseUnit baseUnit,
+                                   Integer packSize, String barcode, String manufacturer, boolean batchTracked,
+                                   boolean expiryTracked, String storageInstructions, ProductHandling handling,
+                                   UUID facilityId, Integer reorderThreshold, Integer targetQuantity,
+                                   UUID actorUserId, String actorName) {
+        requireValidTracking(batchTracked, handling);
+        if (productRepository.findByCodeNormalized(code).isPresent()) {
+            throw new DuplicateProductCodeException(code);
+        }
+        Instant now = clock.instant();
+        PharmacyProduct product = productRepository.save(new PharmacyProduct(code, displayName, genericName,
+                strength, dosageForm, category, baseUnit, packSize, barcode, manufacturer, batchTracked,
+                expiryTracked, storageInstructions, handling, actorUserId, actorName, now));
+        facilityProductRepository.save(new PharmacyFacilityProduct(product.getId(), facilityId, reorderThreshold,
+                targetQuantity, now));
+        reorderAlerts.refresh(facilityId, List.of(product.getId()));
+        return product;
+    }
+
+    // Metadata only — baseUnit/batchTracked/expiryTracked are frozen after
+    // creation (PharmacyProduct.updateDetails()'s own why-note); a material
+    // change to any of those needs a new product, not an edit here.
+    @Transactional
+    public PharmacyProduct updateDetails(UUID productId, String displayName, String genericName, String strength,
+                                          String dosageForm, Integer packSize, String barcode, String manufacturer,
+                                          String storageInstructions, DrugSchedule schedule, boolean coldChain,
+                                          UUID preferredSupplierId, AssortmentLevels levels, UUID actorUserId,
+                                          String actorName) {
+        PharmacyProduct product = get(productId);
+        requireSupplierExists(preferredSupplierId);
+        product.updateDetails(displayName, genericName, strength, dosageForm, packSize, barcode, manufacturer,
+                storageInstructions, actorUserId, actorName, clock.instant());
+        product.updateHandling(schedule, coldChain, preferredSupplierId);
+        if (levels.isPresent()) {
+            updateAssortmentLevels(productId, levels);
+        }
+        return productRepository.save(product);
+    }
+
+    // The levels belong to the facility's assortment row, which a product
+    // edited from a facility that never stocked it gets created on the spot.
+    private void updateAssortmentLevels(UUID productId, AssortmentLevels levels) {
+        PharmacyFacilityProduct assortment = getOrCreateAssortment(productId, levels.facilityId(),
+                levels.reorderThreshold(), levels.targetQuantity());
+        assortment.updateLevels(levels.reorderThreshold(), levels.targetQuantity());
+        facilityProductRepository.save(assortment);
+        reorderAlerts.refresh(levels.facilityId(), List.of(productId));
+    }
+
+    // A serial-tracked unit is its own identity while a lot is a group of
+    // interchangeable units, so a product cannot be both.
+    private void requireValidTracking(boolean batchTracked, ProductHandling handling) {
+        if (handling.serialTracked() && batchTracked) {
+            throw new PharmacyValidationException(
+                    "A product can be tracked by serial number or by lot, not both. Choose one.");
+        }
+        requireSupplierExists(handling.preferredSupplierId());
+    }
+
+    private void requireSupplierExists(UUID supplierId) {
+        if (supplierId != null && !supplierRepository.existsById(supplierId)) {
+            throw new SupplierNotFoundException();
+        }
+    }
+
+    // plan section 4: "Before archiving require no physical balance in any
+    // bucket..." — Phase 1 has no in-transit/mapped-obligation concepts
+    // yet, so this checks physical balance only (ProductHasStockException's
+    // own why-note).
+    @Transactional
+    public PharmacyProduct archive(UUID productId, UUID actorUserId, String actorName) {
+        PharmacyProduct product = get(productId);
+        List<PharmacyStockAccount> accounts = stockAccountRepository.findByProductId(productId);
+        boolean hasStock = accounts.stream().anyMatch(a -> a.getQuantity() > 0);
+        if (hasStock) {
+            throw new ProductHasStockException();
+        }
+        product.archive(actorUserId, actorName, clock.instant());
+        return productRepository.save(product);
+    }
+
+    @Transactional
+    public PharmacyProduct reactivate(UUID productId, UUID actorUserId, String actorName) {
+        PharmacyProduct product = get(productId);
+        product.reactivate(actorUserId, actorName, clock.instant());
+        return productRepository.save(product);
+    }
+
+    public PharmacyFacilityProduct getOrCreateAssortment(UUID productId, UUID facilityId, Integer reorderThreshold,
+                                                          Integer targetQuantity) {
+        return facilityProductRepository.findByProductIdAndFacilityId(productId, facilityId)
+                .orElseGet(() -> facilityProductRepository.save(new PharmacyFacilityProduct(productId, facilityId,
+                        reorderThreshold, targetQuantity, clock.instant())));
+    }
+
+    public List<PharmacyFacilityProduct> listAssortment(UUID facilityId) {
+        return facilityProductRepository.findByFacilityIdAndActiveTrue(facilityId);
+    }
+}
