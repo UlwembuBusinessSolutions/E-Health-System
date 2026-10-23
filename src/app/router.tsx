@@ -1,0 +1,239 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import { FindOrganizationScreen } from "@/auth/FindOrganizationScreen";
+import { LoginScreen } from "@/auth/LoginScreen";
+import { ForgotPasswordScreen } from "@/auth/ForgotPasswordScreen";
+import { SsoCallbackPage } from "@/auth/SsoCallbackPage";
+import { RequireAuth } from "@/auth/RequireAuth";
+import { RequireRole } from "@/auth/RequireRole";
+import { VITALS_ROLES } from "@/auth/roles";
+import { AddStaffScreen } from "@/staff/AddStaffScreen";
+import { EditStaffScreen } from "@/staff/EditStaffScreen";
+import { StaffListPage } from "@/staff/StaffListPage";
+import { PatientSearchPage } from "@/patient/PatientSearchPage";
+import { RegisterPatientScreen } from "@/patient/RegisterPatientScreen";
+import { PatientDetailPage } from "@/patient/PatientDetailPage";
+import { QueuePage } from "@/queue/QueuePage";
+import { VitalsIntakePage } from "@/queue/VitalsIntakePage";
+import { TicketPrintPage } from "@/queue/TicketPrintPage";
+import { VitalsPrintPage } from "@/patient/VitalsPrintPage";
+import { OrganizationSettingsPage } from "@/settings/OrganizationSettingsPage";
+import { AuditTrailPage } from "@/audit/AuditTrailPage";
+import { AppointmentsPage } from "@/appointments/AppointmentsPage";
+import { PatientLoginScreen } from "@/patient-portal/PatientLoginScreen";
+import { PatientForgotPasswordScreen } from "@/patient-portal/PatientForgotPasswordScreen";
+import { PatientRegisterScreen } from "@/patient-portal/PatientRegisterScreen";
+import { PatientPortalPage } from "@/patient-portal/PatientPortalPage";
+import { PatientBookingPage } from "@/patient-portal/PatientBookingPage";
+import { RequirePatientPortalAuth } from "@/patient-portal/RequirePatientPortalAuth";
+import { TenantHomePage } from "@/tenant-site/TenantHomePage";
+import { AppShell } from "./AppShell";
+import {
+  AddProductPage,
+  DispensingQueuePage,
+  CcmddPage,
+  LedgerPage,
+  ImportPage,
+  OpeningStockPage,
+  PharmacyLayout,
+  PharmacyOverviewPage,
+  PrescriptionPrintPage,
+  ReceiveStockPage,
+  ReorderPage,
+  ScheduleRegisterPage,
+  StockCountPage,
+  StockPage,
+  SuppliersPage,
+  WithPageLoading,
+} from "./pharmacyPages";
+import { DashboardPage } from "./DashboardPage";
+import { PlatformRoot } from "@/platform/PlatformRoot";
+import { PlatformLoginScreen } from "@/platform/PlatformLoginScreen";
+import { RequirePlatformAuth } from "@/platform/RequirePlatformAuth";
+import { PlatformShell } from "@/platform/components/PlatformShell";
+import { OverviewPage } from "@/platform/OverviewPage";
+import { OrganizationsPage } from "@/platform/OrganizationsPage";
+import { OrganizationDetailPage } from "@/platform/OrganizationDetailPage";
+import { OrganizationRolePermissionsPage } from "@/platform/OrganizationRolePermissionsPage";
+import { ProvisionOrganizationScreen } from "@/platform/ProvisionOrganizationScreen";
+import { AddOrganizationAdminScreen } from "@/platform/AddOrganizationAdminScreen";
+import { AddClinicScreen } from "@/platform/AddClinicScreen";
+import { UsersPage } from "@/platform/UsersPage";
+import { CreateOperatorScreen } from "@/platform/CreateOperatorScreen";
+import { AuditPage } from "@/platform/AuditPage";
+import { ModuleEntitlementMatrixPage } from "@/platform/ModuleEntitlementMatrixPage";
+import { SyncCenterPage } from "@/offline/SyncCenterPage"; // OFFLINE
+
+export function AppRouter() {
+  return (
+    <Routes>
+      {/* No tenant slug here — this is the gate a bare/bookmarked /login
+          lands on, which exists only to redirect into /org/:tenantSlug/login
+          once someone types their organisation. Real sign-in never happens
+          on this route. */}
+      <Route path="/login" element={<FindOrganizationScreen />} />
+      {/* The tenant's public front door — logo/description/contact info
+          from PublicOrganizationController, no session required. */}
+      <Route path="/org/:tenantSlug" element={<TenantHomePage />} />
+      <Route path="/org/:tenantSlug/login" element={<LoginScreen />} />
+      {/* Where a completed Microsoft sign-in lands. */}
+      <Route path="/org/:tenantSlug/sso/callback" element={<SsoCallbackPage />} />
+      <Route path="/org/:tenantSlug/forgot-password" element={<ForgotPasswordScreen />} />
+      {/* The patient portal's own identity space. */}
+      <Route path="/org/:tenantSlug/patient/login" element={<PatientLoginScreen />} />
+      <Route path="/org/:tenantSlug/patient/forgot-password" element={<PatientForgotPasswordScreen />} />
+      <Route path="/org/:tenantSlug/patient/register" element={<PatientRegisterScreen />} />
+      <Route path="/org/:tenantSlug/patient/book" element={<RequirePatientPortalAuth><PatientBookingPage /></RequirePatientPortalAuth>} />
+      <Route
+        path="/org/:tenantSlug/patient/portal"
+        element={
+          <RequirePatientPortalAuth>
+            <PatientPortalPage />
+          </RequirePatientPortalAuth>
+        }
+      />
+      {/* Deliberately outside AppShell — print targets. */}
+      <Route
+        path="/print/ticket/:tokenId"
+        element={
+          <RequireAuth>
+            <TicketPrintPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/print/vitals/:assessmentId"
+        element={
+          <RequireAuth>
+            <VitalsPrintPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/print/prescription/:prescriptionId"
+        element={
+          <RequireAuth>
+            <WithPageLoading>
+              <PrescriptionPrintPage />
+            </WithPageLoading>
+          </RequireAuth>
+        }
+      />
+      {/* The tenant app shell. */}
+      <Route
+        path="/app"
+        element={
+          <RequireAuth>
+            <AppShell />
+          </RequireAuth>
+        }
+      >
+        <Route index element={<DashboardPage />} />
+        <Route
+          path="staff"
+          element={
+            <RequireRole role="ORG_ADMIN">
+              <StaffListPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="staff/new"
+          element={
+            <RequireRole role="ORG_ADMIN">
+              <AddStaffScreen />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="staff/:staffId/edit"
+          element={
+            <RequireRole role="ORG_ADMIN">
+              <EditStaffScreen />
+            </RequireRole>
+          }
+        />
+        {/* No RequireRole — registering and finding a patient is front-line
+            reception/clinical work, not admin territory. */}
+        <Route path="patients" element={<PatientSearchPage />} />
+        <Route path="patients/new" element={<RegisterPatientScreen />} />
+        <Route path="patients/:id" element={<PatientDetailPage />} />
+        <Route path="queue" element={<QueuePage />} />
+        {/* OFFLINE: pending records on this device + conflicts needing a decision.
+            No RequireRole — resolving a conflict is admin-only on the server. */}
+        <Route path="sync" element={<SyncCenterPage />} />
+        <Route path="appointments" element={<AppointmentsPage />} />
+        <Route
+          path="vitals"
+          element={
+            <RequireRole roles={[...VITALS_ROLES]}>
+              <VitalsIntakePage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="pharmacy"
+          element={
+            <WithPageLoading>
+              <PharmacyLayout />
+            </WithPageLoading>
+          }
+        >
+          <Route index element={<PharmacyOverviewPage />} />
+          <Route path="dispensing" element={<DispensingQueuePage />} />
+          <Route path="ccmdd" element={<CcmddPage />} />
+          <Route path="stock" element={<StockPage />} />
+          <Route path="products/new" element={<AddProductPage />} />
+          <Route path="receive" element={<ReceiveStockPage />} />
+          <Route path="suppliers" element={<SuppliersPage />} />
+          <Route path="reorder" element={<ReorderPage />} />
+          <Route path="ledger" element={<LedgerPage />} />
+          <Route path="counts" element={<StockCountPage />} />
+          <Route path="register" element={<ScheduleRegisterPage />} />
+          <Route path="import" element={<ImportPage />} />
+          <Route path="opening-stock" element={<OpeningStockPage />} />
+        </Route>
+        <Route
+          path="settings"
+          element={
+            <RequireRole role="ORG_ADMIN">
+              <OrganizationSettingsPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="audit"
+          element={
+            <RequireRole role="ORG_ADMIN">
+              <AuditTrailPage />
+            </RequireRole>
+          }
+        />
+      </Route>
+      {/* Platform console — a completely separate identity space. */}
+      <Route path="/platform" element={<PlatformRoot />}>
+        <Route path="login" element={<PlatformLoginScreen />} />
+        <Route
+          element={
+            <RequirePlatformAuth>
+              <PlatformShell />
+            </RequirePlatformAuth>
+          }
+        >
+          <Route index element={<OverviewPage />} />
+          <Route path="organizations" element={<OrganizationsPage />} />
+          <Route path="organizations/new" element={<ProvisionOrganizationScreen />} />
+          <Route path="organizations/:id" element={<OrganizationDetailPage />} />
+          <Route path="organizations/:id/roles" element={<OrganizationRolePermissionsPage />} />
+          <Route path="organizations/:id/admins/new" element={<AddOrganizationAdminScreen />} />
+          <Route path="organizations/:id/facilities/new" element={<AddClinicScreen />} />
+          <Route path="users" element={<UsersPage />} />
+          <Route path="users/new" element={<CreateOperatorScreen />} />
+          <Route path="audit" element={<AuditPage />} />
+          <Route path="modules" element={<ModuleEntitlementMatrixPage />} />
+        </Route>
+      </Route>
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
+  );
+}

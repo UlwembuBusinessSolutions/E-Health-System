@@ -1,0 +1,45 @@
+﻿import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const browser=await chromium.launch({headless:true,channel:'chrome'});
+const page=await browser.newPage({viewport:{width:1440,height:1000}});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+let success=false, submitted;
+await page.route('**/api/v1/patient/auth/login',async route=>{
+ submitted=route.request().postDataJSON();
+ assert.equal(route.request().headers()['x-tenant-id'],'demo-clinic');
+ await route.fulfill(success ? {json:{accessToken:'test-token',expiresAt:'2099-01-01T00:00:00Z',account:{id:'test',firstName:'Sample',lastName:'Patient',email:'sample@example.invalid',linked:false}}} : {status:401,json:{message:'Email or password is incorrect.'}});
+});
+try{
+ await page.goto('http://localhost:5173/org/demo-clinic/patient/login');
+ await page.getByRole('heading',{name:'Welcome back.'}).waitFor();
+ await page.getByRole('link',{name:/Back to Demo/}).waitFor();
+ await page.getByRole('button',{name:'Sign in to your portal'}).click();
+ await page.getByText('Email is required',{exact:true}).waitFor();
+ await page.getByText('Password is required',{exact:true}).waitFor();
+ assert.equal(submitted,undefined);
+ await page.getByLabel('Email address',{exact:true}).fill('sample@example.invalid');
+ await page.getByLabel('Password',{exact:true}).fill('SampleOnly!123');
+ await page.getByRole('button',{name:'Show password',exact:true}).focus();
+ await page.keyboard.press('Enter');
+ assert.equal(await page.getByLabel('Password',{exact:true}).getAttribute('type'),'text');
+ await page.getByRole('button',{name:'Hide password',exact:true}).click();
+ await page.getByRole('button',{name:'Sign in to your portal'}).click();
+ await page.getByRole('alert').filter({hasText:'Email or password is incorrect.'}).waitFor();
+ assert.equal(await page.getByLabel('Password',{exact:true}).inputValue(),'SampleOnly!123');
+ await page.reload();
+ await page.getByRole('heading',{name:'Welcome back.'}).waitFor();
+ await page.getByLabel('Email address',{exact:true}).focus();
+ await mkdir('test-results',{recursive:true});
+ await page.screenshot({path:'test-results/patient-login-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await page.screenshot({path:'test-results/patient-login-mobile.png',fullPage:true});
+ success=true;
+ await page.getByLabel('Email address',{exact:true}).fill('sample@example.invalid');
+ await page.getByLabel('Password',{exact:true}).fill('SampleOnly!123');
+ await page.getByRole('button',{name:'Sign in to your portal'}).click();
+ await page.waitForURL('**/patient/portal');
+ assert.deepEqual(errors,[]);
+ console.log('PASS: input validation, keyboard password toggle, authentication errors, tenant header, successful redirect and mobile layout. Authentication mocked.');
+}finally{await browser.close();}

@@ -1,0 +1,102 @@
+// API paths overlap with client-side routes under /platform, so development
+// requests go directly to the backend instead of through a Vite path proxy.
+// Production stays same-origin by default for deployments behind a reverse
+// proxy that fronts both apps; set VITE_API_BASE_URL when the API has a
+// separate origin.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "http://localhost:8081" : "");
+
+// Exposed for the one caller that needs the backend's origin as a real,
+// absolute URL rather than a fetch path — the Microsoft SSO "start" link
+// (LoginScreen.tsx) is a plain <a href>, a full-page browser navigation
+// that has to resolve on its own, unlike every apiClient.* call below
+// which fetch() resolves against API_BASE_URL automatically.
+export function apiOrigin(): string {
+  return API_BASE_URL;
+}
+
+// Some conflicts carry a machine-readable `code` (and, for duplicates, the record
+// that already exists) so a screen can offer a precise next step instead of a
+// generic error banner - e.g. "Use MedSupply Wholesalers instead".
+export interface ApiErrorExtras {
+  code?: string;
+  existing?: { id: string; name: string };
+  similar?: boolean;
+}
+
+export class ApiError extends Error {
+  status: number;
+  fieldErrors?: Record<string, string>;
+  code?: string;
+  existing?: { id: string; name: string };
+  similar?: boolean;
+
+  constructor(message: string, status: number, fieldErrors?: Record<string, string>, extras?: ApiErrorExtras) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.fieldErrors = fieldErrors;
+    this.code = extras?.code;
+    this.existing = extras?.existing;
+    this.similar = extras?.similar;
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // FormData bodies (multipart uploads) must NOT get a manual Content-Type
+  // — the browser sets one itself, including the multipart boundary, only
+  // if left alone. Forcing application/json here would silently corrupt
+  // every upload.
+  const isFormData = init?.body instanceof FormData;
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      ...init?.headers,
+    },
+  });
+
+  if (!res.ok) {
+    const headers = new Headers(init?.headers);
+    if ((res.status === 401 || res.status === 419) && headers.has("Authorization") && headers.has("X-Tenant-ID")
+      && !path.startsWith("/api/v1/auth/unlock")) {
+      window.dispatchEvent(new CustomEvent("ulwembu:session-ended", { detail: { status: res.status } }));
+    }
+    const body = await res.json().catch(() => null);
+    throw new ApiError(body?.message ?? res.statusText, res.status, body?.fieldErrors, {
+      code: body?.code,
+      existing: body?.existing,
+      similar: body?.similar,
+    });
+  }
+
+  // Not just `res.status === 204` — a 200 with an empty body (the password-
+  // reset endpoints' own bug, caught by real browser testing: curl never
+  // parses the body, so it never noticed) hits the exact same "nothing here
+  // to parse" case. res.json() on empty text throws a SyntaxError that
+  // request() doesn't catch, silently turning a successful call into a
+  // rejected promise. Every void endpoint SHOULD return 204 (and does,
+  // elsewhere in this codebase) — this is the fallback for the one that
+  // didn't, not a reason to stop bothering with 204.
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
+}
+
+// Typed client every module's api/ folder calls through.
+// Optional `init` on each method — platform.ts needs it to attach
+// X-Platform-Key, tenant modules will need it for Authorization/X-Tenant-ID
+// the same way once they're wired up too.
+export const apiClient = {
+  get: <T>(path: string, init?: RequestInit) => request<T>(path, init),
+  post: <T>(path: string, body?: unknown, init?: RequestInit) =>
+    request<T>(path, {
+      ...init,
+      method: "POST",
+      body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
+    }),
+  put: <T>(path: string, body?: unknown, init?: RequestInit) =>
+    request<T>(path, { ...init, method: "PUT", body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(path: string, body?: unknown, init?: RequestInit) =>
+    request<T>(path, { ...init, method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
+  delete: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: "DELETE" }),
+};
