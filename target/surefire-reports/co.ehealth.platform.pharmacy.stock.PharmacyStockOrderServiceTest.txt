@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: co.ehealth.platform.pharmacy.stock.PharmacyStockOrderServiceTest
--------------------------------------------------------------------------------
-Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.706 s -- in co.ehealth.platform.pharmacy.stock.PharmacyStockOrderServiceTest
