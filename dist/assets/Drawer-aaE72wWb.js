@@ -1,0 +1,1 @@
+import{n as e}from"./createLucideIcon-BMrBRcTc.js";import{O as t}from"./index-DMv4rAcy.js";var n=e(),r=`ml-auto mr-0 h-dvh w-full sm:max-w-md sm:rounded-l-2xl`;function i({open:e,...i}){return e?(0,n.jsx)(t,{...i,panelClassName:r}):null}export{i as t};

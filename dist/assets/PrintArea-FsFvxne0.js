@@ -1,0 +1,1 @@
+import{n as e}from"./createLucideIcon-BMrBRcTc.js";import{q as t}from"./index-DMv4rAcy.js";var n=e();function r({visibleOnScreen:e=!1,className:r,children:i}){return(0,n.jsx)(`div`,{className:t(`print-area`,!e&&`hidden print:block`,r),children:i})}export{r as t};

@@ -1,0 +1,4 @@
+var e=[`,`,`	`,`;`];function t(t){let n=t.split(/\r?\n/,1)[0]??``;return e.map(e=>({delimiter:e,count:n.split(e).length-1})).reduce((e,t)=>t.count>e.count?t:e).delimiter}function n(e){let n=t(e),r=[],i=[],a=``,o=!1;function s(){i.push(a.trim()),a=``}function c(){s(),i.some(e=>e!==``)&&r.push(i),i=[]}for(let t=0;t<e.length;t+=1){let r=e[t];o?r===`"`&&e[t+1]===`"`?(a+=`"`,t+=1):r===`"`?o=!1:a+=r:r===`"`?o=!0:r===n?s():r===`
+`||r===`\r`?(r===`\r`&&e[t+1]===`
+`&&(t+=1),c()):a+=r}return c(),r}function r(e){return/[",\r\n]/.test(e)?`"${e.replace(/"/g,`""`)}"`:e}function i(e){return e.map(e=>e.map(r).join(`,`)).join(`\r
+`)}function a(e,t,n=`text/csv;charset=utf-8`){let r=URL.createObjectURL(new Blob([t],{type:n})),i=document.createElement(`a`);i.href=r,i.download=e,document.body.appendChild(i),i.click(),i.remove(),URL.revokeObjectURL(r)}export{i as n,n as r,a as t};

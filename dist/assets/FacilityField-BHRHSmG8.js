@@ -1,0 +1,1 @@
+import{n as e}from"./createLucideIcon-BMrBRcTc.js";import{I as t}from"./index-DMv4rAcy.js";var n=e();function r({facilities:e,value:r,onChange:i}){return e.length<2?null:(0,n.jsx)(`div`,{className:`mb-5 max-w-xs`,children:(0,n.jsx)(t,{label:`Facility`,value:r,options:e.map(e=>({value:e.id,label:e.name})),onChange:e=>i(e.target.value)})})}export{r as t};
