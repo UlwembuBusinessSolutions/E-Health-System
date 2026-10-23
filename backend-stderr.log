@@ -1,7 +1,0 @@
-At line:1 char:188
-+ ... x64\jre\21.0.12.1-win32-x86_64'; $env:PATH=$env:JAVA_HOME\bin;$env:PA ...
-+                                                              ~~~~
-Unexpected token '\bin' in expression or statement.
-    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
-    + FullyQualifiedErrorId : UnexpectedToken
- 
