@@ -22,6 +22,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import co.ehealth.platform.identity.mfa.MfaService;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -46,11 +48,14 @@ class AuthSessionTest {
     private final UUID userId = UUID.randomUUID();
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules()
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-    private final JwtService jwt = new JwtService("a-test-only-session-signing-secret-longer-than-32-bytes", 720, clock);
+    private final JwtService jwt = new JwtService("a-test-only-session-signing-secret-longer-than-32-bytes", 720,
+            clock);
     private MockMvc mvc;
     private JwtService.IssuedToken token;
+    private final MfaService mfaService = mock(MfaService.class);
 
-    @BeforeEach void setup() {
+    @BeforeEach
+    void setup() {
         TenantContext.setCurrentTenant("test_clinic");
         when(users.findById(userId)).thenReturn(Optional.of(user));
         when(user.getId()).thenReturn(userId);
@@ -61,7 +66,7 @@ class AuthSessionTest {
         token = jwt.issue(userId, "test_clinic", List.of("RECEPTIONIST"), 3);
         activityStore.registerSession(token.jti(), startedAt, token.expiresAt(), startedAt);
         AuthService service = new AuthService(users, passwords, jwt, mock(AuditLogService.class),
-                activityStore, clock, mapper, 15);
+                activityStore, clock, mapper, mfaService, 15);
         mvc = MockMvcBuilders.standaloneSetup(new AuthController(service, mock(PasswordResetService.class), users))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
@@ -71,12 +76,14 @@ class AuthSessionTest {
                 .build();
     }
 
-    @AfterEach void cleanup() {
+    @AfterEach
+    void cleanup() {
         SecurityContextHolder.clearContext();
         TenantContext.clear();
     }
 
-    @Test void metadataUsesServerClockAndDoesNotExtendIdleDeadline() throws Exception {
+    @Test
+    void metadataUsesServerClockAndDoesNotExtendIdleDeadline() throws Exception {
         clock.advance(Duration.ofMinutes(14));
         request(get("/api/v1/auth/session"))
                 .andExpect(status().isOk())
@@ -91,7 +98,8 @@ class AuthSessionTest {
         request(get("/api/v1/auth/session")).andExpect(status().is(419));
     }
 
-    @Test void readRequestsCannotKeepAnUnattendedSessionAlive() throws Exception {
+    @Test
+    void readRequestsCannotKeepAnUnattendedSessionAlive() throws Exception {
         for (int minute = 1; minute <= 14; minute++) {
             clock.advance(Duration.ofMinutes(1));
             request(get("/api/v1/auth/me")).andExpect(status().isOk());
@@ -101,7 +109,8 @@ class AuthSessionTest {
         assertEquals(startedAt, activityStore.getLastActivity(token.jti()));
     }
 
-    @Test void explicitActivityExtendsOnlyTheIdleDeadline() throws Exception {
+    @Test
+    void explicitActivityExtendsOnlyTheIdleDeadline() throws Exception {
         clock.advance(Duration.ofMinutes(14));
         request(post("/api/v1/auth/session/activity"))
                 .andExpect(status().isOk())
@@ -109,7 +118,8 @@ class AuthSessionTest {
                 .andExpect(jsonPath("$.expiresAt").value("2030-01-10T20:00:00Z"));
     }
 
-    @Test void continueIssuesFreshTokenWithCurrentRolesAndPreservesSessionIdentity() throws Exception {
+    @Test
+    void continueIssuesFreshTokenWithCurrentRolesAndPreservesSessionIdentity() throws Exception {
         clock.advance(Duration.ofMinutes(14));
         when(users.findRoleNames(userId)).thenReturn(List.of("ORG_ADMIN", "RECEPTIONIST"));
         String body = request(post("/api/v1/auth/session/continue"))
@@ -128,19 +138,22 @@ class AuthSessionTest {
         request(get("/api/v1/auth/session"), renewed).andExpect(status().isOk());
     }
 
-    @Test void exactIdleDeadlineBlocksActivityAndContinueWithoutResettingIt() throws Exception {
+    @Test
+    void exactIdleDeadlineBlocksActivityAndContinueWithoutResettingIt() throws Exception {
         clock.advance(Duration.ofMinutes(15));
         request(post("/api/v1/auth/session/activity")).andExpect(status().is(419));
         request(post("/api/v1/auth/session/continue")).andExpect(status().is(419));
         assertEquals(startedAt, activityStore.getLastActivity(token.jti()));
     }
 
-    @Test void expiredTokenCannotBeContinued() throws Exception {
+    @Test
+    void expiredTokenCannotBeContinued() throws Exception {
         clock.advance(Duration.ofHours(12).plusSeconds(1));
         request(post("/api/v1/auth/session/continue")).andExpect(status().isUnauthorized());
     }
 
-    @Test void passwordChangeAndAccountDisableCannotBeBypassedByContinue() throws Exception {
+    @Test
+    void passwordChangeAndAccountDisableCannotBeBypassedByContinue() throws Exception {
         when(user.getTokenVersion()).thenReturn(4);
         request(post("/api/v1/auth/session/continue")).andExpect(status().isUnauthorized());
         when(user.getTokenVersion()).thenReturn(3);
@@ -150,14 +163,16 @@ class AuthSessionTest {
         request(post("/api/v1/auth/session/continue")).andExpect(status().isUnauthorized());
     }
 
-    @Test void idleSessionCanLogOutAndCannotReuseItsToken() throws Exception {
+    @Test
+    void idleSessionCanLogOutAndCannotReuseItsToken() throws Exception {
         clock.advance(Duration.ofMinutes(16));
         request(post("/api/v1/auth/logout")).andExpect(status().isNoContent());
         request(post("/api/v1/auth/session/continue")).andExpect(status().isUnauthorized());
         request(get("/api/v1/auth/me")).andExpect(status().isUnauthorized());
     }
 
-    @Test void logoutRevokesRenewalsButDoesNotRevokeIndependentSessions() throws Exception {
+    @Test
+    void logoutRevokesRenewalsButDoesNotRevokeIndependentSessions() throws Exception {
         clock.advance(Duration.ofMinutes(14));
         JsonNode continued = mapper.readTree(request(post("/api/v1/auth/session/continue"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
@@ -170,7 +185,8 @@ class AuthSessionTest {
         request(get("/api/v1/auth/me"), continued.get("accessToken").asText()).andExpect(status().isUnauthorized());
     }
 
-    @Test void failedUnlockDoesNotResetIdleLock() throws Exception {
+    @Test
+    void failedUnlockDoesNotResetIdleLock() throws Exception {
         clock.advance(Duration.ofMinutes(16));
         when(passwords.matches("wrong", "password-hash")).thenReturn(false);
         request(post("/api/v1/auth/unlock").contentType("application/json").content("{\"password\":\"wrong\"}"))
@@ -179,7 +195,8 @@ class AuthSessionTest {
         request(post("/api/v1/auth/session/continue")).andExpect(status().is(419));
     }
 
-    @Test void successfulUnlockRestoresSessionActivity() throws Exception {
+    @Test
+    void successfulUnlockRestoresSessionActivity() throws Exception {
         clock.advance(Duration.ofMinutes(16));
         when(passwords.matches("correct", "password-hash")).thenReturn(true);
         request(post("/api/v1/auth/unlock").contentType("application/json").content("{\"password\":\"correct\"}"))
@@ -188,7 +205,8 @@ class AuthSessionTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.idleExpiresAt").value("2030-01-10T08:31:00Z"));
     }
 
-    @Test void missingActivityStateUsesSignedIssueTimeInsteadOfMetadataReadTime() throws Exception {
+    @Test
+    void missingActivityStateUsesSignedIssueTimeInsteadOfMetadataReadTime() throws Exception {
         var other = jwt.issue(userId, "test_clinic", List.of("RECEPTIONIST"), 3);
         clock.advance(Duration.ofMinutes(14));
         request(get("/api/v1/auth/session"), other.token())
@@ -208,10 +226,28 @@ class AuthSessionTest {
 
     private static class MutableClock extends Clock {
         private Instant now;
-        MutableClock(Instant now) { this.now = now; }
-        void advance(Duration elapsed) { now = now.plus(elapsed); }
-        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
-        @Override public Clock withZone(ZoneId zone) { return this; }
-        @Override public Instant instant() { return now; }
+
+        MutableClock(Instant now) {
+            this.now = now;
+        }
+
+        void advance(Duration elapsed) {
+            now = now.plus(elapsed);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
     }
 }

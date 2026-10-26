@@ -44,54 +44,57 @@ public class SecurityConfig {
             @Value("${app.idle-lock.timeout-minutes}") long idleTimeoutMinutes,
             CorsConfigurationSource corsConfigurationSource) throws Exception {
 
-        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository, activityStore, clock);
-        IdleLockFilter idleLockFilter =
-                new IdleLockFilter(activityStore, Duration.ofMinutes(idleTimeoutMinutes), clock);
-        PlatformJwtAuthenticationFilter platformJwtFilter =
-                new PlatformJwtAuthenticationFilter(platformJwtService, platformOperatorRepository);
-        PatientJwtAuthenticationFilter patientJwtFilter =
-                new PatientJwtAuthenticationFilter(patientJwtService, patientAccountRepository);
+        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepository, activityStore,
+                clock);
+        IdleLockFilter idleLockFilter = new IdleLockFilter(activityStore, Duration.ofMinutes(idleTimeoutMinutes),
+                clock);
+        PlatformJwtAuthenticationFilter platformJwtFilter = new PlatformJwtAuthenticationFilter(platformJwtService,
+                platformOperatorRepository);
+        PatientJwtAuthenticationFilter patientJwtFilter = new PatientJwtAuthenticationFilter(patientJwtService,
+                patientAccountRepository);
 
         http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource))
-            .csrf(AbstractHttpConfigurer::disable) // stateless bearer-token API — no cookie session to forge
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(authorize -> authorize
-                .requestMatchers("/api/v1/auth/login", "/api/v1/auth/password-reset/**",
-                        "/api/v1/auth/sso/**", "/api/v1/public/**", "/actuator/health").permitAll()
-                // Getting a token in the first place can't require one.
-                .requestMatchers("/platform/auth/login").permitAll()
-                // Same reasoning, patient portal's own two pre-auth
-                // endpoints — must be listed before the broader
-                // /api/v1/patient/** rule below, since Spring Security
-                // matches requestMatchers in declaration order.
-                .requestMatchers("/api/v1/patient/register", "/api/v1/patient/auth/login").permitAll()
-                // Everything else under /platform/** needs a real,
-                // ACTIVE, correctly-signed operator token — PlatformJwtAuthenticationFilter
-                // is what actually populates that Authentication; this
-                // just says what it has to look like once it's there.
-                .requestMatchers("/platform/**").hasRole("PLATFORM_OPERATOR")
-                // Same shape, PatientJwtAuthenticationFilter populates it.
-                .requestMatchers("/api/v1/patient/**").hasRole("PATIENT")
-                .requestMatchers("/api/v1/admin/**").hasRole("ORG_ADMIN")
-                // Creating a facility is an admin action even though the
-                // path isn't under /api/v1/admin/** — GET on the same path
-                // has to stay open to any authenticated staff member (it
-                // feeds the staff-creation dropdown), so the two verbs
-                // need separate rules rather than one path-level match.
-                .requestMatchers(HttpMethod.POST, "/api/v1/facilities").hasRole("ORG_ADMIN")
-                // /api/v1/facilities (GET) and /api/v1/roles feed the admin
-                // staff-creation dropdowns and nothing else — the original
-                // Phase 1 spec lists their minimum role as "any", meaning
-                // any authenticated staff member, not the public internet.
-                // Both only have real callers behind RequireAuth already,
-                // so requiring a valid tenant JWT costs nothing functional
-                // and closes an unnecessary public-data exposure.
-                .anyRequest().authenticated())
-            .addFilterBefore(platformJwtFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(patientJwtFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterAfter(idleLockFilter, JwtAuthenticationFilter.class);
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                .csrf(AbstractHttpConfigurer::disable) // stateless bearer-token API — no cookie session to forge
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/password-reset/**",
+                                "/api/v1/auth/sso/**", "/api/v1/public/**", "/actuator/health",
+                                "/api/v1/auth/mfa/verify", "/api/v1/auth/mfa/enrol/**")
+                        .permitAll()
+                        // Getting a token in the first place can't require one.
+                        .requestMatchers("/platform/auth/login").permitAll()
+                        // Same reasoning, patient portal's own two pre-auth
+                        // endpoints — must be listed before the broader
+                        // /api/v1/patient/** rule below, since Spring Security
+                        // matches requestMatchers in declaration order.
+                        .requestMatchers("/api/v1/patient/register", "/api/v1/patient/auth/login").permitAll()
+                        // Everything else under /platform/** needs a real,
+                        // ACTIVE, correctly-signed operator token — PlatformJwtAuthenticationFilter
+                        // is what actually populates that Authentication; this
+                        // just says what it has to look like once it's there.
+                        .requestMatchers("/platform/**").hasRole("PLATFORM_OPERATOR")
+                        // Same shape, PatientJwtAuthenticationFilter populates it.
+                        .requestMatchers("/api/v1/patient/**").hasRole("PATIENT")
+                        .requestMatchers("/api/v1/admin/**").hasRole("ORG_ADMIN")
+                        // Creating a facility is an admin action even though the
+                        // path isn't under /api/v1/admin/** — GET on the same path
+                        // has to stay open to any authenticated staff member (it
+                        // feeds the staff-creation dropdown), so the two verbs
+                        // need separate rules rather than one path-level match.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/facilities").hasRole("ORG_ADMIN")
+                        // /api/v1/facilities (GET) and /api/v1/roles feed the admin
+                        // staff-creation dropdowns and nothing else — the original
+                        // Phase 1 spec lists their minimum role as "any", meaning
+                        // any authenticated staff member, not the public internet.
+                        // Both only have real callers behind RequireAuth already,
+                        // so requiring a valid tenant JWT costs nothing functional
+                        // and closes an unnecessary public-data exposure.
+                        .anyRequest().authenticated())
+                .addFilterBefore(platformJwtFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(patientJwtFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(idleLockFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

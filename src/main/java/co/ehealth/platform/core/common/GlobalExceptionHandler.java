@@ -6,6 +6,9 @@ import co.ehealth.platform.consultation.InvalidConsultationStateException;
 import co.ehealth.platform.core.security.InvalidTokenException;
 import co.ehealth.platform.identity.InvalidRolePermissionChangeException;
 import co.ehealth.platform.identity.RoleNotFoundException;
+import co.ehealth.platform.identity.mfa.InvalidMfaCodeException;
+import co.ehealth.platform.identity.mfa.InvalidMfaStateException;
+import co.ehealth.platform.identity.mfa.MfaChallengeExpiredException;
 import co.ehealth.platform.identity.AccountLockedException;
 import co.ehealth.platform.identity.DuplicateFieldException;
 import co.ehealth.platform.identity.InvalidCredentialsException;
@@ -752,5 +755,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.error("Unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ApiErrorResponse("Something went wrong. Please try again.", null));
+    }
+
+    @ExceptionHandler(InvalidMfaCodeException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidMfaCode(InvalidMfaCodeException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(MfaChallengeExpiredException.class)
+    public ResponseEntity<ApiErrorResponse> handleMfaChallengeExpired(MfaChallengeExpiredException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidMfaStateException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidMfaState(InvalidMfaStateException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 }
