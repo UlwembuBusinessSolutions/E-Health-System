@@ -22,6 +22,8 @@ import { PageHeader } from "@/shared/components/PageHeader";
 import { Select } from "@/shared/components/Select";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { RowActionsMenu, type RowActionItem } from "@/shared/components/RowActionsMenu";
+import { useAuth } from "@/auth/AuthContext";
+import { resetStaffMfa } from "@/shared/api/mfa";
 
 const STATUS_FILTER_OPTIONS = [
   { value: "ALL", label: "All statuses" },
@@ -80,21 +82,25 @@ function CopyButton({ text }: { text: string }) {
 export function StaffListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [confirmResetId, setConfirmResetId] = useState<string | null>(null);
+  const [confirmResetMfaId, setConfirmResetMfaId] = useState<string | null>(null);
   const [revealedPassword, setRevealedPassword] = useState<{ id: string; password: string } | null>(null);
   const [employmentTypeEditId, setEmploymentTypeEditId] = useState<string | null>(null);
   const [employmentTypeDraft, setEmploymentTypeDraft] = useState<EmploymentType | "">("");
   const [offboardId, setOffboardId] = useState<string | null>(null);
   const [offboardDateDraft, setOffboardDateDraft] = useState(todayIsoDate());
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   // Only one inline row-edit open at a time — opening any of these clears
   // whichever of the others was open, same as the pre-existing
   // confirmResetId/revealedPassword pair already did for each other.
   function closeAllRowEditors() {
     setConfirmResetId(null);
+    setConfirmResetMfaId(null);
     setRevealedPassword(null);
     setEmploymentTypeEditId(null);
     setOffboardId(null);
@@ -133,6 +139,19 @@ export function StaffListPage() {
     onError: (error) => {
       setConfirmResetId(null);
       setActionError(error instanceof ApiError ? error.message : "Couldn't reset that password. Try again.");
+    },
+  });
+
+  const resetMfa = useMutation({
+    mutationFn: (id: string) => resetStaffMfa(id),
+    onMutate: () => { setActionError(null); setActionNotice(null); },
+    onSuccess: () => {
+      setConfirmResetMfaId(null);
+      setActionNotice("MFA was reset. The staff member must set it up again at their next sign-in if required by policy.");
+    },
+    onError: (error) => {
+      setConfirmResetMfaId(null);
+      setActionError(error instanceof ApiError ? error.message : "Couldn't reset that staff member's MFA. Try again.");
     },
   });
 
@@ -223,6 +242,11 @@ export function StaffListPage() {
         {actionError && (
           <div role="alert" className="border-b border-danger-500/30 bg-danger-50 px-5 py-2.5 text-[13.5px] text-danger-600">
             {actionError}
+          </div>
+        )}
+        {actionNotice && (
+          <div role="status" className="border-b border-success-500/30 bg-success-50 px-5 py-2.5 text-[13.5px] text-success-600">
+            {actionNotice}
           </div>
         )}
         {staffQuery.isLoading ? (
@@ -350,6 +374,16 @@ export function StaffListPage() {
                             Confirm
                           </Button>
                         </div>
+                      ) : confirmResetMfaId === s.id ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-[12.5px] text-text-secondary">Reset MFA for this staff member?</span>
+                          <Button size="md" variant="secondary" onClick={() => setConfirmResetMfaId(null)}>
+                            Cancel
+                          </Button>
+                          <Button size="md" variant="danger" loading={resetMfa.isPending} onClick={() => resetMfa.mutate(s.id)}>
+                            Confirm reset
+                          </Button>
+                        </div>
                       ) : offboardId === s.id ? (
                         <div className="flex items-center justify-end gap-2">
                           <span className="text-[12.5px] text-text-secondary">Last day?</span>
@@ -389,6 +423,17 @@ export function StaffListPage() {
                                 setConfirmResetId(s.id);
                               },
                             },
+                            ...(s.id === user?.id ? [] : [{
+                              key: "reset-mfa",
+                              label: "Reset MFA",
+                              icon: <ShieldCheck className="size-4" aria-hidden />,
+                              onClick: () => {
+                                closeAllRowEditors();
+                                setActionError(null);
+                                setActionNotice(null);
+                                setConfirmResetMfaId(s.id);
+                              },
+                            }]),
                             // Hidden once alreadyOffboarded — a bare login
                             // toggle on someone who left would re-enable
                             // sign-in while leaving a stale employmentEndDate

@@ -3,16 +3,23 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import { StaffLoginLayout } from "./StaffLoginLayout";
 import { loginSchema, type LoginValues } from "./validation";
-import { login } from "@/shared/api/auth";
+import { establishMfaSession, login, type LoginResponse } from "@/shared/api/auth";
+import {
+  confirmMfaChallengeEnrolment,
+  startMfaChallengeEnrolment,
+  verifyMfaLogin,
+  type MfaEnrolmentSecret,
+} from "@/shared/api/mfa";
 import { getPublicOrganization } from "@/shared/api/publicOrganization";
 import { ApiError, apiOrigin } from "@/shared/api/client";
 import { useAuth } from "./AuthContext";
 import { Input } from "@/shared/components/Input";
 import { Button } from "@/shared/components/Button";
 import { useOffline } from "@/offline/OfflineContext"; // OFFLINE
+import type { AuthenticatedUser } from "@/shared/api/types";
 
 // MicrosoftSsoService's own error codes, turned into something a person
 // signing in can actually make sense of — every one of these is a query
@@ -41,6 +48,17 @@ export function LoginScreen() {
   const offline = useOffline(); // OFFLINE
   const [formError, setFormError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [pendingMfa, setPendingMfa] = useState<{
+    challengeToken: string;
+    challengeExpiresAt: string;
+    enrolmentRequired: boolean;
+    password: string;
+  } | null>(null);
+  const [completedMfa, setCompletedMfa] = useState<{
+    response: LoginResponse;
+    password: string;
+    recoveryCodes: string[];
+  } | null>(null);
 
   // Same queryKey StaffLoginLayout's own org query uses — TanStack Query
   // dedupes the two into one request, this component just also needs the
@@ -77,10 +95,12 @@ export function LoginScreen() {
     mutationFn: login,
     // OFFLINE: the password typed here is the only moment it is available,
     // so the encrypted offline vault is created/unlocked now, with no extra prompt.
-    onSuccess: (user, variables) => {
-      setUser(user);
-      void offline.provisionAfterLogin(user.id, variables.password);
-      navigate("/app", { replace: true });
+    onSuccess: (result, variables) => {
+      if (result.type === "mfa") {
+        setPendingMfa({ ...result, password: variables.password });
+        return;
+      }
+      finishSignIn(result.user, variables.password);
     },
     onError: (error) =>
       setFormError(
@@ -95,10 +115,44 @@ export function LoginScreen() {
     setFormError(null);
     mutation.mutate({ ...values, tenantSlug });
   };
+  function finishSignIn(user: AuthenticatedUser, password: string) {
+    setUser(user);
+    void offline.provisionAfterLogin(user.id, password);
+    navigate("/app", { replace: true });
+  }
+
+  function completeMfa(response: LoginResponse) {
+    if (!pendingMfa) return;
+    const recoveryCodes = response.recoveryCodes ?? [];
+    if (recoveryCodes.length) {
+      setCompletedMfa({ response, password: pendingMfa.password, recoveryCodes });
+      setPendingMfa(null);
+      return;
+    }
+    const user = establishMfaSession(response);
+    finishSignIn(user, pendingMfa.password);
+    setPendingMfa(null);
+  }
+
   if (!tenantSlug) return <Navigate to="/login" replace />;
 
   return (
     <StaffLoginLayout key={tenantSlug} tenantSlug={tenantSlug}>
+      {completedMfa ? (
+        <RecoveryCodesNotice
+          codes={completedMfa.recoveryCodes}
+          onContinue={() => finishSignIn(establishMfaSession(completedMfa.response), completedMfa.password)}
+        />
+      ) : pendingMfa ? (
+        <MfaLoginStep
+          challenge={pendingMfa}
+          onComplete={completeMfa}
+          onBack={() => {
+            setPendingMfa(null);
+            setFormError(null);
+          }}
+        />
+      ) : (
       <form
         onSubmit={handleSubmit(onSubmit)}
         noValidate
@@ -162,6 +216,7 @@ export function LoginScreen() {
           {!busy && <ArrowRight size={16} aria-hidden />}
         </Button>
       </form>
+      )}
       {organizationQuery.data?.microsoftSsoEnabled && (
         <>
           <div className="sl-sso-divider">or</div>
@@ -175,6 +230,134 @@ export function LoginScreen() {
         </>
       )}
     </StaffLoginLayout>
+  );
+}
+
+interface MfaChallengeState {
+  challengeToken: string;
+  challengeExpiresAt: string;
+  enrolmentRequired: boolean;
+}
+
+function MfaLoginStep({
+  challenge,
+  onComplete,
+  onBack,
+}: {
+  challenge: MfaChallengeState;
+  onComplete: (response: LoginResponse) => void;
+  onBack: () => void;
+}) {
+  const [secret, setSecret] = useState<MfaEnrolmentSecret | null>(null);
+  const [code, setCode] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const setupMutation = useMutation({
+    mutationFn: () => startMfaChallengeEnrolment(challenge.challengeToken),
+    onSuccess: (result) => {
+      setSecret(result);
+      setError(null);
+    },
+    onError: (reason) => setError(reason instanceof ApiError ? reason.message : "Couldn't start MFA setup. Please try again."),
+  });
+  const verifyMutation = useMutation({
+    mutationFn: () => challenge.enrolmentRequired
+      ? confirmMfaChallengeEnrolment(challenge.challengeToken, code)
+      : verifyMfaLogin(challenge.challengeToken, useRecoveryCode ? undefined : code, useRecoveryCode ? recoveryCode : undefined),
+    onSuccess: onComplete,
+    onError: (reason) => setError(reason instanceof ApiError ? reason.message : "MFA verification failed. Please try again."),
+  });
+  const busy = setupMutation.isPending || verifyMutation.isPending;
+  const expiredAt = new Date(challenge.challengeExpiresAt);
+
+  return (
+    <div className="flex flex-col gap-5" aria-busy={busy}>
+      <div className="flex items-start gap-3 rounded-xl border border-border-subtle bg-surface-raised p-4">
+        <ShieldCheck className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
+        <div>
+          <h2 className="text-[16px] font-semibold text-text-primary">
+            {challenge.enrolmentRequired ? "Set up two-step verification" : "Verify your identity"}
+          </h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-text-secondary">
+            {challenge.enrolmentRequired
+              ? "Your role requires MFA. Set up an authenticator app to continue."
+              : "Enter the current 6-digit code from your authenticator app, or use a recovery code."}
+          </p>
+        </div>
+      </div>
+      {error && <div role="alert" className="rounded-lg border border-danger-500/30 bg-danger-50 px-3.5 py-2.5 text-[13.5px] text-danger-600">{error}</div>}
+
+      {challenge.enrolmentRequired && !secret ? (
+        <Button type="button" size="lg" loading={setupMutation.isPending} onClick={() => setupMutation.mutate()}>
+          Set up authenticator
+        </Button>
+      ) : challenge.enrolmentRequired && secret ? (
+        <>
+          <div className="rounded-xl border border-border-subtle bg-surface-raised p-4">
+            <p className="text-[13px] font-semibold text-text-primary">Add this account to your authenticator</p>
+            <p className="mt-1 text-[13px] text-text-secondary">In your app, choose to add an account manually and enter this setup key:</p>
+            <code className="mt-3 block break-all rounded-lg bg-surface-sunken px-3 py-2.5 font-mono text-[13px] text-text-primary">{secret.secret}</code>
+            <a href={secret.otpauthUri} className="mt-3 inline-block text-[13px] font-medium text-brand-600 underline">
+              Open in an authenticator app
+            </a>
+          </div>
+          <form onSubmit={(event) => { event.preventDefault(); setError(null); verifyMutation.mutate(); }} className="flex flex-col gap-4">
+            <Input label="6-digit verification code" required inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} maxLength={6} />
+            <Button type="submit" size="lg" loading={verifyMutation.isPending} disabled={!/^\d{6}$/.test(code)}>Confirm and continue</Button>
+          </form>
+        </>
+      ) : (
+        <>
+          {useRecoveryCode ? (
+            <Input label="Recovery code" required autoComplete="one-time-code" value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value)} />
+          ) : (
+            <Input label="6-digit verification code" required inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} maxLength={6} />
+          )}
+          <Button type="button" size="lg" loading={verifyMutation.isPending} disabled={useRecoveryCode ? !recoveryCode.trim() : !/^\d{6}$/.test(code)} onClick={() => { setError(null); verifyMutation.mutate(); }}>
+            Verify and sign in
+          </Button>
+          <button type="button" className="self-start text-[13px] font-medium text-brand-600 underline" onClick={() => { setUseRecoveryCode((value) => !value); setError(null); }}>
+            {useRecoveryCode ? "Use an authenticator code instead" : "Use a recovery code"}
+          </button>
+        </>
+      )}
+      <p className="text-[12px] text-text-secondary">This sign-in challenge expires at {Number.isNaN(expiredAt.getTime()) ? "the displayed expiry" : expiredAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.</p>
+      <button type="button" onClick={onBack} className="inline-flex items-center gap-2 self-start text-[13px] font-medium text-text-secondary hover:text-text-primary">
+        <ArrowLeft size={14} aria-hidden /> Back to sign in
+      </button>
+    </div>
+  );
+}
+
+function RecoveryCodesNotice({ codes, onContinue }: { codes: string[]; onContinue: () => void }) {
+  const [copied, setCopied] = useState(false);
+  async function copyCodes() {
+    try {
+      await navigator.clipboard.writeText(codes.join("\n"));
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-start gap-3 rounded-xl border border-success-500/30 bg-success-50 p-4">
+        <ShieldCheck className="mt-0.5 size-5 shrink-0 text-success-600" aria-hidden />
+        <div>
+          <h2 className="text-[16px] font-semibold text-text-primary">Save your recovery codes</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-text-secondary">Each code works once if you lose access to your authenticator. These codes are shown only once.</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 rounded-xl border border-border-subtle bg-surface-raised p-4">
+        {codes.map((code) => <code key={code} className="rounded-md bg-surface-sunken px-2 py-1.5 text-center font-mono text-[13px] text-text-primary">{code}</code>)}
+      </div>
+      <Button type="button" variant="secondary" onClick={() => void copyCodes()} icon={copied ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}>
+        {copied ? "Recovery codes copied" : "Copy recovery codes"}
+      </Button>
+      <Button type="button" size="lg" onClick={onContinue}>I've saved my codes — continue</Button>
+    </div>
   );
 }
 
