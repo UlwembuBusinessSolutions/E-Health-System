@@ -24,7 +24,7 @@ function describeDuplicateSupplier(error: ApiError): string {
 export function describeError(error: unknown, fallback = FALLBACK_MESSAGE): string {
   if (error instanceof ApiError) {
     if (error.code === DUPLICATE_SUPPLIER_CODE) return describeDuplicateSupplier(error);
-    if (error.status === 403) return "You don't have permission to do that.";
+    if (error.status === 403) return error.message || "You don't have permission to do that.";
     if (error.status >= 500) return fallback;
     return error.message || fallback;
   }

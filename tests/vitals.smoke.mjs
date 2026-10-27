@@ -12,6 +12,21 @@ await context.addInitScript(token => {
 }, token);
 const patient = { id: "patient-1", firstName: "Test", lastName: "Patient", mpiNumber: "TEST-001", dateOfBirth: "1990-01-01", gender: "FEMALE", citizenshipStatus: "SA_CITIZEN", idNumber: "TEST", address: "Test clinic", contactNumber: "0000000000", medicalAidProvider: null, medicalAidNumber: null, passportNumber: null, passportExpiry: null, createdAt: "2026-09-08T10:00:00Z", archived: false };
 let saved, submitted;
+let releaseFailedCapture;
+const failFirstCapture = new Promise(resolve => { releaseFailedCapture = resolve; });
+const capturedKeys = [];
+let captureAttempts = 0;
+async function assertVisibleFeedback(page, text) {
+  const alert = page.getByRole("alert").filter({ hasText: text });
+  await alert.waitFor();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("role") === "alert");
+  const visible = await alert.evaluate(el => {
+    const rect = el.getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= innerHeight;
+  });
+  assert.equal(visible, true, "Save feedback must be in the viewport");
+  assert.equal(await alert.getAttribute("tabindex"), "-1");
+}
 await context.route("**/api/**", async route => {
   const path = new URL(route.request().url()).pathname;
   if (!path.startsWith("/api/")) return route.continue();
@@ -21,6 +36,12 @@ await context.route("**/api/**", async route => {
   else if (path === "/api/v1/patients/patient-1") result = patient;
   else if (path.endsWith("/visits/visit-1/triage") && route.request().method() === "POST") {
     submitted = route.request().postDataJSON();
+    captureAttempts++;
+    capturedKeys.push(submitted.idempotencyKey);
+    if (captureAttempts === 1) {
+      await failFirstCapture;
+      return route.fulfill({ status: 503, json: { message: "The server is temporarily unavailable. Please try again." } });
+    }
     saved = { ...submitted, id: "reading-1", visitId: "visit-1", status: "ACTIVE", scoringProfile: "ADULT", tewsScore: 1, scoringVersion: "SATS-DRAFT-2026.2", calculatedColour: "GREEN", finalColour: "GREEN", capturedByUserId: "nurse-1", observedAt: "2026-09-08T10:00:00Z", recordedAt: "2026-09-08T10:00:00Z", additionalObservations: { ...submitted.additionalObservations, bmi: 25.1 } };
     result = saved;
   } else if (path.endsWith("/visits/visit-1/triage")) result = { items: saved ? [saved] : [] };
@@ -39,12 +60,19 @@ try {
   await page.getByLabel(/^AVPU/).selectOption("ALERT");
   await page.getByLabel(/^Mobility/).selectOption("WALKING");
   await page.getByRole("button", { name: "Save vitals", exact: true }).click();
-  await page.getByRole("alert").filter({ hasText: "Select whether an injury" }).waitFor();
+  await assertVisibleFeedback(page, "Select whether an injury");
   assert.equal(submitted, undefined);
+  assert.equal(await page.getByLabel("Injury within the past 48 hours").getAttribute("required"), "");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Save vitals", exact: true }).click();
+  assert.equal(await page.getByRole("alert").filter({ hasText: "Select whether an injury" }).evaluate(el => {
+    const rect = el.getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight;
+  }), true, "Repeated validation stays visible on mobile");
+  await page.setViewportSize({ width: 1440, height: 1100 });
   await page.getByLabel("Injury within the past 48 hours").selectOption("yes");
   await page.getByRole("spinbutton", { name: "Weight (kg)", exact: true }).fill("-1");
   await page.getByRole("button", { name: "Save vitals", exact: true }).click();
-  await page.getByRole("alert").filter({ hasText: "numbers greater than zero" }).waitFor();
+  await assertVisibleFeedback(page, "numbers greater than zero");
   assert.equal(submitted, undefined);
   await page.getByRole("spinbutton", { name: "Weight (kg)", exact: true }).fill("72.5");
   await page.getByLabel("Height / length (cm)").fill("170");
@@ -59,12 +87,27 @@ try {
   await page.getByText("Additional measurements", { exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "test-results/vitals-capture.png", fullPage: true });
   await page.getByRole("button", { name: "Save vitals", exact: true }).click();
+  await page.getByRole("button", { name: "Saving vitals…", exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "Saving vitals…", exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole("button", { name: "Cancel", exact: true }).isDisabled(), true);
+  releaseFailedCapture();
+  await assertVisibleFeedback(page, "server is temporarily unavailable");
+  assert.equal(saved, undefined, "Failed request must not show a saved reading");
+  assert.equal(await page.getByRole("spinbutton", { name: "Weight (kg)", exact: true }).inputValue(), "72.5");
+  assert.equal(await page.getByLabel(/Respiratory rate/).inputValue(), "18");
+  await page.getByRole("button", { name: "Save vitals", exact: true }).click();
   await page.getByRole("button", { name: "Take new reading", exact: true }).waitFor();
+  await page.getByText("Vitals saved.", { exact: true }).waitFor();
+  assert.equal(captureAttempts, 2, "One failed attempt and one successful retry expected");
+  assert.ok(capturedKeys[0]);
+  assert.equal(capturedKeys[0], capturedKeys[1], "Retry must retain its idempotency key");
   assert.equal(submitted.additionalObservations.weightKg, 72.5);
   assert.equal(submitted.additionalObservations.traumaPresent, true);
   assert.equal(submitted.additionalObservations.urineProtein, "NEGATIVE");
   assert.equal(submitted.additionalObservations.urineGlucose, null);
   assert.equal(submitted.additionalObservations.pregnancyTest, "INDETERMINATE");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Take new reading", exact: true }).waitFor();
   await page.getByRole("tab", { name: "Vitals", exact: true }).click();
   await page.getByRole("heading", { name: "Vitals history", exact: true }).waitFor();
   await page.getByRole("button").filter({ hasText: "Captured" }).last().waitFor();
@@ -86,7 +129,7 @@ try {
   await page.goto(`${process.env.VITALS_UI_URL || "http://127.0.0.1:5178"}/print/vitals/reading-1`);
   await page.getByText("Indeterminate", { exact: true }).waitFor();
   assert.deepEqual(errors, []);
-  console.log("PASS: capture validation, payload values, optional/negative results, history, mobile layout, details and print.");
+  console.log("PASS: visible/focused validation on desktop and mobile, required injury assessment, pending state, failed-save recovery, idempotent retry, success confirmation, reload/history, details and print.");
 } catch (error) {
   console.error("Browser errors:", errors);
   console.error("Page:", (await page.locator("body").innerText()).slice(0, 3000));

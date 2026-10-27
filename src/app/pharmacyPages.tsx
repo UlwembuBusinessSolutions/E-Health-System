@@ -9,6 +9,7 @@ function lazyPage<Name extends string>(load: () => Promise<Record<Name, Componen
 }
 
 export const PharmacyLayout = lazyPage(() => import("@/pharmacy/PharmacyLayout"), "PharmacyLayout");
+export const PharmacyOverviewPage = lazyPage(() => import("@/pharmacy/overview/OverviewPage"), "OverviewPage");
 export const DispensingQueuePage = lazyPage(() => import("@/pharmacy/dispensing/DispensingQueuePage"), "DispensingQueuePage");
 export const PrescriptionPrintPage = lazyPage(() => import("@/pharmacy/PrescriptionPrintPage"), "PrescriptionPrintPage");
 export const StockPage = lazyPage(() => import("@/pharmacy/stock/StockPage"), "StockPage");

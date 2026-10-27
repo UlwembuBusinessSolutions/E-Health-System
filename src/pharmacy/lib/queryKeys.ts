@@ -15,6 +15,10 @@ export const pharmacyKeys = {
     lots: (productId: string) => [ROOT, "stock", "lots", productId] as const,
     history: (productId: string, facilityId: string) => [ROOT, "stock", "history", productId, facilityId] as const,
   },
+  overview: {
+    all: [ROOT, "overview"] as const,
+    detail: (facilityId: string) => [ROOT, "overview", facilityId] as const,
+  },
   products: {
     all: [ROOT, "products"] as const,
     detail: (productId: string) => [ROOT, "products", "detail", productId] as const,
@@ -78,7 +82,8 @@ export const pharmacyKeys = {
 // Everything a quantity change on the shelf can make stale: the stock list and
 // its dashboard counts, the ledger and receipts that record it, the reorder
 // suggestions and open counts computed from it, the scheduled-medicines
-// register balances, and what the dispensing queue says is in stock. Receiving,
+// register balances, what the dispensing queue says is in stock, and the
+// Overview tab's cover, expiry and dispensing figures. Receiving,
 // adjusting, reversing, counting and dispensing all go through here, so none of
 // them can forget one.
 export function invalidateAfterStockMovement(queryClient: QueryClient): Promise<unknown> {
@@ -91,6 +96,7 @@ export function invalidateAfterStockMovement(queryClient: QueryClient): Promise<
       pharmacyKeys.counts.all,
       pharmacyKeys.register.all,
       pharmacyKeys.dispensing.all,
+      pharmacyKeys.overview.all,
     ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
   );
 }

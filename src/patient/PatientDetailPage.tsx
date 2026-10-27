@@ -1,3 +1,4 @@
+import { VisitTimingPanel } from "./VisitTimingPanel";
 import { generateUUID } from "../utils/uuid";
 import { PatientVisitsTab } from "./PatientVisitsTab";
 import { createPortal } from "react-dom";
@@ -727,11 +728,13 @@ export function PatientDetailPage() {
   // relevant no matter which tab someone's looking at, not "content" that
   // should hide when the Vitals tab (a different, cross-visit view of the
   // same clinical data) is selected.
-  // ?tab=consultation opens straight onto the consultation, e.g. from the list of unsigned ones.
-  const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(
-    searchParams.get("tab") === "consultation" ? "consultation" : "overview",
-  );
+  // ?tab=consultation opens straight onto the consultation, e.g. from the list of unsigned ones;
+  // ?tab=medication onto the prescriptions, e.g. from a pharmacy message on the Dashboard.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(() => {
+    const tab = searchParams.get("tab");
+    return tab === "consultation" || tab === "medication" ? tab : "overview";
+  });
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const [facilityId, setFacilityId] = useState("");
   const [visitType, setVisitType] = useState<VisitType | "">("");
@@ -852,6 +855,13 @@ export function PatientDetailPage() {
       }),
     onSuccess: (result) => {
       setStartedVisit(result);
+      setSearchParams((previous) => {
+        const next = new URLSearchParams(previous);
+        next.set("visitId", result.visit.id);
+        return next;
+      }, { replace: true });
+      void queryClient.invalidateQueries({ queryKey: ["patients", patientId, "visits"] });
+      void queryClient.invalidateQueries({ queryKey: ["patient-visit-timings", patientId] });
       setIsStartingVisit(false);
     },
     onError: (error) => {
@@ -880,11 +890,18 @@ export function PatientDetailPage() {
   const [isCapturingVitals, setIsCapturingVitals] = useState(false);
   const [vitalsForm, setVitalsForm] = useState<VitalsFormState>(EMPTY_VITALS_FORM);
   const [vitalsError, setVitalsError] = useState<string | null>(null);
+  const vitalsErrorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (vitalsError) {
+      vitalsErrorRef.current?.focus({ preventScroll: true });
+      vitalsErrorRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [vitalsError]);
   // One key per open of the form, not one per keystroke — a genuine new
   // capture (form dismissed and reopened) gets a fresh key, while retrying
   // the same submission (the mutation firing again for the same click)
   // reuses it, which is the whole point of idempotencyKey server-side.
-  //const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => crypto.randomUUID());
+  //const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => generateUUID());
   const [vitalsIdempotencyKey, setVitalsIdempotencyKey] = useState(() => generateUUID());
 
   const vitalsHistoryQuery = useQuery({
@@ -907,10 +924,15 @@ export function PatientDetailPage() {
 
   const captureVitals = useMutation({
     mutationFn: (payload: CaptureTriagePayload) => captureTriage(activeVisitId as string, payload),
-    onSuccess: () => {
+    onSuccess: (assessment) => {
+      queryClient.setQueryData<TriageAssessment[]>(["triage-history", activeVisitId], (history = []) => [
+        ...history.filter((item) => item.id !== assessment.id), assessment,
+      ]);
+      setVitalsError(null);
+      showToast("Vitals saved.", "success");
       setIsCapturingVitals(false);
       setVitalsForm(EMPTY_VITALS_FORM);
-      //setVitalsIdempotencyKey(crypto.randomUUID());
+      //setVitalsIdempotencyKey(generateUUID());
       setVitalsIdempotencyKey(generateUUID());
       queryClient.invalidateQueries({ queryKey: ["triage-history", activeVisitId] });
       queryClient.invalidateQueries({ queryKey: ["patient-vitals-history"] });
@@ -1083,11 +1105,6 @@ export function PatientDetailPage() {
                   </div>
                 ) : isCapturingVitals ? (
                   <>
-                    {vitalsError && (
-                      <p role="alert" className="mb-4 text-[13.5px] text-danger-600">
-                        {vitalsError}
-                      </p>
-                    )}
   
                     <label className="mb-4 flex items-center gap-3 rounded-lg border border-danger-500/25 bg-danger-50 px-3.5 py-3">
                       <Switch
@@ -1272,7 +1289,7 @@ export function PatientDetailPage() {
                       </div>
                     )}
   
-                    <AdditionalVitalsForm value={vitalsForm.additional} onChange={additional => setVitalsForm(f => ({ ...f, additional }))} />
+                    <AdditionalVitalsForm value={vitalsForm.additional} traumaRequired={!vitalsForm.emergencySign} onChange={additional => setVitalsForm(f => ({ ...f, additional }))} />
                     <label className="mt-4 flex flex-col gap-1.5">
                       <span className="text-[13px] font-medium text-text-primary">Presenting complaint</span>
                       <textarea
@@ -1299,11 +1316,24 @@ export function PatientDetailPage() {
                       </label>
                     )}
   
-                    <div className="mt-4 flex gap-2">
-                      <Button loading={captureVitals.isPending} onClick={handleCaptureVitals}>
-                        Save vitals
+                    {vitalsError && (
+                      <div
+                        ref={vitalsErrorRef}
+                        role="alert"
+                        tabIndex={-1}
+                        className="mt-4 scroll-mt-24 rounded-lg border border-danger-500/30 bg-danger-50 p-3 text-[13.5px] text-danger-600 outline-none focus-visible:ring-2 focus-visible:ring-danger-500"
+                      >
+                        <p className="font-semibold">Vitals were not saved.</p>
+                        <p>{vitalsError}</p>
+                      </div>
+                    )}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button type="button" loading={captureVitals.isPending} onClick={handleCaptureVitals}>
+                        {captureVitals.isPending ? "Saving vitals…" : "Save vitals"}
                       </Button>
                       <Button
+                        type="button"
+                        disabled={captureVitals.isPending}
                         variant="secondary"
                         onClick={() => {
                           setIsCapturingVitals(false);
@@ -1661,7 +1691,10 @@ export function PatientDetailPage() {
                       variant="secondary"
                       size="md"
                       icon={<HeartPulse className="size-3.5" aria-hidden />}
-                      onClick={() => setIsCapturingVitals(true)}
+                      onClick={() => {
+                        setActiveTab("vitals");
+                        setIsCapturingVitals(true);
+                      }}
                     >
                       Take vitals
                     </Button>}
@@ -1713,6 +1746,8 @@ export function PatientDetailPage() {
               )}
             </Card>
           )}
+
+          {activeVisitId && <VisitTimingPanel key={activeVisitId} visitId={activeVisitId} />}
 
           <div role="tablist" aria-label="Patient record sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-border-subtle">
             {(["overview", "visits", "vitals", "consultation", "medication"] as const).map((tab) => (

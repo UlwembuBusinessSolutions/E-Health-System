@@ -11,6 +11,8 @@ import { StatCard } from "@/shared/components/StatCard";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { InProgressConsultations } from "@/patient/InProgressConsultations";
+import { usesClinicianDashboard } from "@/auth/roles";
+import { ClinicianDashboardPage } from "@/clinician/ClinicianDashboardPage";
 
 function sectorLabel(sector: string): string {
   return sector.charAt(0) + sector.slice(1).toLowerCase();
@@ -24,7 +26,18 @@ function sectorLabel(sector: string): string {
 // stat/card the prototype has: this app's schema-per-org tenancy has no
 // clinic sub-entity to count, unlike the prototype's tenant-with-clinics
 // model.
+// Clinical roles get their own working dashboard (who to see next, notes to
+// sign, their appointments); it falls back to this organisation dashboard if
+// the server won't show that role the queue. Everyone else sees this one.
 export function DashboardPage() {
+  const { user } = useAuth();
+  if (usesClinicianDashboard(user?.role)) {
+    return <ClinicianDashboardPage fallback={<OrganizationDashboard />} />;
+  }
+  return <OrganizationDashboard />;
+}
+
+function OrganizationDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
