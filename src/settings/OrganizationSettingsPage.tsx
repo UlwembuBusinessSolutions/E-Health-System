@@ -1,4 +1,4 @@
-import { Blocks, Building2, Fingerprint, Mail, MapPin, Search, Settings2, ChevronRight, Palette, type LucideIcon } from "lucide-react";
+import { Blocks, Building2, Fingerprint, Mail, MapPin, Search, Settings2, ChevronRight, Palette, ShieldCheck, type LucideIcon } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FacilitiesSettingsSection } from "./FacilitiesSettingsSection";
@@ -9,6 +9,7 @@ import { SsoSettingsSection } from "./SsoSettingsSection";
 import { AppointmentsSettingsSection } from "./AppointmentsSettingsSection";
 import { CalendarDays } from "lucide-react";
 import { BrandingSettingsSection } from "./BrandingSettingsSection";
+import { MfaPolicySettingsSection } from "./MfaPolicySettingsSection";
 
 type OrganizationSettingsSection = {
   id: string;
@@ -48,6 +49,11 @@ const sections: OrganizationSettingsSection[] = [{
   description: "Let staff sign in with their organization's Microsoft account.",
   keywords: "sso single sign on microsoft azure ad entra oauth login staff", icon: Fingerprint,
   component: SsoSettingsSection,
+}, {
+  id: "mfa", title: "Multi-factor authentication", group: "Security",
+  description: "Configure the sign-in MFA requirement independently for each staff role.",
+  keywords: "mfa multi factor authentication two step verification security role policy", icon: ShieldCheck,
+  component: MfaPolicySettingsSection,
 }];
 
 export function OrganizationSettingsPage() {

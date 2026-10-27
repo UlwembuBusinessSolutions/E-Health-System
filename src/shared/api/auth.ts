@@ -84,6 +84,18 @@ export interface LoginPayload {
   tenantSlug: string;
 }
 
+export interface LoginResponse {
+  accessToken: string | null;
+  expiresAt: string | null;
+  user: UserSummary | null;
+  mfaRequired?: boolean;
+  mfaEnrolmentRequired?: boolean;
+  challengeToken?: string | null;
+  challengeExpiresAt?: string | null;
+  recoveryCodes?: string[] | null;
+  recoveryCodesRemaining?: number | null;
+}
+
 interface UserSummary {
   id: string;
   email: string;
@@ -91,11 +103,9 @@ interface UserSummary {
   lastName: string;
 }
 
-interface LoginResponse {
-  accessToken: string;
-  expiresAt: string;
-  user: UserSummary;
-}
+export type LoginOutcome =
+  | { type: "authenticated"; user: AuthenticatedUser }
+  | { type: "mfa"; challengeToken: string; challengeExpiresAt: string; enrolmentRequired: boolean };
 
 // Shared by login() and getCurrentUser() below — the real LoginResponse/
 // UserSummary has no role field at all (the known drift api-reference.html
@@ -112,13 +122,36 @@ function buildAuthenticatedUser(summary: UserSummary, token: string): Authentica
   };
 }
 
-export async function login(payload: LoginPayload): Promise<AuthenticatedUser> {
+export async function login(payload: LoginPayload): Promise<LoginOutcome> {
+  clearTenantAuth();
   setTenantSlug(payload.tenantSlug);
   const response = await apiClient.post<LoginResponse>(
     "/api/v1/auth/login",
     { email: payload.email, password: payload.password },
     { headers: { "X-Tenant-ID": payload.tenantSlug } },
   );
+  if (response.mfaRequired) {
+    if (!response.challengeToken || !response.challengeExpiresAt) {
+      throw new Error("The server returned an incomplete MFA challenge.");
+    }
+    return {
+      type: "mfa",
+      challengeToken: response.challengeToken,
+      challengeExpiresAt: response.challengeExpiresAt,
+      enrolmentRequired: !!response.mfaEnrolmentRequired,
+    };
+  }
+  if (!response.accessToken || !response.user) {
+    throw new Error("The server returned an incomplete sign-in response.");
+  }
+  setTenantToken(response.accessToken);
+  return { type: "authenticated", user: buildAuthenticatedUser(response.user, response.accessToken) };
+}
+
+export function establishMfaSession(response: LoginResponse): AuthenticatedUser {
+  if (!response.accessToken || !response.user) {
+    throw new Error("The server returned an incomplete MFA sign-in response.");
+  }
   setTenantToken(response.accessToken);
   return buildAuthenticatedUser(response.user, response.accessToken);
 }

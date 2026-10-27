@@ -61,6 +61,7 @@ import { CreateOperatorScreen } from "@/platform/CreateOperatorScreen";
 import { AuditPage } from "@/platform/AuditPage";
 import { ModuleEntitlementMatrixPage } from "@/platform/ModuleEntitlementMatrixPage";
 import { SyncCenterPage } from "@/offline/SyncCenterPage"; // OFFLINE
+import { SecurityPage } from "@/auth/SecurityPage";
 
 export function AppRouter() {
   return (
@@ -127,6 +128,7 @@ export function AppRouter() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="security" element={<SecurityPage />} />
         <Route
           path="staff"
           element={
