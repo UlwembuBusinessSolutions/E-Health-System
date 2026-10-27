@@ -32,6 +32,8 @@ import co.ehealth.platform.patient.PatientArchivedException;
 import co.ehealth.platform.patient.PatientDocumentNotFoundException;
 import co.ehealth.platform.patient.PatientGuardianNotFoundException;
 import co.ehealth.platform.patient.PatientNotFoundException;
+import co.ehealth.platform.patient.InvalidPatientVerificationCodeException;
+import co.ehealth.platform.patient.PatientIdentityMismatchException;
 import co.ehealth.platform.patient.TooManyGuardiansException;
 
 import co.ehealth.platform.patient.InvalidOfflineSyncException;
@@ -184,6 +186,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(InvalidResetCodeException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidResetCode(InvalidResetCodeException ex) {
         return ResponseEntity.badRequest().body(new ApiErrorResponse("Incorrect or expired code.", null));
+    }
+
+    @ExceptionHandler(InvalidPatientVerificationCodeException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidPatientVerificationCode(
+            InvalidPatientVerificationCodeException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PatientIdentityMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handlePatientIdentityMismatch(PatientIdentityMismatchException ex) {
+        return ResponseEntity.unprocessableEntity().body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(DuplicateFieldException.class)

@@ -37,4 +37,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, UUID> 
     // rather than push the +/- N minute window into SQL.
     List<Appointment> findByFacilityIdAndAssignedStaffIdAndAppointmentDateAndStatusNot(
             UUID facilityId, UUID assignedStaffId, LocalDate date, String status);
+
+    List<Appointment> findByPatientIdOrderByAppointmentDateAscAppointmentTimeAsc(UUID patientId);
 }

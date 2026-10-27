@@ -226,6 +226,28 @@ public class EmailService {
         send(toEmail, subject, body, html);
     }
 
+    public void sendPatientRegistrationCodeEmail(String toEmail, String firstName, String code,
+                                                  long codeTtlMinutes) {
+        String subject = "Verify your patient portal email";
+        String body = """
+                Hi %s,
+
+                Use this code to verify your email address and finish creating your patient account:
+
+                  %s
+
+                This code expires in %d minutes. If you didn't start this registration, you can ignore this email.
+                """.formatted(firstName, code, codeTtlMinutes);
+        String html = shell(Accent.SUCCESS,
+                kicker(Accent.SUCCESS, "Verify your email")
+                        + greeting("Hi " + esc(firstName) + ",")
+                        + lead("Use this code to verify your email address and finish creating your patient account:")
+                        + codeBox(esc(code), "Expires in " + codeTtlMinutes + " minutes")
+                        + muted("If you didn&rsquo;t start this registration, you can ignore this email."),
+                footer(FooterAudience.PATIENT));
+        send(toEmail, subject, body, html);
+    }
+
     // Fired once per PlatformOperatorService.resetPassword() call — the
     // admin-triggered counterpart to sendPlatformOperatorAccountCreatedEmail
     // above, for an operator who already has an account but needs a new

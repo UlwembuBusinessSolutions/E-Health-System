@@ -31,6 +31,10 @@ public interface AppointmentStaffRepository extends Repository<Appointment, UUID
         """, nativeQuery = true)
     List<StaffOption> findAvailable(@Param("facilityId") UUID facilityId);
 
+    default List<StaffOption> findPatientBookingOptions(UUID facilityId) {
+        return findAvailable(facilityId);
+    }
+
     // Keep names visible on historical bookings even when a staff member is disabled or moves facilities.
     @Query(value = """
         SELECT u.id AS id, CONCAT(u.first_name, ' ', u.last_name) AS name, u.designation AS designation
