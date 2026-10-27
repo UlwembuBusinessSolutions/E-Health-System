@@ -32,6 +32,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import co.ehealth.platform.identity.mfa.MfaAdminService;
+
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -110,6 +112,7 @@ public class OrganizationProvisioningService {
     // identity.RolePermissionService, not RoleRepository/PermissionRepository
     // directly — same module-boundary rule as staffService above.
     private final RolePermissionService rolePermissionService;
+    private final MfaAdminService mfaAdminService;
 
     public OrganizationProvisioningService(OrganizationRepository organizationRepository,
             TenantMigrationRunner migrationRunner, StaffService staffService, AuditLogService auditLogService,
@@ -117,7 +120,7 @@ public class OrganizationProvisioningService {
             OrganizationBrandingService organizationBrandingService,
             OrganizationMailSettingsService organizationMailSettingsService,
             ModuleEntitlementRepository moduleEntitlementRepository,
-            ModuleEntitlementQueryService moduleEntitlementQueryService,
+            ModuleEntitlementQueryService moduleEntitlementQueryService, MfaAdminService mfaAdminService,
             FacilityService facilityService, RolePermissionService rolePermissionService) {
         this.organizationRepository = organizationRepository;
         this.migrationRunner = migrationRunner;
@@ -129,6 +132,7 @@ public class OrganizationProvisioningService {
         this.organizationMailSettingsService = organizationMailSettingsService;
         this.moduleEntitlementRepository = moduleEntitlementRepository;
         this.moduleEntitlementQueryService = moduleEntitlementQueryService;
+        this.mfaAdminService = mfaAdminService;
         this.facilityService = facilityService;
         this.rolePermissionService = rolePermissionService;
     }
@@ -347,6 +351,24 @@ public class OrganizationProvisioningService {
         }
         recordPlatformAudit(actingOperatorId,
                 enabled ? "ORGANIZATION_ADMIN_ENABLED" : "ORGANIZATION_ADMIN_DISABLED", organizationId);
+    }
+
+    // Platform-side recovery for "the org's only admin lost their authenticator
+    // and has no recovery codes". Same TenantContext set/clear-in-finally
+    // discipline as resetAdminPassword()/setAdminEnabled() above. actorUserId
+    // is null on purpose: a platform operator isn't a row in this tenant's
+    // users table, so their id travels in the tenant audit detail and in the
+    // platform_audit_log row below instead.
+    public void resetAdminMfa(UUID organizationId, UUID userId, UUID actingOperatorId) {
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(OrganizationNotFoundException::new);
+        TenantContext.setCurrentTenant(organization.getSchemaName());
+        try {
+            mfaAdminService.resetUserMfa(userId, null, actingOperatorId);
+        } finally {
+            TenantContext.clear();
+        }
+        recordPlatformAudit(actingOperatorId, "ORGANIZATION_ADMIN_MFA_RESET", organizationId);
     }
 
     public void suspend(UUID organizationId, UUID actingOperatorId) {
