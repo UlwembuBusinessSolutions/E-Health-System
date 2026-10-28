@@ -83,7 +83,7 @@ public class PatientMigrationWriter {
             }
             candidate.reactivateFromMigration(cmd.firstName(), cmd.lastName(), cmd.address(), cmd.contactNumber(),
                     cmd.email(), cmd.medicalAidProvider(), cmd.medicalAidNumber(), cmd.passportNumber(),
-                    cmd.passportExpiry());
+                    cmd.passportExpiry(), cmd.parentRelationship(), cmd.patientFileNumber());
             patientRepository.save(candidate);
             // The old outbound link is stale the moment this person is back
             // — and patient_id is UNIQUE on patient_migrations, so it has to
@@ -97,7 +97,8 @@ public class PatientMigrationWriter {
             destinationPatient = new Patient(mpiNumber, cmd.firstName(), cmd.lastName(), cmd.dateOfBirth(),
                     cmd.gender(), cmd.citizenshipStatus(), cmd.idNumber(), cmd.address(), cmd.contactNumber(),
                     cmd.email(), cmd.medicalAidProvider(), cmd.medicalAidNumber(), cmd.passportNumber(),
-                    cmd.passportExpiry(), cmd.registeredByUserId(), cmd.now());
+                    cmd.passportExpiry(), cmd.parentRelationship(), cmd.patientFileNumber(),
+                    cmd.registeredByUserId(), cmd.now());
             patientRepository.save(destinationPatient);
         }
 
@@ -125,6 +126,7 @@ public class PatientMigrationWriter {
                                            CitizenshipStatus citizenshipStatus, String idNumber, String address,
                                            String contactNumber, String email, String medicalAidProvider,
                                            String medicalAidNumber, String passportNumber, LocalDate passportExpiry,
+                                           ParentRelationship parentRelationship, String patientFileNumber,
                                            UUID registeredByUserId, List<PatientDocument> documents, Instant now) {
     }
 

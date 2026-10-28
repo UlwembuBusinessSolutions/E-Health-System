@@ -143,6 +143,7 @@ public class PatientMigrationService {
                     patient.getCitizenshipStatus(), patient.getIdNumber(), patient.getAddress(),
                     patient.getContactNumber(), patient.getEmail(), patient.getMedicalAidProvider(),
                     patient.getMedicalAidNumber(), patient.getPassportNumber(), patient.getPassportExpiry(),
+                    patient.getParentRelationship(), patient.getPatientFileNumber(),
                     actingUserId, documents, now));
         } finally {
             // Restore, not clear() — this request is still origin-tenant-

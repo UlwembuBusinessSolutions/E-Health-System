@@ -60,7 +60,8 @@ public class PatientController {
         var command = new PatientService.RegisterPatientCommand(request.firstName(), request.lastName(),
                 request.idNumber(), request.address(), request.contactNumber(), request.email(),
                 request.medicalAidProvider(), request.medicalAidNumber(), request.passportNumber(),
-                request.passportExpiry());
+                request.passportExpiry(), request.dateOfBirth(), request.parentRelationship(),
+                request.patientFileNumber());
         Patient patient = patientService.register(command, staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(PatientSummary.from(patient, false));
     }
@@ -301,7 +302,9 @@ public class PatientController {
             // Loosely validated (length only): passport number formats vary
             // too widely across issuing countries for a single regex the
             // way idNumber's own SA-specific pattern above works.
-            @Size(max = 20) String passportNumber, LocalDate passportExpiry) {
+            @Size(max = 20) String passportNumber, LocalDate passportExpiry,
+            @NotNull LocalDate dateOfBirth, ParentRelationship parentRelationship,
+            @Size(max = 100) String patientFileNumber) {
     }
 
     // idNumber is included, not masked — reception/admin staff handle ID
@@ -311,7 +314,8 @@ public class PatientController {
     // the caller (get() below), not stored on Patient itself — see that
     // method's own why-note.
     public record PatientSummary(UUID id, String mpiNumber, String firstName, String lastName,
-                                  LocalDate dateOfBirth, Gender gender, CitizenshipStatus citizenshipStatus,
+                                  LocalDate dateOfBirth, ParentRelationship parentRelationship,
+                                  String patientFileNumber, Gender gender, CitizenshipStatus citizenshipStatus,
                                   String idNumber, String address, String contactNumber, String email,
                                   String medicalAidProvider, String medicalAidNumber, String passportNumber,
                                   LocalDate passportExpiry, Instant createdAt, boolean archived,
@@ -319,8 +323,9 @@ public class PatientController {
                                   boolean migrated) {
         static PatientSummary from(Patient p, boolean migrated) {
             return new PatientSummary(p.getId(), p.getMpiNumber(), p.getFirstName(), p.getLastName(),
-                    p.getDateOfBirth(), p.getGender(), p.getCitizenshipStatus(), p.getIdNumber(), p.getAddress(),
-                    p.getContactNumber(), p.getEmail(), p.getMedicalAidProvider(), p.getMedicalAidNumber(),
+                    p.getDateOfBirth(), p.getParentRelationship(), p.getPatientFileNumber(), p.getGender(),
+                    p.getCitizenshipStatus(), p.getIdNumber(), p.getAddress(), p.getContactNumber(), p.getEmail(),
+                    p.getMedicalAidProvider(), p.getMedicalAidNumber(),
                     p.getPassportNumber(), p.getPassportExpiry(), p.getCreatedAt(), p.isArchived(),
                     p.getArchivedReason(), p.getArchivedAt(), p.getDeceasedDate(), migrated);
         }
