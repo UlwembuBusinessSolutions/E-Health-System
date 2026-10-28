@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -58,7 +59,8 @@ public class OfflineRegistrationProcessor {
         }
 
         // Validation: a permanent failure, surfaced to the device for correction.
-        String problem = validate(item, now);
+        PatientController.RegisterPatientRequest registration = withLegacyDateOfBirth(item.data());
+        String problem = validate(registration, item, now);
         if (problem != null) {
             record.markRejected(problem);
             syncRepo.save(record);
@@ -79,36 +81,56 @@ public class OfflineRegistrationProcessor {
         }
 
         // Happy path: the exact same registration logic as online.
-        PatientController.RegisterPatientRequest d = item.data();
+        PatientController.RegisterPatientRequest d = registration;
         Patient patient = patientService.registerOffline(
                 new PatientService.RegisterPatientCommand(d.firstName(), d.lastName(), d.idNumber(), d.address(),
                         d.contactNumber(), d.email(), d.medicalAidProvider(), d.medicalAidNumber(),
-                        d.passportNumber(), d.passportExpiry()),
+                        d.passportNumber(), d.passportExpiry(), d.dateOfBirth(), d.parentRelationship(),
+                        d.patientFileNumber()),
                 userId, capturedAt);
         record.markSynced(patient.getId());
         syncRepo.save(record);
         return toResult(record);
     }
 
-    private String validate(OfflineSyncService.SyncItem item, Instant now) {
+    private String validate(PatientController.RegisterPatientRequest registration,
+            OfflineSyncService.SyncItem item, Instant now) {
         if (item.capturedAt() == null) {
             return "Capture time is required.";
         }
         if (item.capturedAt().isAfter(now.plusSeconds(300))) {
             return "Capture time cannot be in the future.";
         }
-        var violations = validator.validate(item.data());
+        var violations = validator.validate(registration);
         if (!violations.isEmpty()) {
             return violations.stream()
                     .map(v -> v.getPropertyPath() + ": " + v.getMessage())
                     .sorted().collect(Collectors.joining("; "));
         }
         try {
-            SouthAfricanIdNumber.parse(item.data().idNumber());
+            SouthAfricanIdNumber.parse(registration.idNumber());
         } catch (InvalidIdNumberException e) {
             return e.getMessage();
         }
         return null;
+    }
+
+    private PatientController.RegisterPatientRequest withLegacyDateOfBirth(
+            PatientController.RegisterPatientRequest registration) {
+        if (registration.dateOfBirth() != null) {
+            return registration;
+        }
+        LocalDate legacyDateOfBirth;
+        try {
+            legacyDateOfBirth = SouthAfricanIdNumber.parse(registration.idNumber()).dateOfBirth();
+        } catch (InvalidIdNumberException e) {
+            return registration;
+        }
+        return new PatientController.RegisterPatientRequest(registration.firstName(), registration.lastName(),
+                registration.idNumber(), registration.address(), registration.contactNumber(), registration.email(),
+                registration.medicalAidProvider(), registration.medicalAidNumber(), registration.passportNumber(),
+                registration.passportExpiry(), legacyDateOfBirth, registration.parentRelationship(),
+                registration.patientFileNumber());
     }
 
     private OfflineSyncService.SyncResult toResult(OfflineSyncRecord r) {

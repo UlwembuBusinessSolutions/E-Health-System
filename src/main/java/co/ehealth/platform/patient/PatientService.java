@@ -56,11 +56,10 @@ public class PatientService {
 
     // PREG-US-001: "an EPR is created and a unique MPI number is
     // generated ... the patient is immediately available in search and an
-    // AUDT PATIENT_REGISTERED event is recorded." idNumber is the only
-    // identity input the form takes — dateOfBirth/gender/citizenship all
-    // come from SouthAfricanIdNumber.parse(), never from the request
-    // directly, so there's no way for a caller to submit a DOB that
-    // disagrees with the ID number it was supposedly derived from.
+    // AUDT PATIENT_REGISTERED event is recorded." Gender and citizenship
+    // are derived from the South African ID number. The submitted
+    // dateOfBirth is stored as supplied; internal callers without one keep
+    // the ID-derived fallback.
     //
     // Reception hitting an idNumber that a patient already self-registered
     // under (PatientAuthService.register() already ran registerSelf()
@@ -122,10 +121,12 @@ public class PatientService {
                 .orElseThrow(() -> new IllegalStateException("Unknown organization for current tenant"));
         String mpiNumber = MpiNumberFormat.generate(organization.getTenantCode(),
                 patientRepository.nextMpiSequenceValue());
-        Patient patient = new Patient(mpiNumber, cmd.firstName(), cmd.lastName(), parsed.dateOfBirth(),
+        LocalDate dateOfBirth = cmd.dateOfBirth() == null ? parsed.dateOfBirth() : cmd.dateOfBirth();
+        Patient patient = new Patient(mpiNumber, cmd.firstName(), cmd.lastName(), dateOfBirth,
                 parsed.gender(), parsed.citizenshipStatus(), cmd.idNumber(), cmd.address(), cmd.contactNumber(),
                 cmd.email(), cmd.medicalAidProvider(), cmd.medicalAidNumber(), cmd.passportNumber(),
-                cmd.passportExpiry(), registeredByUserId, clock.instant());
+                cmd.passportExpiry(), cmd.parentRelationship(), cmd.patientFileNumber(),
+                registeredByUserId, clock.instant());
         patientRepository.save(patient);
 
         auditLogService.append(registeredByUserId, null, "PATIENT_REGISTERED", "Patient",
@@ -379,7 +380,14 @@ public class PatientService {
 
     public record RegisterPatientCommand(String firstName, String lastName, String idNumber, String address,
             String contactNumber, String email, String medicalAidProvider,
-            String medicalAidNumber, String passportNumber, LocalDate passportExpiry) {
+            String medicalAidNumber, String passportNumber, LocalDate passportExpiry,
+            LocalDate dateOfBirth, ParentRelationship parentRelationship, String patientFileNumber) {
+        public RegisterPatientCommand(String firstName, String lastName, String idNumber, String address,
+                String contactNumber, String email, String medicalAidProvider,
+                String medicalAidNumber, String passportNumber, LocalDate passportExpiry) {
+            this(firstName, lastName, idNumber, address, contactNumber, email, medicalAidProvider,
+                    medicalAidNumber, passportNumber, passportExpiry, null, null, null);
+        }
     }
 
     // No idNumber/dateOfBirth/gender/citizenshipStatus/mpiNumber here at

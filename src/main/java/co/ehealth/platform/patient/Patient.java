@@ -24,10 +24,9 @@ import java.util.UUID;
 // demographic details" a receptionist might need to correct. mpiNumber,
 // idNumber, dateOfBirth, gender, and citizenshipStatus have no setter at
 // all — mpiNumber per PREG-US-016's own AC2 ("not editable by any role"),
-// and the other four because they're derived from idNumber at construction
-// (SouthAfricanIdNumber.parse()'s own why-note); letting them drift
-// independently of the ID number they were derived from would break that
-// invariant. PatientService.update() is the only caller of these setters,
+// and the identity fields because they're fixed at registration; gender
+// and citizenship are derived from idNumber, while dateOfBirth is accepted
+// explicitly from the registration form. PatientService.update() is the only caller of these setters,
 // and only reaches them after PatientFieldHistory has recorded the prior
 // value — never call these directly from anywhere else.
 @Entity
@@ -55,6 +54,13 @@ public class Patient {
     // auto-derived."
     @Column(name = "date_of_birth", nullable = false)
     private LocalDate dateOfBirth;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "parent_relationship", length = 20)
+    private ParentRelationship parentRelationship;
+
+    @Column(name = "patient_file_number", length = 100)
+    private String patientFileNumber;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
@@ -142,10 +148,22 @@ public class Patient {
             CitizenshipStatus citizenshipStatus, String idNumber, String address, String contactNumber,
             String email, String medicalAidProvider, String medicalAidNumber, String passportNumber,
             LocalDate passportExpiry, UUID registeredByUserId, Instant createdAt) {
+        this(mpiNumber, firstName, lastName, dateOfBirth, gender, citizenshipStatus, idNumber, address,
+                contactNumber, email, medicalAidProvider, medicalAidNumber, passportNumber, passportExpiry,
+                null, null, registeredByUserId, createdAt);
+    }
+
+    public Patient(String mpiNumber, String firstName, String lastName, LocalDate dateOfBirth, Gender gender,
+            CitizenshipStatus citizenshipStatus, String idNumber, String address, String contactNumber,
+            String email, String medicalAidProvider, String medicalAidNumber, String passportNumber,
+            LocalDate passportExpiry, ParentRelationship parentRelationship, String patientFileNumber,
+            UUID registeredByUserId, Instant createdAt) {
         this.mpiNumber = mpiNumber;
         this.firstName = firstName;
         this.lastName = lastName;
         this.dateOfBirth = dateOfBirth;
+        this.parentRelationship = parentRelationship;
+        this.patientFileNumber = patientFileNumber;
         this.gender = gender;
         this.citizenshipStatus = citizenshipStatus;
         this.idNumber = idNumber;
@@ -178,6 +196,14 @@ public class Patient {
 
     public LocalDate getDateOfBirth() {
         return dateOfBirth;
+    }
+
+    public ParentRelationship getParentRelationship() {
+        return parentRelationship;
+    }
+
+    public String getPatientFileNumber() {
+        return patientFileNumber;
     }
 
     public Gender getGender() {
@@ -284,7 +310,8 @@ public class Patient {
     // have changed while this person was away).
     public void reactivateFromMigration(String firstName, String lastName, String address, String contactNumber,
             String email, String medicalAidProvider, String medicalAidNumber,
-            String passportNumber, LocalDate passportExpiry) {
+            String passportNumber, LocalDate passportExpiry, ParentRelationship parentRelationship,
+            String patientFileNumber) {
         this.archived = false;
         this.archivedReason = null;
         this.archivedAt = null;
@@ -299,6 +326,8 @@ public class Patient {
         this.medicalAidNumber = medicalAidNumber;
         this.passportNumber = passportNumber;
         this.passportExpiry = passportExpiry;
+        this.parentRelationship = parentRelationship;
+        this.patientFileNumber = patientFileNumber;
     }
 
     // Called only by PatientService.registerOffline(). Deliberately not a
