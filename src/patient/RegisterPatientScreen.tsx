@@ -27,7 +27,11 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { registerPatientSchema, type RegisterPatientValues } from "./validation";
+import {
+  extractSouthAfricanIdDateOfBirth,
+  registerPatientSchema,
+  type RegisterPatientValues,
+} from "./validation";
 import {
   addGuardian,
   registerPatient,
@@ -316,9 +320,8 @@ function GuardianEntry({
 
 // PREG-US-001: "Given a person is not already registered, When I complete
 // the registration form with all mandatory fields, Then an EPR is created
-// and a unique MPI number is generated." dateOfBirth/gender/citizenship
-// aren't form fields at all — PatientController derives all three from
-// idNumber alone.
+// and a unique MPI number is generated." Gender and citizenship are derived
+// from idNumber; dateOfBirth is collected explicitly.
 //
 // OFFLINE: when the device is offline (or the request never gets an answer),
 // the demographics are saved to the encrypted on-device outbox instead and
@@ -359,6 +362,7 @@ export function RegisterPatientScreen() {
   const {
     register,
     handleSubmit,
+    setValue,
     reset, // OFFLINE
     formState: { errors, isSubmitting },
   } = useForm<RegisterPatientValues>({
@@ -368,6 +372,12 @@ export function RegisterPatientScreen() {
       firstName: resend?.values.firstName ?? "",
       lastName: resend?.values.lastName ?? "",
       idNumber: resend?.values.idNumber ?? "",
+      dateOfBirth:
+        resend?.values.dateOfBirth ??
+        (resend?.values.idNumber ? extractSouthAfricanIdDateOfBirth(resend.values.idNumber) : null) ??
+        "",
+      parentRelationship: resend?.values.parentRelationship ?? "",
+      patientFileNumber: resend?.values.patientFileNumber ?? "",
       address: resend?.values.address ?? "",
       contactNumber: resend?.values.contactNumber ?? "",
       email: resend?.values.email ?? "",
@@ -378,11 +388,16 @@ export function RegisterPatientScreen() {
     },
   });
 
+  const idNumberField = register("idNumber");
+
   // OFFLINE: form values -> API payload (same mapping the online mutation uses).
   const toPayload = (v: RegisterPatientValues): RegisterPatientPayload => ({
     firstName: v.firstName,
     lastName: v.lastName,
     idNumber: v.idNumber,
+    dateOfBirth: v.dateOfBirth,
+    parentRelationship: v.parentRelationship || undefined,
+    patientFileNumber: v.patientFileNumber || undefined,
     address: v.address,
     contactNumber: v.contactNumber,
     email: v.email || undefined,
@@ -416,19 +431,7 @@ export function RegisterPatientScreen() {
   };
 
   const mutation = useMutation({
-    mutationFn: (values: RegisterPatientValues) =>
-      registerPatient({
-        firstName: values.firstName,
-        lastName: values.lastName,
-        idNumber: values.idNumber,
-        address: values.address,
-        contactNumber: values.contactNumber,
-        email: values.email || undefined,
-        medicalAidProvider: values.medicalAidProvider || undefined,
-        medicalAidNumber: values.medicalAidNumber || undefined,
-        passportNumber: values.passportNumber || undefined,
-        passportExpiry: values.passportExpiry || undefined,
-      }),
+    mutationFn: (values: RegisterPatientValues) => registerPatient(toPayload(values)),
     onSuccess: (patient: Patient) => {
       const staged: { documentType: PatientDocumentType; file: File }[] = [];
       if (photoFile) staged.push({ documentType: "PATIENT_PHOTO", file: photoFile });
@@ -729,9 +732,48 @@ export function RegisterPatientScreen() {
               placeholder="9005155001084"
               inputMode="numeric"
               autoComplete="off"
-              hint={!errors.idNumber ? "Date of birth, gender and citizenship are derived from this." : undefined}
+              hint={!errors.idNumber ? "Date of birth is filled from this ID number and must match it." : undefined}
               error={errors.idNumber?.message}
-              {...register("idNumber")}
+              {...idNumberField}
+              onChange={(event) => {
+                void idNumberField.onChange(event);
+                const dateOfBirth = extractSouthAfricanIdDateOfBirth(event.target.value);
+                if (dateOfBirth) {
+                  setValue("dateOfBirth", dateOfBirth, { shouldDirty: true, shouldValidate: true });
+                }
+              }}
+            />
+
+            <FormRow>
+              <Input
+                label="Date of birth"
+                type="date"
+                required
+                autoComplete="bday"
+                error={errors.dateOfBirth?.message}
+                {...register("dateOfBirth")}
+              />
+              <Select
+                label="Parent relationship"
+                options={[
+                  { value: "MOTHER", label: "Mother" },
+                  { value: "FATHER", label: "Father" },
+                ]}
+                placeholder="Optional"
+                error={errors.parentRelationship?.message}
+                {...register("parentRelationship")}
+              />
+            </FormRow>
+
+            <Input
+              label="Patient file number"
+              icon={<Hash className="size-4" aria-hidden />}
+              placeholder="Optional"
+              autoComplete="off"
+              maxLength={100}
+              hint={!errors.patientFileNumber ? "Letters and numbers are accepted." : undefined}
+              error={errors.patientFileNumber?.message}
+              {...register("patientFileNumber")}
             />
 
             <FormRow>

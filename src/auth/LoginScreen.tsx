@@ -20,6 +20,7 @@ import { Input } from "@/shared/components/Input";
 import { Button } from "@/shared/components/Button";
 import { useOffline } from "@/offline/OfflineContext"; // OFFLINE
 import type { AuthenticatedUser } from "@/shared/api/types";
+import { AuthenticatorSetupHelpDialog } from "./AuthenticatorSetupHelpDialog";
 
 // MicrosoftSsoService's own error codes, turned into something a person
 // signing in can actually make sense of — every one of these is a query
@@ -253,10 +254,12 @@ function MfaLoginStep({
   const [recoveryCode, setRecoveryCode] = useState("");
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAuthenticatorHelp, setShowAuthenticatorHelp] = useState(false);
   const setupMutation = useMutation({
     mutationFn: () => startMfaChallengeEnrolment(challenge.challengeToken),
     onSuccess: (result) => {
       setSecret(result);
+      setShowAuthenticatorHelp(false);
       setError(null);
     },
     onError: (reason) => setError(reason instanceof ApiError ? reason.message : "Couldn't start MFA setup. Please try again."),
@@ -298,9 +301,13 @@ function MfaLoginStep({
             <p className="text-[13px] font-semibold text-text-primary">Add this account to your authenticator</p>
             <p className="mt-1 text-[13px] text-text-secondary">In your app, choose to add an account manually and enter this setup key:</p>
             <code className="mt-3 block break-all rounded-lg bg-surface-sunken px-3 py-2.5 font-mono text-[13px] text-text-primary">{secret.secret}</code>
-            <a href={secret.otpauthUri} className="mt-3 inline-block text-[13px] font-medium text-brand-600 underline">
+            <button
+              type="button"
+              className="mt-3 inline-block text-[13px] font-medium text-brand-600 underline"
+              onClick={() => setShowAuthenticatorHelp(true)}
+            >
               Open in an authenticator app
-            </a>
+            </button>
           </div>
           <form onSubmit={(event) => { event.preventDefault(); setError(null); verifyMutation.mutate(); }} className="flex flex-col gap-4">
             <Input label="6-digit verification code" required inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} maxLength={6} />
@@ -321,6 +328,12 @@ function MfaLoginStep({
             {useRecoveryCode ? "Use an authenticator code instead" : "Use a recovery code"}
           </button>
         </>
+      )}
+      {secret && showAuthenticatorHelp && (
+        <AuthenticatorSetupHelpDialog
+          setupKey={secret.secret}
+          onClose={() => setShowAuthenticatorHelp(false)}
+        />
       )}
       <p className="text-[12px] text-text-secondary">This sign-in challenge expires at {Number.isNaN(expiredAt.getTime()) ? "the displayed expiry" : expiredAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.</p>
       <button type="button" onClick={onBack} className="inline-flex items-center gap-2 self-start text-[13px] font-medium text-text-secondary hover:text-text-primary">
