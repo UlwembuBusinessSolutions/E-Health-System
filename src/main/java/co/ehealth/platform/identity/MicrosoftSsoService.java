@@ -37,7 +37,7 @@ import java.util.Optional;
 public class MicrosoftSsoService {
 
     private static final Logger log = LoggerFactory.getLogger(MicrosoftSsoService.class);
-    private static final String SCOPE = "openid email profile";
+    private static final String SCOPE = "openid email profile User.Read";
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
 
     private final OrganizationLookupService organizationLookupService;
