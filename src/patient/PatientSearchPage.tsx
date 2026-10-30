@@ -351,8 +351,6 @@ export function PatientSearchPage() {
             onChange={setMedicalAidFilter}
             options={MEDICAL_AID_FILTER_OPTIONS}
           />
-          {false && (
-            <>
           <FilterPill
             label="Filter by citizenship"
             value={citizenshipFilter}
@@ -387,8 +385,6 @@ export function PatientSearchPage() {
               className="h-8 rounded-full border border-border-strong bg-surface-raised px-2.5 text-[13px] text-text-primary outline-none transition-colors duration-150 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
-            </>
-          )}
         </div>
       )}
 
