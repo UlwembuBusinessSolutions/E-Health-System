@@ -20,6 +20,7 @@ export interface PharmacyProduct {
   code: string;
   displayName: string;
   genericName: string | null;
+  atcCode: string | null;
   strength: string | null;
   dosageForm: string | null;
   category: StockCategory;
@@ -40,6 +41,19 @@ export interface PharmacyProduct {
   createdAt: string;
   updatedByName: string | null;
   updatedAt: string | null;
+}
+
+export interface AtcCatalogEntry {
+  productId: string;
+  productName: string;
+  ingredientName: string | null;
+  atcCode: string;
+  groupCode: string;
+  groupName: string;
+}
+
+export async function getAtcCatalog(): Promise<AtcCatalogEntry[]> {
+  return apiClient.get<AtcCatalogEntry[]>(`${BASE}/products/atc-catalog`, { headers: tenantAuthHeaders() });
 }
 
 export interface ListProductsParams {
@@ -70,6 +84,7 @@ export interface CreateProductPayload {
   packSize?: number;
   barcode?: string;
   manufacturer?: string;
+  atcCode?: string;
   batchTracked: boolean;
   expiryTracked: boolean;
   serialTracked: boolean;
@@ -97,6 +112,7 @@ export interface UpdateProductPayload {
   packSize?: number;
   barcode?: string;
   manufacturer?: string;
+  atcCode?: string | null;
   storageInstructions?: string;
   schedule: DrugSchedule | null;
   coldChain: boolean;

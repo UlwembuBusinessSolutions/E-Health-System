@@ -13,6 +13,8 @@ export interface MedicineAlternative {
   productId: string;
   name: string;
   available: number;
+  /** The alternative's ATC code, so the allergy rule can be checked before it is picked. */
+  atcCode: string | null;
 }
 
 export interface Medicine {
@@ -22,6 +24,7 @@ export interface Medicine {
   genericName: string | null;
   strength: string | null;
   dosageForm: string | null;
+  atcCode: string | null;
   unit: string;
   packSize: number | null;
   schedule: "S5" | "S6" | null;

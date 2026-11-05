@@ -5,25 +5,28 @@ import { Card } from "@/shared/components/Card";
 import { EntriesTable } from "./EntriesTable";
 import { MedicineForm } from "./MedicineForm";
 import { ReviewDialog } from "./ReviewDialog";
-import { problemsOf, type Entry, type PrescriptionState } from "./entries";
+import { allergyConflicts, problemsOf, type Entry, type PrescriptionState } from "./entries";
 
 interface PrescriptionWorkspaceProps {
   state: PrescriptionState;
   onChange: (state: PrescriptionState) => void;
   /** One line about the patient's recorded allergies, or null when none are recorded. */
   allergyNote: string | null;
+  allergyAtcCodes: string[];
+  patientWeightKg: number | null;
   patientLabel: string;
 }
 
 // The doctor's prescribing area on the consultation: a switch to prescribe at all, a form to enter one
 // medicine with every direction, and a table of what has been entered so far. The prescription is
 // part of the draft, so it is kept when the record is closed.
-export function PrescriptionWorkspace({ state, onChange, allergyNote, patientLabel }: PrescriptionWorkspaceProps) {
+export function PrescriptionWorkspace({ state, onChange, allergyNote, allergyAtcCodes, patientWeightKg, patientLabel }: PrescriptionWorkspaceProps) {
   const [editing, setEditing] = useState<Entry | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [pharmacyName, setPharmacyName] = useState("");
 
-  const problems = problemsOf(state);
+  const problems = problemsOf(state, allergyAtcCodes);
+  const conflicts = allergyConflicts(state.entries, allergyAtcCodes);
   const pharmacyCount = state.entries.filter((entry) => entry.supply === "PHARMACY").length;
   const buyCount = state.entries.length - pharmacyCount;
 
@@ -88,9 +91,27 @@ export function PrescriptionWorkspace({ state, onChange, allergyNote, patientLab
             </p>
           )}
 
+          {conflicts.length > 0 && (
+            <div role="alert" className="space-y-2 rounded-lg border border-danger-600 bg-danger-50 px-3.5 py-2.5 text-[13.5px] text-danger-600">
+              <p><strong>Allergy warning.</strong> These medicines share their first five ATC characters with a recorded allergy and cannot be prescribed:</p>
+              <ul className="space-y-1">
+                {conflicts.map((entry) => (
+                  <li key={entry.key} className="flex flex-wrap items-center justify-between gap-2">
+                    <span>{entry.name} ({entry.atcCode})</span>
+                    <button type="button" onClick={() => setEditing(entry)} className="min-h-9 rounded-full border border-danger-600 px-3 text-[12.5px] font-semibold hover:bg-danger-100">
+                      Change medicine
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <MedicineForm
             key={editing?.key ?? "new"}
             entries={state.entries}
+            allergyAtcCodes={allergyAtcCodes}
+            patientWeightKg={patientWeightKg}
             editing={editing}
             onSave={save}
             onPharmacyKnown={setPharmacyName}

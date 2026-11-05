@@ -19,6 +19,8 @@ import {
 
 interface MedicineFormProps {
   entries: Entry[];
+  allergyAtcCodes: string[];
+  patientWeightKg: number | null;
   /** The entry being edited, or null when adding a new one. */
   editing: Entry | null;
   onSave: (saved: Entry[], replacingKey: string | null) => void;
@@ -43,6 +45,7 @@ interface Fields {
 interface Picked {
   productId: string;
   available: number;
+  atcCode: string | null;
 }
 
 const EMPTY: Fields = {
@@ -72,16 +75,17 @@ function Field({ label, note, className = "", children }: { label: string; note?
 // Step 1 of the prescription: one medicine at a time, with every direction written out. The name box
 // searches the pharmacy's live stock; a medicine picked from it can be supplied by the pharmacy, one
 // typed by hand can only be bought by the patient.
-export function MedicineForm({ entries, editing, onSave, onPharmacyKnown, onCancelEdit }: MedicineFormProps) {
+export function MedicineForm({ entries, editing, allergyAtcCodes, patientWeightKg, onSave, onPharmacyKnown, onCancelEdit }: MedicineFormProps) {
   const listId = useId();
   const [fields, setFields] = useState<Fields>(() => (editing ? fieldsOf(editing) : EMPTY));
   const [picked, setPicked] = useState<Picked | null>(() =>
-    editing?.productId && editing.available !== null ? { productId: editing.productId, available: editing.available } : null,
+    editing?.productId && editing.available !== null ? { productId: editing.productId, available: editing.available, atcCode: editing.atcCode ?? null } : null,
   );
   const [error, setError] = useState<string | null>(null);
   const [splitOffer, setSplitOffer] = useState<{ left: number; extra: number } | null>(null);
   const [searching, setSearching] = useState(false);
   const [active, setActive] = useState(0);
+  const [dosePerKg, setDosePerKg] = useState("");
 
   const query = useDebouncedValue(fields.name.trim(), 250);
   const canSearch = searching && query.length >= MIN_SEARCH_LENGTH;
@@ -118,7 +122,7 @@ export function MedicineForm({ entries, editing, onSave, onPharmacyKnown, onCanc
 
   function pick(medicine: Medicine) {
     const strengthForm = [medicine.strength, medicine.dosageForm].filter(Boolean).join(" ");
-    setPicked({ productId: medicine.productId, available: medicine.available });
+    setPicked({ productId: medicine.productId, available: medicine.available, atcCode: medicine.atcCode });
     setFields((current) => ({
       ...current,
       name: medicine.name,
@@ -130,6 +134,8 @@ export function MedicineForm({ entries, editing, onSave, onPharmacyKnown, onCanc
     setError(null);
     setSplitOffer(null);
   }
+
+  const matchingAllergy = picked?.atcCode && allergyAtcCodes.some((code) => code.slice(0, 5) === picked.atcCode?.slice(0, 5));
 
   function onNameKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (!searching || results.length === 0) return;
@@ -170,12 +176,14 @@ export function MedicineForm({ entries, editing, onSave, onPharmacyKnown, onCanc
       supply,
       instructions: fields.instructions.trim(),
       available: picked?.available ?? null,
+      atcCode: picked?.atcCode ?? null,
     };
   }
 
   function submit(event: FormEvent) {
     event.preventDefault();
     const quantity = Number(fields.quantity);
+    if (matchingAllergy) return setError("This medicine shares the first five ATC characters with a recorded allergy. Choose another medicine.");
     if (!Number.isInteger(quantity) || quantity < 1) return setError("Quantity must be a whole number of 1 or more.");
     const duplicate = findDuplicate(entries, { name: fields.name, strengthForm: fields.strengthForm, supply: fields.supply }, editing?.key);
     if (duplicate) {
@@ -270,7 +278,7 @@ export function MedicineForm({ entries, editing, onSave, onPharmacyKnown, onCanc
                             event.preventDefault();
                             event.stopPropagation();
                             const full = results.find((candidate) => candidate.productId === alternative.productId);
-                            pick(full ?? { ...medicine, productId: alternative.productId, name: alternative.name, available: alternative.available, level: "IN_STOCK", alternatives: [] });
+                            pick(full ?? { ...medicine, productId: alternative.productId, name: alternative.name, atcCode: alternative.atcCode, available: alternative.available, level: "IN_STOCK", alternatives: [] });
                           }}
                           className="min-h-9 rounded-full border border-brand-300 bg-surface-raised px-3 text-[12.5px] font-semibold hover:bg-brand-100"
                         >
@@ -292,8 +300,15 @@ export function MedicineForm({ entries, editing, onSave, onPharmacyKnown, onCanc
         </Field>
 
         <Field label="Dose *" className="sm:col-span-2">
-          <input required maxLength={100} value={fields.dose} onChange={(event) => set("dose", event.target.value)} placeholder="e.g. 1 tablet" className={INPUT_CLASS} />
+          <input required maxLength={100} value={fields.dose} onChange={(event) => { setDosePerKg(""); set("dose", event.target.value); }} placeholder="e.g. 1 tablet" className={INPUT_CLASS} />
         </Field>
+        {patientWeightKg != null && patientWeightKg > 0 && <Field label="Weight-based dose (mg/kg)" note={`Current recorded weight: ${patientWeightKg} kg`} className="sm:col-span-2">
+          <input type="number" min="0.01" step="any" value={dosePerKg} onChange={(event) => {
+            const value = event.target.value;
+            setDosePerKg(value);
+            if (value && Number(value) > 0) set("dose", `${value} mg/kg (${(Number(value) * patientWeightKg).toFixed(1)} mg per dose for ${patientWeightKg} kg)`);
+          }} placeholder="Optional" className={INPUT_CLASS} />
+        </Field>}
         <Field label="Route *" className="sm:col-span-2">
           <select required value={fields.route} onChange={(event) => set("route", event.target.value)} className={INPUT_CLASS}>
             <option value="">Select route</option>

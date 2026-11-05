@@ -41,6 +41,7 @@ export function MoreDetailsSection({ values, update }: SectionProps) {
         <div className="mt-4 flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Generic name" placeholder="e.g. Ibuprofen" value={values.genericName} onChange={(event) => update({ genericName: event.target.value })} />
+            <Input label="ATC code" placeholder="e.g. N02BE01" maxLength={7} className="font-mono uppercase" value={values.atcCode} onChange={(event) => update({ atcCode: event.target.value.toUpperCase() })} />
             <Input label="Manufacturer" placeholder="e.g. Cipla" value={values.manufacturer} onChange={(event) => update({ manufacturer: event.target.value })} />
             <Input label="Barcode / GTIN" className="font-mono" placeholder="Scan it here" value={values.barcode} onChange={(event) => update({ barcode: event.target.value })} />
             <Input label="Storage" placeholder="e.g. Keep refrigerated 2–8 °C" value={values.storageInstructions} onChange={(event) => update({ storageInstructions: event.target.value })} />

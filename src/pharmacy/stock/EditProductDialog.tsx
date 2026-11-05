@@ -17,6 +17,7 @@ import { describeError } from "../lib/problem";
 import { pharmacyKeys } from "../lib/queryKeys";
 import { unitLabel } from "../lib/units";
 import { useProductDetails } from "./stockQueries";
+import { ProductIndications } from "../products/ProductIndications";
 
 const NO_SUPPLIER = "NONE";
 
@@ -27,6 +28,7 @@ const editSchema = z.object({
   reorderThreshold: whole("Use a whole number"),
   packSize: whole("Use a whole number").refine((value) => value === "" || Number(value) >= 1, "Must be at least 1"),
   barcode: z.string().trim().max(64),
+  atcCode: z.string().trim().max(7).regex(/^$|^[A-Za-z][0-9]{2}[A-Za-z]{2}([A-Za-z0-9]{1,2})?$/, "Use a valid 5 or 7 character ATC code"),
   storageInstructions: z.string().trim().max(500),
   preferredSupplierId: z.string(),
 });
@@ -82,6 +84,7 @@ function EditProductForm({ row, product, facilityId, onClose }: EditProductFormP
       reorderThreshold: row.reorderThreshold?.toString() ?? "",
       packSize: product.packSize?.toString() ?? "",
       barcode: product.barcode ?? "",
+      atcCode: product.atcCode ?? "",
       storageInstructions: product.storageInstructions ?? "",
       preferredSupplierId: product.preferredSupplierId ?? NO_SUPPLIER,
     },
@@ -97,6 +100,7 @@ function EditProductForm({ row, product, facilityId, onClose }: EditProductFormP
         strength: product.strength ?? undefined,
         dosageForm: product.dosageForm ?? undefined,
         manufacturer: product.manufacturer ?? undefined,
+        atcCode: values.atcCode,
         schedule: product.schedule,
         coldChain: product.coldChain,
         packSize: values.packSize ? Number(values.packSize) : undefined,
@@ -146,8 +150,10 @@ function EditProductForm({ row, product, facilityId, onClose }: EditProductFormP
           <Input label="Units per pack" inputMode="numeric" error={errors.packSize?.message} {...register("packSize")} />
         </FormRow>
         <Input label="Barcode" className="font-mono" placeholder="Scan it here" error={errors.barcode?.message} {...register("barcode")} />
+        <Input label="ATC code" className="font-mono uppercase" placeholder="e.g. N02BE01" error={errors.atcCode?.message} {...register("atcCode")} />
         <Input label="Storage" placeholder="e.g. Keep refrigerated 2–8 °C" error={errors.storageInstructions?.message} {...register("storageInstructions")} />
         <Select label="Usual supplier" options={supplierOptions} {...register("preferredSupplierId")} />
+        <ProductIndications productId={product.id} />
 
         <p className="rounded-lg bg-surface-sunken px-3.5 py-3 text-[13px] text-text-secondary">
           Locked after the first receipt, because changing them would break the history: SKU{" "}

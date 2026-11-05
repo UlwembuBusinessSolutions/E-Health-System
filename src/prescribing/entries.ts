@@ -22,6 +22,8 @@ export interface Entry {
   instructions: string;
   /** What the shelf held when the medicine was picked; the server checks again when signing. */
   available: number | null;
+  /** ATC code of the picked product. The allergy rule compares its first 5 characters. */
+  atcCode: string | null;
 }
 
 export interface PrescriptionState {
@@ -102,9 +104,28 @@ export function sentenceOf(entry: Pick<Entry, "dose" | "route" | "frequency" | "
 }
 
 /** Everything that stops the prescription being sent, in plain words. Empty means it can go. */
-export function problemsOf(state: PrescriptionState): string[] {
+/** Lines whose ATC code shares its first 5 characters with a recorded allergy (story: they cannot be prescribed). */
+export function allergyConflicts(entries: Entry[], allergyAtcCodes: string[]): Entry[] {
+  const groups = allergyAtcCodes.map((code) => code.trim().toUpperCase().slice(0, 5)).filter((group) => group.length === 5);
+  if (groups.length === 0) return [];
+  return entries.filter((entry) => entry.atcCode && groups.includes(entry.atcCode.trim().toUpperCase().slice(0, 5)));
+}
+
+/** With allergies recorded, a line that has no ATC code cannot be checked, so it cannot be sent either. */
+export function unverifiableForAllergy(entries: Entry[], allergyAtcCodes: string[]): Entry[] {
+  return allergyAtcCodes.length === 0 ? [] : entries.filter((entry) => !entry.atcCode);
+}
+
+export function problemsOf(state: PrescriptionState, allergyAtcCodes: string[] = []): string[] {
   if (!state.prescribe) return [];
   const problems: string[] = [];
+  const conflicts = allergyConflicts(state.entries, allergyAtcCodes);
+  if (conflicts.length > 0) {
+    problems.push(`Allergy warning: ${conflicts.map((entry) => entry.name).join(", ")} shares an ATC group with a recorded allergy. Change the medicine.`);
+  }
+  if (unverifiableForAllergy(state.entries, allergyAtcCodes).length > 0) {
+    problems.push("A recorded allergy needs every medicine picked from the pharmacy list (with an ATC code) so it can be checked.");
+  }
   if (state.entries.length === 0) problems.push("Add at least one medicine.");
   if (state.entries.some((entry) => shortfallOf(state.entries, entry) > 0)) {
     problems.push("Some quantities are more than the pharmacy holds.");
@@ -162,7 +183,7 @@ export function parse(json: string | null | undefined): PrescriptionState {
   if (!json) return EMPTY_PRESCRIPTION;
   try {
     const value = JSON.parse(json) as Partial<PrescriptionState>;
-    const entries = Array.isArray(value.entries) ? value.entries.filter((entry): entry is Entry => typeof entry?.name === "string") : [];
+    const entries = Array.isArray(value.entries) ? value.entries.filter((entry): entry is Entry => typeof entry?.name === "string").map((entry) => ({ ...entry, atcCode: entry.atcCode ?? null })) : [];
     return { prescribe: value.prescribe === true || entries.length > 0, entries };
   } catch {
     return EMPTY_PRESCRIPTION;

@@ -19,6 +19,7 @@ export interface ProductFormValues {
   packSize: string;
   reorderThreshold: string;
   genericName: string;
+  atcCode: string;
   manufacturer: string;
   barcode: string;
   storageInstructions: string;
@@ -116,6 +117,7 @@ export function emptyProductValues(name = ""): ProductFormValues {
     packSize: "",
     reorderThreshold: "",
     genericName: "",
+    atcCode: "",
     manufacturer: "",
     barcode: "",
     storageInstructions: "",
@@ -146,6 +148,7 @@ export function valuesFromProduct(product: PharmacyProduct): ProductFormValues {
     packSize: product.packSize?.toString() ?? "",
     reorderThreshold: "",
     genericName: product.genericName ?? "",
+    atcCode: product.atcCode ?? "",
     manufacturer: product.manufacturer ?? "",
     barcode: "",
     storageInstructions: product.storageInstructions ?? "",
@@ -206,6 +209,7 @@ export function toCreatePayload(values: ProductFormValues, sku: string, facility
     code: sku.trim(),
     displayName: composeDisplayName(values),
     genericName: orUndefined(values.genericName),
+    atcCode: orUndefined(values.atcCode),
     strength: orUndefined(values.strength),
     dosageForm: orUndefined(values.dosageForm),
     category: values.category,

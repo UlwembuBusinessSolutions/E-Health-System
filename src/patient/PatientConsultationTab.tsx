@@ -12,6 +12,7 @@ import { StatusPill } from "@/shared/components/StatusPill";
 import { ApiError } from "@/shared/api/client";
 import { getLatestTriage } from "@/shared/api/triage";
 import { getFacilities } from "@/shared/api/facilities";
+import { getAtcCatalog } from "@/shared/api/pharmacyStock";
 import {
   addConsultationDiagnosis,
   amendConsultation,
@@ -241,6 +242,7 @@ function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeV
             key={current.id}
             consultation={current}
             presentingComplaint={triageQuery.data?.presentingComplaint ?? carriedVitalsQuery.data?.presentingComplaint ?? null}
+            patientWeightKg={triageQuery.data?.additionalObservations?.weightKg ?? carriedVitalsQuery.data?.additionalObservations?.weightKg ?? null}
             onChanged={invalidate}
           />
         </>
@@ -273,16 +275,18 @@ function ConsultationStart({
 function ConsultationRecord({
   consultation,
   presentingComplaint,
+  patientWeightKg,
   onChanged,
 }: {
   consultation: Consultation;
   presentingComplaint: string | null;
+  patientWeightKg: number | null;
   onChanged: () => void;
 }) {
   if (consultation.status === "DRAFT") {
-    return <DraftView consultation={consultation} presentingComplaint={presentingComplaint} onChanged={onChanged} />;
+    return <DraftView consultation={consultation} presentingComplaint={presentingComplaint} patientWeightKg={patientWeightKg} onChanged={onChanged} />;
   }
-  return <SignedView consultation={consultation} presentingComplaint={presentingComplaint} onChanged={onChanged} />;
+  return <SignedView consultation={consultation} presentingComplaint={presentingComplaint} patientWeightKg={patientWeightKg} onChanged={onChanged} />;
 }
 
 const BYPASS_LABELS: Record<NonNullable<Consultation["vitalsBypassReason"]>, string> = {
@@ -353,6 +357,18 @@ const ALLERGY_OPTIONS: { value: AllergyStatus; label: string }[] = [
   { value: "KNOWN", label: "Known allergies" },
 ];
 
+type StructuredAllergy = { kind: "INGREDIENT" | "PRODUCT" | "GROUP"; name: string; atcCode: string };
+function parseAllergies(detail: string): StructuredAllergy[] {
+  try {
+    const value: unknown = JSON.parse(detail);
+    if (Array.isArray(value)) return value.filter((item): item is StructuredAllergy => item && typeof item.name === "string");
+  } catch { /* Older consultations stored free text. */ }
+  return detail.trim() ? [{ kind: "INGREDIENT", name: detail, atcCode: "" }] : [];
+}
+function allergyCodesOf(detail: string): string[] {
+  return parseAllergies(detail).map((allergy) => allergy.atcCode.trim().toUpperCase()).filter((code) => /^[A-Z][0-9]{2}[A-Z]{2}/.test(code));
+}
+
 function AllergyStatusPicker({
   value,
   detail,
@@ -366,6 +382,20 @@ function AllergyStatusPicker({
   onChangeDetail?: (value: string) => void;
   disabled?: boolean;
 }) {
+  const [allergies, setAllergies] = useState(() => parseAllergies(detail));
+  useEffect(() => setAllergies(parseAllergies(detail)), [detail]);
+  const atcCatalog = useQuery({
+    queryKey: ["pharmacy-products", "atc-allergy-options"],
+    queryFn: getAtcCatalog,
+    enabled: value === "KNOWN",
+    staleTime: 5 * 60_000,
+  });
+  const catalogProducts = atcCatalog.data ?? [];
+  const catalogGroups = Array.from(new Map(catalogProducts.map((product) => [product.groupCode, product.groupName])).entries());
+  const updateAllergies = (next: StructuredAllergy[]) => {
+    setAllergies(next);
+    onChangeDetail?.(JSON.stringify(next));
+  };
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[13px] font-medium text-text-primary">Allergies</span>
@@ -393,7 +423,35 @@ function AllergyStatusPicker({
         </p>
       )}
       {value === "KNOWN" && (
-        <TextAreaField label="Allergy detail" value={detail} onChange={onChangeDetail} disabled={disabled} />
+        <div className="flex flex-col gap-3">
+          <p className="text-[12px] text-text-secondary">Record the ingredient or product and its ATC code. Medicines sharing the first five ATC characters will be blocked during prescribing.</p>
+          {allergies.map((allergy, index) => (
+            <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-[150px_1fr_180px_auto]">
+              <select aria-label="Allergy type" disabled={disabled} value={allergy.kind} className="h-10 rounded-lg border border-border-strong bg-surface-raised px-2 text-sm" onChange={(event) => updateAllergies(allergies.map((item, i) => i === index ? { ...item, kind: event.target.value as StructuredAllergy["kind"] } : item))}>
+                <option value="INGREDIENT">Ingredient</option><option value="PRODUCT">Product</option><option value="GROUP">ATC group</option>
+              </select>
+              <input aria-label="Allergen name" required disabled={disabled} value={allergy.name} placeholder="Ingredient, product, or group" className="h-10 rounded-lg border border-border-strong bg-surface-raised px-3 text-sm" onChange={(event) => updateAllergies(allergies.map((item, i) => i === index ? { ...item, name: event.target.value } : item))} />
+              <input aria-label="ATC code" required disabled={disabled} maxLength={7} pattern="[A-Za-z][0-9]{2}[A-Za-z]{2}([A-Za-z0-9]{1,2})?" value={allergy.atcCode} placeholder="ATC code" className="h-10 rounded-lg border border-border-strong bg-surface-raised px-3 font-mono text-sm uppercase" onChange={(event) => updateAllergies(allergies.map((item, i) => i === index ? { ...item, atcCode: event.target.value.toUpperCase() } : item))} />
+              {!disabled && <button type="button" className="h-10 rounded-lg border border-border-strong px-3 text-sm" onClick={() => updateAllergies(allergies.filter((_, i) => i !== index))}>Remove</button>}
+              {!disabled && <select aria-label="Select from ATC medicine catalogue" className="h-10 rounded-lg border border-border-strong bg-surface-raised px-2 text-sm sm:col-span-3" value="" onChange={(event) => {
+                const selected = event.target.value;
+                if (selected.startsWith("product:")) {
+                  const product = catalogProducts.find((item) => item.productId === selected.slice(8));
+                  if (product) updateAllergies(allergies.map((item, i) => i === index ? { kind: "PRODUCT", name: product.productName, atcCode: product.atcCode } : item));
+                } else if (selected.startsWith("group:")) {
+                  const code = selected.slice(6);
+                  if (catalogGroups.some(([group]) => group === code)) updateAllergies(allergies.map((item, i) => i === index ? { kind: "GROUP", name: `${catalogGroups.find(([group]) => group === code)?.[1] ?? "ATC group"} (${code})`, atcCode: code } : item));
+                }
+              }}>
+                <option value="">Choose product or ATC group from catalog</option>
+                {catalogGroups.map(([code, name]) => <option key={`group:${code}`} value={`group:${code}`}>Group · {name} ({code})</option>)}
+                {catalogProducts.map((product) => <option key={`product:${product.productId}`} value={`product:${product.productId}`}>Product · {product.productName} ({product.atcCode})</option>)}
+              </select>}
+            </div>
+          ))}
+          {!disabled && <button type="button" className="min-h-10 self-start rounded-lg border border-brand-300 px-3 text-sm font-medium text-brand-700" onClick={() => updateAllergies([...allergies, { kind: "INGREDIENT", name: "", atcCode: "" }])}>Add allergy</button>}
+          {allergies.length === 0 && <p className="text-xs text-danger-600">Add at least one ingredient or medicine and ATC code.</p>}
+        </div>
       )}
     </div>
   );
@@ -466,7 +524,9 @@ function OutcomePicker({
   loading,
   onCancel,
   prescription,
+  allergyAtcCodes,
 }: {
+  allergyAtcCodes: string[];
   outcomeNotes: string;
   onChangeNotes: (v: string) => void;
   onChoose: (outcome: ConsultationOutcome, medicines?: PrescribedMedicines, destinationFacilityId?: string) => void;
@@ -478,7 +538,7 @@ function OutcomePicker({
   // Send to pharmacy needs a real prescription — that is what shows up in the pharmacy's dispensing
   // queue; the queue-token transfer alone moves the patient's ticket but leaves nothing to dispense.
   const prescribed = prescription.prescribe && prescription.entries.length > 0;
-  const prescriptionProblems = problemsOf(prescription);
+  const prescriptionProblems = problemsOf(prescription, allergyAtcCodes);
   const pharmacyReady = prescribed && prescriptionProblems.length === 0;
   const pharmacyHint = !prescription.prescribe
     ? "Switch on Prescribe above and add the medicines first."
@@ -592,7 +652,10 @@ const AUTOSAVE_DELAY_MS = 1500;
 /** One line about a recorded allergy for the prescribing area, or null when none is recorded. */
 function allergyNoteOf(fields: { allergyStatus: AllergyStatus; allergyDetail: string }): string | null {
   if (fields.allergyStatus !== "KNOWN") return null;
-  return fields.allergyDetail.trim() ? `Allergy recorded: ${fields.allergyDetail.trim()}.` : "An allergy is recorded.";
+  const entries = parseAllergies(fields.allergyDetail);
+  const coded = entries.filter((entry) => allergyCodesOf(JSON.stringify([entry])).length > 0);
+  if (coded.length !== entries.length) return "Complete an ingredient or product name and valid ATC code for every recorded allergy before prescribing.";
+  return `Allergies: ${coded.map((entry) => `${entry.name} (${entry.atcCode})`).join(", ")}. Medicines sharing the first five ATC characters are blocked.`;
 }
 
 interface ConsultationFieldsState {
@@ -620,10 +683,12 @@ function toFieldsState(consultation: Consultation): ConsultationFieldsState {
 function DraftView({
   consultation,
   presentingComplaint,
+  patientWeightKg,
   onChanged,
 }: {
   consultation: Consultation;
   presentingComplaint: string | null;
+  patientWeightKg: number | null;
   onChanged: () => void;
 }) {
   const navigate = useNavigate();
@@ -860,12 +925,15 @@ function DraftView({
         state={prescription}
         onChange={changePrescription}
         allergyNote={allergyNoteOf(fields)}
+        allergyAtcCodes={allergyCodesOf(fields.allergyDetail)}
+        patientWeightKg={patientWeightKg}
         patientLabel="Prescription for this visit"
       />
 
       {showOutcomePicker ? (
         <OutcomePicker
           prescription={prescription}
+          allergyAtcCodes={allergyCodesOf(fields.allergyDetail)}
           outcomeNotes={outcomeNotes}
           onChangeNotes={setOutcomeNotes}
           loading={sign.isPending}
@@ -942,17 +1010,19 @@ function DiagnosisRow({ diagnosis, onRemove }: { diagnosis: ConsultationDiagnosi
 function SignedView({
   consultation,
   presentingComplaint,
+  patientWeightKg,
   onChanged,
 }: {
   consultation: Consultation;
   presentingComplaint: string | null;
+  patientWeightKg: number | null;
   onChanged: () => void;
 }) {
   const [amending, setAmending] = useState(false);
 
   if (amending) {
     return (
-      <AmendForm consultation={consultation} onCancel={() => setAmending(false)} onChanged={onChanged} />
+      <AmendForm consultation={consultation} patientWeightKg={patientWeightKg} onCancel={() => setAmending(false)} onChanged={onChanged} />
     );
   }
 
@@ -1009,10 +1079,12 @@ function SignedView({
 
 function AmendForm({
   consultation,
+  patientWeightKg,
   onCancel,
   onChanged,
 }: {
   consultation: Consultation;
+  patientWeightKg: number | null;
   onCancel: () => void;
   onChanged: () => void;
 }) {
@@ -1173,12 +1245,15 @@ function AmendForm({
         state={prescription}
         onChange={setPrescription}
         allergyNote={allergyNoteOf(fields)}
+        allergyAtcCodes={allergyCodesOf(fields.allergyDetail)}
+        patientWeightKg={patientWeightKg}
         patientLabel="Prescription for this amendment"
       />
 
       {showOutcomePicker ? (
         <OutcomePicker
           prescription={prescription}
+          allergyAtcCodes={allergyCodesOf(fields.allergyDetail)}
           outcomeNotes={outcomeNotes}
           onChangeNotes={setOutcomeNotes}
           loading={amend.isPending}

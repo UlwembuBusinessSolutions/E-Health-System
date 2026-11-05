@@ -4,7 +4,15 @@ import { PatientVisitsTab } from "./PatientVisitsTab";
 import { createPortal } from "react-dom";
 import { VitalsOverview } from "./VitalsOverview";
 import { PatientConsultationTab } from "./PatientConsultationTab";
-import { AdditionalVitalsForm, AdditionalVitalsSummary, EMPTY_ADDITIONAL_VITALS, additionalPayload, type AdditionalVitalsState } from "./AdditionalVitals";
+import { AdditionalVitalsForm, AdditionalVitalsSummary, EMPTY_ADDITIONAL_VITALS, additionalIcd10Codes, additionalPayload, type AdditionalVitalsState } from "./AdditionalVitals";
+import {
+  CLASSIFICATION_PILL,
+  ageInMonths,
+  classifyBloodPressure,
+  classifyRespiration,
+  classifyTemperature,
+  icd10CodesOf,
+} from "./vitalClassification";
 import { useEffect, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -132,6 +140,26 @@ function isPaediatric(dateOfBirth?: string): boolean {
   let age = today.getFullYear() - birth.getFullYear();
   if (today < new Date(today.getFullYear(), birth.getMonth(), birth.getDate())) age -= 1;
   return age < 13;
+}
+
+function ageMonthsAt(dateOfBirth?: string): number | null {
+  return ageInMonths(dateOfBirth);
+}
+
+// The live classification line under the vitals inputs. The rules live in vitalClassification.ts (a mirror
+// of the backend's VitalsClassifier), so what the nurse sees here is what the saved record will say.
+function vitalClassifications(form: VitalsFormState, ageMonths: number | null) {
+  const temperature = classifyTemperature(form.temperatureCelsius, ageMonths);
+  const respiration = classifyRespiration(form.respiratoryRate, ageMonths);
+  const bloodPressure = classifyBloodPressure(form.systolicBp, form.diastolicBp, ageMonths);
+  const items = [
+    temperature && { name: "Temperature", result: temperature },
+    respiration && { name: "Respiration", result: respiration },
+    bloodPressure && { name: "Blood pressure", result: bloodPressure },
+  ].filter((item): item is { name: string; result: NonNullable<typeof temperature> } => !!item);
+  // ICD-10 codes the readings point to, so the nurse can see which conditions prescribing will offer.
+  const icd10 = [...icd10CodesOf([bloodPressure]), ...additionalIcd10Codes(form.additional)].filter((code, i, all) => all.indexOf(code) === i);
+  return { items, icd10 };
 }
 
 interface VitalsFormState {
@@ -970,8 +998,17 @@ export function PatientDetailPage() {
     }
     for (const key of ["weightKg", "heightCm", "glucoseMmolL", "haemoglobinGdl"] as const) {
       const value = vitalsForm.additional[key];
-      if (value !== "" && (!Number.isFinite(Number(value)) || Number(value) <= 0)) {
-        setVitalsError("Additional measurements must be numbers greater than zero. Leave unmeasured values blank.");
+      if (value !== "" && (!Number.isFinite(Number(value)) || (key === "glucoseMmolL" ? Number(value) < 0 : Number(value) <= 0))) {
+        setVitalsError("Weight, height, and haemoglobin must be greater than zero; glucose may be zero. Leave unmeasured values blank.");
+        return;
+      }
+    }
+    {
+      const glucose = vitalsForm.additional.glucoseMmolL;
+      const glucoseValue = Number(glucose);
+      // Below 4 and above 11.1 are classified whatever the type; in between, fasting or random decides.
+      if (!vitalsForm.emergencySign && glucose !== "" && !vitalsForm.additional.glucoseType && glucoseValue >= 4 && glucoseValue <= 11.1) {
+        setVitalsError("Select whether the blood glucose was fasting or random.");
         return;
       }
     }
@@ -1261,6 +1298,24 @@ export function PatientDetailPage() {
                           />
                         </div>
   
+                        {(() => {
+                          const live = vitalClassifications(vitalsForm, ageMonthsAt(patient?.dateOfBirth));
+                          if (live.items.length === 0) return null;
+                          return (
+                            <div role="status" className="space-y-2 rounded-lg bg-surface-raised px-3 py-2 text-sm text-text-primary">
+                              <div className="flex flex-wrap gap-2">
+                                {live.items.map((item) => (
+                                  <span key={item.name} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${CLASSIFICATION_PILL[item.result.tone]}`}>
+                                    {item.name} {item.result.text}
+                                  </span>
+                                ))}
+                              </div>
+                              {live.icd10.length > 0 && (
+                                <p className="text-xs text-text-secondary">ICD-10 for prescribing: {live.icd10.join(", ")}</p>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <div>
                           <p className="mb-2 text-[13px] font-medium text-text-primary">
                             Clinical discriminators (if any apply)

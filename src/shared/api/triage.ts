@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+﻿import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
 
 // RECQ-US-008/009/010. Matches TriageController field-for-field.
@@ -30,12 +30,24 @@ export interface AdditionalObservations {
   glucoseMmolL?: number | null;
   haemoglobinGdl?: number | null;
   bmi?: number | null;
+  bmiClassification?: string | null;
   urineProtein?: string | null;
   urineGlucose?: string | null;
   urineKetones?: string | null;
   urineBlood?: string | null;
   urineLeukocytes?: string | null;
   urineNitrites?: string | null;
+  urineUrobilinogen?: string | null;
+  urineBilirubin?: string | null;
+  urinePh?: number | null;
+  glucoseType?: "FASTING" | "RANDOM" | null;
+  glucoseClassification?: string | null;
+  urinalysisInterventionRequired?: boolean;
+  /** Each recorded urinalysis item with its bracketed classification, e.g. { Protein: "(Abnormal)" }. */
+  urinalysisFindings?: Record<string, string>;
+  urinePhClassification?: string | null;
+  /** True for underweight, overweight and obese: refer to a Dietician. */
+  dieticianReferralRequired?: boolean;
   pregnancyTest?: string | null;
 }
 
@@ -55,6 +67,12 @@ export interface TriageAssessment {
   systolicBp: number | null;
   diastolicBp: number | null;
   temperatureCelsius: number | null;
+  ageMonthsAtCapture?: number | null;
+  temperatureClassification?: string | null;
+  respiratoryRateClassification?: string | null;
+  bloodPressureClassification?: string | null;
+  /** ICD-10 codes the readings point to (I10 from blood pressure, diabetes codes from glucose), for prescribing. */
+  icd10Indications?: string[];
   spo2Percent: number | null;
   oxygenSupport: OxygenSupport;
   oxygenDevice: string | null;

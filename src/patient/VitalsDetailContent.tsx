@@ -250,7 +250,7 @@ export function VitalsDetailContent({
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4">
             {assessment.respiratoryRate != null && (
-              <VitalField icon={Wind} label="Resp. rate" value={String(assessment.respiratoryRate)} unit=" /min" />
+              <VitalField icon={Wind} label="Resp. rate" value={String(assessment.respiratoryRate)} unit=" /min" caption={assessment.respiratoryRateClassification ?? undefined} />
             )}
             {assessment.heartRate != null && (
               <VitalField icon={HeartPulse} label="Heart rate" value={String(assessment.heartRate)} unit=" bpm" />
@@ -261,10 +261,11 @@ export function VitalsDetailContent({
                 label="Blood pressure"
                 value={`${assessment.systolicBp}${assessment.diastolicBp != null ? `/${assessment.diastolicBp}` : ""}`}
                 unit=" mmHg"
+                caption={assessment.bloodPressureClassification ?? undefined}
               />
             )}
             {assessment.temperatureCelsius != null && (
-              <VitalField icon={Thermometer} label="Temp" value={String(assessment.temperatureCelsius)} unit="°C" />
+              <VitalField icon={Thermometer} label="Temp" value={String(assessment.temperatureCelsius)} unit="°C" caption={assessment.temperatureClassification ?? undefined} />
             )}
             {assessment.spo2Percent != null && (
               <VitalField icon={Activity} label="SpO2" value={String(assessment.spo2Percent)} unit="%" />
