@@ -7,7 +7,7 @@ import { Card } from "@/shared/components/Card";
 
 const types: Record<VisitType, string> = { NEW: "New visit", FOLLOW_UP: "Follow-up" };
 const streams: Record<ServiceStream, string> = {
-  GENERAL: "General", CHRONIC_CARE: "Chronic care", MATERNAL_CHILD: "Maternal & child", OCCUPATIONAL_HEALTH: "Occupational health",
+  GENERAL: "General", CHRONIC_CARE: "Chronic care", MATERNAL_CHILD: "Maternal & child", OCCUPATIONAL_HEALTH: "Occupational health", PHARMACY: "Pharmacy collection",
 };
 const dateFormat = new Intl.DateTimeFormat("en-ZA", { day: "numeric", month: "short", year: "numeric" });
 const timeFormat = new Intl.DateTimeFormat("en-ZA", { hour: "2-digit", minute: "2-digit" });
@@ -23,7 +23,7 @@ export function PatientVisitsTab({ patientId }: { patientId: string }) {
   const query = useQuery({ queryKey: ["patients", patientId, "visits"], queryFn: () => getPatientVisitHistory(patientId) });
   const visits = query.data ?? [];
   const filtered = visits.filter(visit => (!type || visit.visitType === type) &&
-    `${visit.facilityName ?? "Unknown facility"} ${streams[visit.serviceStream] ?? visit.serviceStream} ${types[visit.visitType] ?? visit.visitType}`.toLowerCase().includes(search.trim().toLowerCase()),
+    `${visit.facilityName ?? "Unknown facility"} ${streams[visit.serviceStream] ?? visit.serviceStream} ${types[visit.visitType] ?? visit.visitType} ${visit.visitReason ?? ""}`.toLowerCase().includes(search.trim().toLowerCase()),
   ).sort((a, b) => (Date.parse(b.visitDateTime) - Date.parse(a.visitDateTime)) * (order === "newest" ? 1 : -1));
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pages);
@@ -70,7 +70,7 @@ export function PatientVisitsTab({ patientId }: { patientId: string }) {
                       <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${visit.visitType === "FOLLOW_UP" ? "bg-brand-50 text-brand-700" : "bg-surface-sunken text-text-secondary"}`}>{types[visit.visitType] ?? visit.visitType}</span>
                     </div>
                     <p className="mt-3 flex items-start gap-2 text-[15px] font-medium text-text-primary"><Building2 className="mt-0.5 size-4 shrink-0 text-text-secondary" aria-hidden /><span className="min-w-0 break-words">{visit.facilityName ?? "Unknown facility"}</span></p>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-text-secondary"><span>{streams[visit.serviceStream] ?? visit.serviceStream}</span><span className="inline-flex items-center gap-1.5"><Clock3 className="size-3.5" aria-hidden />{timeFormat.format(date)}</span></div>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-text-secondary"><span>{streams[visit.serviceStream] ?? visit.serviceStream}</span>{visit.visitReason && <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-medium capitalize text-brand-700">{visit.visitReason.replaceAll("_", " ").toLowerCase()}</span>}<span className="inline-flex items-center gap-1.5"><Clock3 className="size-3.5" aria-hidden />{timeFormat.format(date)}</span></div>
                     {visit.transferredFromVisitId && <p className="mt-3 flex items-center gap-2 border-t border-border-subtle pt-3 text-[12px] text-brand-600"><ArrowRightLeft className="size-3.5 shrink-0" aria-hidden />Transferred from {facilityNameByVisitId.get(visit.transferredFromVisitId) ?? "another facility"}</p>}
                   </article>
                 </li>;

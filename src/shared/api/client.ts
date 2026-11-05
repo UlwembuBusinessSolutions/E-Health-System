@@ -24,6 +24,7 @@ export interface ApiErrorExtras {
   code?: string;
   existing?: { id: string; name: string };
   similar?: boolean;
+  retryAfterSeconds?: number;
 }
 
 export class ApiError extends Error {
@@ -32,6 +33,7 @@ export class ApiError extends Error {
   code?: string;
   existing?: { id: string; name: string };
   similar?: boolean;
+  retryAfterSeconds?: number;
 
   constructor(message: string, status: number, fieldErrors?: Record<string, string>, extras?: ApiErrorExtras) {
     super(message);
@@ -41,6 +43,7 @@ export class ApiError extends Error {
     this.code = extras?.code;
     this.existing = extras?.existing;
     this.similar = extras?.similar;
+    this.retryAfterSeconds = extras?.retryAfterSeconds;
   }
 }
 
@@ -69,6 +72,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       code: body?.code,
       existing: body?.existing,
       similar: body?.similar,
+      retryAfterSeconds: Number(res.headers.get("Retry-After")) || undefined,
     });
   }
 

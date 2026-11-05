@@ -109,6 +109,7 @@ function buildAuthenticatedUser(summary: UserSummary, token: string): Authentica
     firstName: summary.firstName,
     lastName: summary.lastName,
     role: roles.includes("ORG_ADMIN") ? "ORG_ADMIN" : (roles[0] ?? "STAFF"),
+    roles,
   };
 }
 

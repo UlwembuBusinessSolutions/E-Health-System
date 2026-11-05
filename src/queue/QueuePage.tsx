@@ -263,6 +263,8 @@ export function QueuePage() {
   const [date, setDate] = useState(localDateValue);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
+  const [isPreparingReport, setIsPreparingReport] = useState(false);
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
   const [speakerEnabled, setSpeakerEnabled] = useState<boolean>(() => {
     try {
       return localStorage.getItem(SPEAKER_STORAGE_KEY) !== "off";
@@ -284,6 +286,7 @@ export function QueuePage() {
   const [transferNote, setTransferNote] = useState("");
 
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
+  const facilities = facilitiesQuery.data ?? [];
 
   useEffect(() => {
     if (!facilityId && facilitiesQuery.data && facilitiesQuery.data.length > 0) {
@@ -323,6 +326,70 @@ export function QueuePage() {
     enabled: !!facilityId,
     refetchInterval: 5000,
   });
+
+  const reportQuery = useQuery({
+    queryKey: ["queue-report", facilityId, search, statuses, priority, date],
+    queryFn: async () => {
+      const filters = { search: search || undefined, statuses, priority: priority || undefined, date, pageSize: 100 };
+      const firstPage = await listQueue(facilityId, { ...filters, page: 0 });
+      if (firstPage.totalPages <= 1) return firstPage.items;
+      const pages = await Promise.all(
+        Array.from({ length: firstPage.totalPages - 1 }, (_, index) =>
+          listQueue(facilityId, { ...filters, page: index + 1 }),
+        ),
+      );
+      return [...firstPage.items, ...pages.flatMap((result) => result.items)];
+    },
+    enabled: (isPreparingReport || isDownloadingReport) && !!facilityId,
+  });
+
+  useEffect(() => {
+    if (!isDownloadingReport || !reportQuery.data) return;
+    let cancelled = false;
+    void import("@/shared/lib/queueReportPdf")
+      .then(({ downloadQueueReportPdf }) => {
+        if (cancelled) return;
+        downloadQueueReportPdf({
+          clinicName: facilities.find((facility) => facility.id === facilityId)?.name ?? "Clinic",
+          date,
+          statuses: statuses.length ? statuses.map((status) => STATUS_LABEL[status]) : ["All statuses"],
+          priority: priority ? (priority === "PRIORITY" ? "Priority" : "Standard") : undefined,
+          search: search || undefined,
+          entries: reportQuery.data,
+        });
+        setActionError(null);
+        setIsDownloadingReport(false);
+      })
+      .catch(() => {
+        setActionError("The filtered queue report could not be downloaded. Please try again.");
+        setIsDownloadingReport(false);
+      });
+    return () => { cancelled = true; };
+  }, [isDownloadingReport, reportQuery.data, facilities, facilityId, date, statuses, priority, search]);
+
+  useEffect(() => {
+    if (!isDownloadingReport || !reportQuery.isError) return;
+    setActionError("The filtered queue report could not be prepared. Please try again.");
+    setIsDownloadingReport(false);
+  }, [isDownloadingReport, reportQuery.isError]);
+
+  useEffect(() => {
+    if (!isPreparingReport) return;
+    if (reportQuery.isError) {
+      setActionError("The filtered queue report could not be prepared. Please try again.");
+      setIsPreparingReport(false);
+      return;
+    }
+    if (!reportQuery.data) return;
+    const timeout = setTimeout(() => window.print(), 250);
+    return () => clearTimeout(timeout);
+  }, [isPreparingReport, reportQuery.data, reportQuery.isError]);
+
+  useEffect(() => {
+    const finishPrint = () => setIsPreparingReport(false);
+    window.addEventListener("afterprint", finishPrint);
+    return () => window.removeEventListener("afterprint", finishPrint);
+  }, []);
 
   // Guards against a dead end: this page polls every 5s, and other staff
   // resolving tickets can shrink the result set out from under whichever
@@ -430,7 +497,6 @@ export function QueuePage() {
     },
   });
 
-  const facilities = facilitiesQuery.data ?? [];
   const queue = queueQuery.data?.items ?? [];
   // Every row action (boost, call handling, complete, missed, reactivate,
   // cancel) only makes sense against today's live queue — call-next,
@@ -490,11 +556,42 @@ export function QueuePage() {
 
   return (
     <div>
+      {isPreparingReport && reportQuery.data && (
+        <>
+          <style>{`@media print { body * { visibility: hidden !important; } #queue-report-print, #queue-report-print * { visibility: visible !important; } #queue-report-print { display: block !important; position: absolute; inset: 0; width: 100%; background: white; color: #111827; } }`}</style>
+          <section id="queue-report-print" className="hidden p-8 print:block">
+            <h1 className="text-2xl font-bold">Queue register</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              {facilities.find((facility) => facility.id === facilityId)?.name ?? "Clinic"} · {new Date(`${date}T00:00:00`).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" })}
+            </p>
+            <p className="mb-5 mt-1 text-xs text-slate-500">
+              {statuses.length ? statuses.map((status) => STATUS_LABEL[status]).join(", ") : "All statuses"}
+              {priority ? ` · ${priority === "PRIORITY" ? "Priority" : "Standard"}` : ""}
+              {search ? ` · Search: ${search}` : ""} · {reportQuery.data.length} tickets
+            </p>
+            <table className="w-full border-collapse text-left text-sm">
+              <thead><tr className="border-y border-slate-300"><th className="py-2 pr-3">Token</th><th className="py-2 pr-3">Patient</th><th className="py-2 pr-3">MPI</th><th className="py-2 pr-3">Priority</th><th className="py-2 pr-3">Status</th><th className="py-2">Issued</th></tr></thead>
+              <tbody>{reportQuery.data.map((entry) => <tr key={entry.token.id} className="border-b border-slate-200"><td className="py-2 pr-3 font-mono">{entry.token.tokenNumber}</td><td className="py-2 pr-3">{entry.patientName}</td><td className="py-2 pr-3 font-mono">{entry.patientMpi}</td><td className="py-2 pr-3">{entry.token.priority === "PRIORITY" ? "Priority" : "Standard"}</td><td className="py-2 pr-3">{STATUS_LABEL[entry.token.status]}</td><td className="py-2">{formatTime(entry.token.issuedAt)}</td></tr>)}</tbody>
+            </table>
+          </section>
+        </>
+      )}
       <PageHeader
         title="Queue"
         description="Today's token queue — issued when a visit starts, cleared as each patient is completed or cancelled."
         action={
           <div className="flex items-center gap-4">
+            <Button
+              variant="secondary"
+              size="md"
+              icon={<Printer className="size-4" aria-hidden />}
+              loading={isDownloadingReport && reportQuery.isFetching}
+              disabled={!facilityId || isPreparingReport || isDownloadingReport}
+              onClick={() => setIsDownloadingReport(true)}
+            className="print:hidden"
+            >
+              Download PDF
+            </Button>
             <label className="flex items-center gap-2 text-[13px] text-text-secondary">
               {speakerEnabled ? (
                 <Volume2 className="size-4" aria-hidden />

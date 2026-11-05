@@ -22,6 +22,7 @@ import { PageHeader } from "@/shared/components/PageHeader";
 import { Select } from "@/shared/components/Select";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { RowActionsMenu, type RowActionItem } from "@/shared/components/RowActionsMenu";
+import { assignPbpaClinicSchedule, endPbpaClinicSchedule, getPbpaClinicSchedules } from "@/shared/api/pharmacy";
 
 const STATUS_FILTER_OPTIONS = [
   { value: "ALL", label: "All statuses" },
@@ -89,6 +90,10 @@ export function StaffListPage() {
   const [offboardId, setOffboardId] = useState<string | null>(null);
   const [offboardDateDraft, setOffboardDateDraft] = useState(todayIsoDate());
   const [actionError, setActionError] = useState<string | null>(null);
+  const [scheduleEditId, setScheduleEditId] = useState<string | null>(null);
+  const [scheduleFacilityId, setScheduleFacilityId] = useState("");
+  const [scheduleFrom, setScheduleFrom] = useState(todayIsoDate());
+  const [scheduleTo, setScheduleTo] = useState("");
 
   // Only one inline row-edit open at a time — opening any of these clears
   // whichever of the others was open, same as the pre-existing
@@ -102,6 +107,8 @@ export function StaffListPage() {
 
   const staffQuery = useQuery({ queryKey: ["staff", "list"], queryFn: listStaff });
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
+  const schedulesQuery = useQuery({ queryKey: ["pbpa-schedules", scheduleEditId],
+    queryFn: () => getPbpaClinicSchedules(scheduleEditId!), enabled: !!scheduleEditId });
 
   const facilityNames = useMemo(() => {
     const map = new Map<string, string>();
@@ -169,6 +176,18 @@ export function StaffListPage() {
     onError: (error) => {
       setActionError(error instanceof ApiError ? error.message : "Couldn't offboard that staff member. Try again.");
     },
+  });
+
+  const assignSchedule = useMutation({
+    mutationFn: (userId: string) => assignPbpaClinicSchedule({ userId, facilityId: scheduleFacilityId,
+      activeFrom: scheduleFrom, ...(scheduleTo ? { activeTo: scheduleTo } : {}) }),
+    onSuccess: () => { setActionError(null); queryClient.invalidateQueries({ queryKey: ["pbpa-schedules", scheduleEditId] }); },
+    onError: (error) => setActionError(error instanceof ApiError ? error.message : "Couldn't assign the clinic schedule."),
+  });
+  const endSchedule = useMutation({
+    mutationFn: (id: string) => endPbpaClinicSchedule(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pbpa-schedules", scheduleEditId] }),
+    onError: (error) => setActionError(error instanceof ApiError ? error.message : "Couldn't end the clinic schedule."),
   });
 
   // The reverse of offboard above — clears employmentEndDate and re-enables
@@ -284,7 +303,20 @@ export function StaffListPage() {
                       {s.facilityId ? (facilityNames.get(s.facilityId) ?? "—") : "—"}
                     </td>
                     <td className="px-5 py-3.5">
-                      {employmentTypeEditId === s.id ? (
+                      {scheduleEditId === s.id ? (
+                        <div className="flex min-w-64 flex-col gap-2">
+                          {schedulesQuery.data?.map((schedule) => (
+                            <div key={schedule.id} className="flex items-center justify-between gap-2 rounded bg-surface-sunken px-2 py-1.5 text-xs">
+                              <span>{schedule.facilityName}: {schedule.activeFrom}{schedule.activeTo ? ` to ${schedule.activeTo}` : " onward"}</span>
+                              {!schedule.activeTo && <button type="button" className="font-medium text-danger-600" onClick={() => endSchedule.mutate(schedule.id)}>End</button>}
+                            </div>
+                          ))}
+                          <Select label="Scheduled clinic" options={(facilitiesQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }))} value={scheduleFacilityId} onChange={(e) => setScheduleFacilityId(e.target.value)} />
+                          <input aria-label="Schedule starts" type="date" value={scheduleFrom} onChange={(e) => setScheduleFrom(e.target.value)} className="h-9 rounded-md border border-border-strong px-2 text-sm" />
+                          <input aria-label="Schedule ends (optional)" type="date" value={scheduleTo} onChange={(e) => setScheduleTo(e.target.value)} className="h-9 rounded-md border border-border-strong px-2 text-sm" />
+                          <div className="flex gap-2"><Button size="md" variant="secondary" onClick={() => setScheduleEditId(null)}>Cancel</Button><Button size="md" disabled={!scheduleFacilityId} loading={assignSchedule.isPending} onClick={() => assignSchedule.mutate(s.id)}>Assign clinic</Button></div>
+                        </div>
+                      ) : employmentTypeEditId === s.id ? (
                         <div className="flex items-center gap-1.5">
                           <select
                             value={employmentTypeDraft}
@@ -373,7 +405,9 @@ export function StaffListPage() {
                       ) : (
                         (() => {
                           const alreadyOffboarded = !!s.employmentEndDate;
+                          const isPbpa = s.roles.some((role) => ["pharmacist assistant", "post-basic pharmacist assistant", "pbpa"].includes(role.toLowerCase()));
                           const items: RowActionItem[] = [
+                            ...(isPbpa ? [{ key: "clinic-schedule", label: "Schedule clinics", icon: <Briefcase className="size-4" aria-hidden />, onClick: () => { closeAllRowEditors(); setScheduleEditId(s.id); } }] : []),
                             {
                               key: "edit-details",
                               label: "Edit details",

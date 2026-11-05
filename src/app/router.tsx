@@ -20,6 +20,7 @@ import { OrganizationSettingsPage } from "@/settings/OrganizationSettingsPage";
 import { AuditTrailPage } from "@/audit/AuditTrailPage";
 import { AppointmentsPage } from "@/appointments/AppointmentsPage";
 import { PatientLoginScreen } from "@/patient-portal/PatientLoginScreen";
+import { PatientClinicLookupScreen } from "@/patient-portal/PatientClinicLookupScreen";
 import { PatientForgotPasswordScreen } from "@/patient-portal/PatientForgotPasswordScreen";
 import { PatientRegisterScreen } from "@/patient-portal/PatientRegisterScreen";
 import { PatientPortalPage } from "@/patient-portal/PatientPortalPage";
@@ -33,6 +34,7 @@ import {
   LedgerPage,
   ImportPage,
   OpeningStockPage,
+  PbpaClinicSchedulesPage,
   PharmacyLayout,
   PrescriptionPrintPage,
   ReceiveStockPage,
@@ -68,6 +70,7 @@ export function AppRouter() {
           once someone types their organisation. Real sign-in never happens
           on this route. */}
       <Route path="/login" element={<FindOrganizationScreen />} />
+      <Route path="/patient-login" element={<PatientClinicLookupScreen />} />
       {/* The tenant's public front door — logo/description/contact info
           from PublicOrganizationController, no session required. */}
       <Route path="/org/:tenantSlug" element={<TenantHomePage />} />
@@ -193,6 +196,7 @@ export function AppRouter() {
           <Route path="register" element={<ScheduleRegisterPage />} />
           <Route path="import" element={<ImportPage />} />
           <Route path="opening-stock" element={<OpeningStockPage />} />
+          <Route path="clinic-schedules" element={<RequireRole roles={["ORG_ADMIN", "Facility Manager"]}><PbpaClinicSchedulesPage /></RequireRole>} />
         </Route>
         <Route
           path="settings"

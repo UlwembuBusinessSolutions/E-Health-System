@@ -82,12 +82,18 @@ export function LoginScreen() {
       void offline.provisionAfterLogin(user.id, variables.password);
       navigate("/app", { replace: true });
     },
-    onError: (error) =>
-      setFormError(
-        error instanceof ApiError
-          ? error.message
-          : "Something went wrong. Please try again.",
-      ),
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 403) {
+        const detail = error.message.trim().toLowerCase();
+        setFormError(
+          detail === "forbidden"
+            ? "This organization denied sign-in. Check that you opened the correct organization login link. If it is correct, ask the platform administrator to confirm the organization is active and your staff account is enabled."
+            : error.message,
+        );
+        return;
+      }
+      setFormError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
+    },
   });
   const busy = isSubmitting || mutation.isPending;
   const onSubmit = (values: LoginValues) => {

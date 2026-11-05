@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, ChevronRight, Clock3, MapPin, Stethoscope, UserRound } from "lucide-react";
 import { ApiError } from "@/shared/api/client";
 import {
   bookPatientAppointment,
+  getPatientBookingAvailability,
   getPatientBookingFacilities,
   getPatientBookingProviders,
   getPatientBookingServices,
@@ -12,9 +13,11 @@ import {
   type PatientBookingFacility,
   type PatientBookingProvider,
   type PatientBookingService,
+  type PatientAppointment,
 } from "@/shared/api/patientBooking";
 import { usePatientAuth } from "./PatientAuthContext";
 import "./patient-booking.css";
+import "./patient-appointments.css";
 
 const stepNames = ["Service", "Facility", "Provider", "Date & time", "Review"];
 
@@ -43,6 +46,7 @@ export function PatientBookingPage() {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
   const { account } = usePatientAuth();
+  const queryClient = useQueryClient();
   const requestId = useRef(crypto.randomUUID());
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState(0);
@@ -56,6 +60,9 @@ export function PatientBookingPage() {
 
   const services = useQuery({ queryKey: ["patient-booking", "services"], queryFn: getPatientBookingServices });
   const facilities = useQuery({ queryKey: ["patient-booking", "facilities"], queryFn: getPatientBookingFacilities });
+  useEffect(() => {
+    if (!facility && facilities.data?.length) setFacility(facilities.data[0]);
+  }, [facility, facilities.data]);
   const providers = useQuery({
     queryKey: ["patient-booking", "providers", facility?.id],
     queryFn: () => getPatientBookingProviders(facility!.id),
@@ -63,7 +70,7 @@ export function PatientBookingPage() {
   });
   const slots = useQuery({
     queryKey: ["patient-booking", "slots", facility?.id, date, provider?.id ?? null],
-    queryFn: () => getPatientBookingSlots(facility!.id, date, provider?.id ?? null),
+    queryFn: () => getPatientBookingAvailability(facility!.id, date, provider?.id ?? null),
     enabled: Boolean(started && step === 3 && facility && date),
   });
 
@@ -80,8 +87,16 @@ export function PatientBookingPage() {
 
   const mutation = useMutation({
     mutationFn: bookPatientAppointment,
-    onSuccess: () => {
+    onSuccess: (appointment) => {
+      const appointmentsKey = ["patient-portal", account?.id, "appointments"] as const;
+      queryClient.setQueryData<PatientAppointment[]>(appointmentsKey, (current = []) => [
+        appointment,
+        ...current.filter((item) => item.id !== appointment.id),
+      ].sort((left, right) => (left.date + "T" + left.time).localeCompare(right.date + "T" + right.time)));
       requestId.current = crypto.randomUUID();
+      void queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      void queryClient.invalidateQueries({ queryKey: ["patient-booking", "slots"] });
+      void queryClient.invalidateQueries({ queryKey: ["patient-portal", "reschedule-slots"] });
       setConfirmed({
         date,
         time,
@@ -131,6 +146,20 @@ export function PatientBookingPage() {
 
   return (
     <main className="patient-booking">
+      <header className="pa-nav">
+        <div className="pa-nav-inner">
+          <Link to={`/org/${tenantSlug}`} className="pa-logo"><img src="/ulwembu-logo.png" alt="Ulwembu Healthcare Management System" /></Link>
+          <nav aria-label="Main navigation">
+            <Link to={`/org/${tenantSlug}`}>Home</Link>
+            <a href={`/org/${tenantSlug}#services`}>Services</a>
+            <a href={`/org/${tenantSlug}#facilities`}>Facilities</a>
+            <a href={`/org/${tenantSlug}#providers`}>Providers</a>
+            <a className="is-active" href="#booking">Book appointment</a>
+            <Link to={portalUrl}>My appointments</Link>
+          </nav>
+          <div className="pa-nav-actions"><span className="pa-user" aria-label={`Signed in as ${account?.firstName}`}>{`${account?.firstName?.[0] ?? ""}${account?.lastName?.[0] ?? ""}`.toUpperCase()}</span></div>
+        </div>
+      </header>
       {!started && !confirmed && (
         <section className="pb-home-hero">
           <div className="pb-home-copy">
@@ -162,7 +191,7 @@ export function PatientBookingPage() {
               </button>
               <p className="pb-step-count">STEP {String(step + 1).padStart(2, "0")} OF 05</p>
               <h2>{step === 0 ? "What kind of care are you looking for?" : step === 1 ? "Where would you like to be seen?" : step === 2 ? "Who would you like to see?" : step === 3 ? "Choose a date and time." : "Review your appointment."}</h2>
-              <p>{step === 0 ? "Start with the reason for your visit. You can change your choices before confirming the appointment." : step === 1 ? "Choose a clinic that is convenient for you." : step === 2 ? "Choose a provider, or let the clinic assign one for you." : step === 3 ? "Available appointment times are shown in the clinic’s local time." : "Check your details before you confirm."}</p>
+              <p>{step === 0 ? "Start with the reason for your visit. You can change your choices before confirming the appointment." : step === 1 ? facility ? `${facility.name} is selected. Choose another clinic below or continue.` : "Choose a clinic that is convenient for you." : step === 2 ? "Choose a provider, or let the clinic assign one for you." : step === 3 ? "Available appointment times are shown in the clinic’s local time." : "Check your details before you confirm."}</p>
             </div>
           </div>
 
@@ -215,7 +244,8 @@ export function PatientBookingPage() {
               <div className="pb-date-time">
                 <label className="pb-date-field">Appointment date<input type="date" min={tomorrow} value={date} onChange={(event) => { setDate(event.target.value); setTime(""); }} /></label>
                 <div className="pb-slot-panel"><div className="pb-slot-heading"><Clock3 size={19} aria-hidden /><h3>Available times</h3><span>{prettyDate(date)}</span></div>
-                  {slots.isPending ? <p className="pb-state">Checking availability…</p> : slots.isError ? <RetryState message="We couldn't check times for this date." retry={() => void slots.refetch()} /> : slots.data?.length ? <div className="pb-slot-grid">{slots.data.map((value) => <button type="button" className={`pb-slot ${time === value ? "is-selected" : ""}`} key={value} onClick={() => setTime(value)}>{value.slice(0, 5)}</button>)}</div> : <p className="pb-state">No times are available on this date. Choose another date.</p>}
+                  {slots.isSuccess && <div className="pb-capacity" role="status" aria-live="polite"><span><strong>{slots.data.booked}</strong> booked</span><span><strong>{slots.data.dailyLimit ?? "—"}</strong> daily limit</span><span><strong>{slots.data.remaining ?? "∞"}</strong> available</span></div>}
+                  {slots.isPending ? <p className="pb-state">Checking availability…</p> : slots.isError ? <RetryState message="We couldn't check times for this date." retry={() => void slots.refetch()} /> : slots.data?.items.length ? <div className="pb-slot-grid">{slots.data.items.map((value) => <button type="button" className={`pb-slot ${time === value ? "is-selected" : ""}`} key={value} onClick={() => setTime(value)}>{value.slice(0, 5)}</button>)}</div> : <p className="pb-state">{slots.data?.remaining === 0 ? `Daily appointment limit reached (${slots.data.booked} of ${slots.data.dailyLimit}). Choose another date.` : "No times are available on this date. Choose another date."}</p>}
                 </div>
               </div>
             )}

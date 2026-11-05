@@ -72,6 +72,7 @@ import {
   type VisitType,
   type VisitWithToken,
 } from "@/shared/api/visits";
+import type { TokenPriority } from "@/shared/api/queue";
 import {
   createPrescription,
   getPatientPrescriptions,
@@ -117,19 +118,30 @@ import { StatusPill } from "@/shared/components/StatusPill";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 
 
-const VISIT_TYPE_OPTIONS: { value: VisitType; label: string }[] = [
-  { value: "NEW", label: "New visit" },
-  { value: "FOLLOW_UP", label: "Follow-up visit" },
-];
-
 const SERVICE_STREAM_OPTIONS: { value: ServiceStream; label: string }[] = [
   { value: "GENERAL", label: "General / acute care" },
   { value: "CHRONIC_CARE", label: "Chronic care" },
   { value: "MATERNAL_CHILD", label: "Maternal & child health" },
   { value: "OCCUPATIONAL_HEALTH", label: "Occupational health" },
+  { value: "PHARMACY", label: "Pharmacy collection" },
 ];
 
-function isPaediatric(dateOfBirth?: string): boolean {
+const VISIT_REASON_OPTIONS = [
+  { value: "NEW_REGISTRATION", label: "New registration" },
+  { value: "CONSULTATION", label: "Consultation" },
+  { value: "FOLLOW_UP", label: "Follow-up" },
+  { value: "MEDICATION_COLLECTION", label: "Medication collection" },
+  { value: "EMERGENCY", label: "Emergency" },
+];
+
+const TOKEN_PRIORITY_OPTIONS: { value: TokenPriority; label: string }[] = [
+  { value: "NORMAL", label: "Standard" },
+  { value: "PRIORITY", label: "Priority" },
+];
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isPaediatric(dateOfBirth?: string | null): boolean {
   if (!dateOfBirth) return false;
   const birth = new Date(`${dateOfBirth}T00:00:00`);
   const today = new Date();
@@ -219,7 +231,8 @@ function unusualVitals(form: VitalsFormState): string[] {
   return warnings;
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null): string {
+  if (!iso) return "Not recorded";
   return new Date(iso).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -237,7 +250,8 @@ function initials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
 
-function titleCase(value: string): string {
+function titleCase(value: string | null): string {
+  if (!value) return "Not recorded";
   return value.charAt(0) + value.slice(1).toLowerCase();
 }
 
@@ -735,10 +749,13 @@ export function PatientDetailPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(
     "overview",
   );
-  const [isStartingVisit, setIsStartingVisit] = useState(false);
+  const [isStartingVisit, setIsStartingVisit] = useState(searchParams.get("checkIn") === "true");
   const [facilityId, setFacilityId] = useState("");
-  const [visitType, setVisitType] = useState<VisitType | "">("");
+  const [visitType, setVisitType] = useState<VisitType>("NEW");
+  const [visitReason, setVisitReason] = useState("NEW_REGISTRATION");
   const [serviceStream, setServiceStream] = useState<ServiceStream | "">("");
+  const [tokenPriority, setTokenPriority] = useState<TokenPriority>("NORMAL");
+  const [pharmacyToken, setPharmacyToken] = useState(false);
   const [visitError, setVisitError] = useState<string | null>(null);
   const [startedVisit, setStartedVisit] = useState<VisitWithToken | null>(null);
   const [isPrescribing, setIsPrescribing] = useState(false);
@@ -855,7 +872,9 @@ export function PatientDetailPage() {
         patientId,
         facilityId,
         visitType: visitType as VisitType,
-        serviceStream: serviceStream as ServiceStream,
+        serviceStream: (pharmacyToken ? "PHARMACY" : serviceStream) as ServiceStream,
+        priority: visitReason === "EMERGENCY" ? "PRIORITY" : tokenPriority,
+        visitReason,
       }),
     onSuccess: (result) => {
       setStartedVisit(result);
@@ -868,8 +887,16 @@ export function PatientDetailPage() {
 
   const handleStartVisit = () => {
     setVisitError(null);
-    if (!facilityId || !visitType || !serviceStream) {
-      setVisitError("Select a facility, visit type, and service stream.");
+    if (!facilityId || !visitType || (!serviceStream && !pharmacyToken)) {
+      setVisitError("Select a clinic, visit reason, and service stream.");
+      return;
+    }
+    if (!UUID_PATTERN.test(patientId)) {
+      setVisitError("This patient record has an invalid identifier. Reopen the patient from Patient Registration and try again.");
+      return;
+    }
+    if (!UUID_PATTERN.test(facilityId)) {
+      setVisitError("The selected clinic has an invalid identifier. Refresh the page and select the clinic again.");
       return;
     }
     startVisit.mutate();
@@ -1348,6 +1375,13 @@ export function PatientDetailPage() {
                   <p className="rounded-lg bg-surface-sunken px-3 py-1.5 font-mono text-[18px] font-semibold text-text-primary">
                     Token #{startedVisit.token.tokenNumber}
                   </p>
+                  <p className="text-[13px] text-text-secondary">
+                    {(facilitiesQuery.data ?? []).find((facility) => facility.id === startedVisit.visit.facilityId)?.name ?? "Selected clinic"}
+                    {" · "}{startedVisit.visit.visitType === "FOLLOW_UP" ? "Follow-up visit" : "New visit"}
+                    {" · "}{startedVisit.visit.serviceStream.replaceAll("_", " ").toLowerCase()}
+                    {startedVisit.visit.visitReason ? ` · ${startedVisit.visit.visitReason.replaceAll("_", " ").toLowerCase()}` : ""}
+                    {" · "}{startedVisit.token.priority === "PRIORITY" ? "Priority queue" : "Standard queue"}
+                  </p>
                   <p className="text-[13.5px] text-text-secondary">
                     {patient.firstName} is now in the queue.{" "}
                     <Link to="/app/queue" className="font-medium text-brand-600 hover:text-brand-700">
@@ -1394,7 +1428,7 @@ export function PatientDetailPage() {
                       {visitError}
                     </p>
                   )}
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <Select
                       label="Facility"
                       required
@@ -1403,19 +1437,55 @@ export function PatientDetailPage() {
                       onChange={(e) => setFacilityId(e.target.value)}
                     />
                     <Select
-                      label="Visit type"
+                      label="Visit reason"
                       required
-                      options={VISIT_TYPE_OPTIONS}
-                      value={visitType}
-                      onChange={(e) => setVisitType(e.target.value as VisitType)}
+                      options={VISIT_REASON_OPTIONS}
+                      value={visitReason}
+                      onChange={(e) => {
+                        setVisitReason(e.target.value);
+                        setVisitType(e.target.value === "FOLLOW_UP" ? "FOLLOW_UP" : "NEW");
+                        if (e.target.value === "EMERGENCY") setTokenPriority("PRIORITY");
+                      }}
                     />
                     <Select
                       label="Service stream"
                       required
                       options={SERVICE_STREAM_OPTIONS}
-                      value={serviceStream}
+                      value={pharmacyToken ? "PHARMACY" : serviceStream}
+                      disabled={pharmacyToken}
                       onChange={(e) => setServiceStream(e.target.value as ServiceStream)}
                     />
+                    <Select
+                      label="Queue priority"
+                      required
+                      options={TOKEN_PRIORITY_OPTIONS}
+                      value={tokenPriority}
+                      onChange={(e) => setTokenPriority(e.target.value as TokenPriority)}
+                    />
+                  </div>
+                  <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-danger-200 bg-danger-50/70 px-3.5 py-2.5 text-[13px] font-medium text-danger-700">
+                    <input
+                      type="checkbox"
+                      checked={visitReason === "EMERGENCY"}
+                      onChange={(e) => {
+                        setVisitReason(e.target.checked ? "EMERGENCY" : "NEW_REGISTRATION");
+                        setVisitType("NEW");
+                        setTokenPriority(e.target.checked ? "PRIORITY" : "NORMAL");
+                      }}
+                      className="size-4 accent-red-600"
+                    />
+                    Emergency: prioritize this patient in the queue
+                  </label>
+                  <div className="mt-4 flex gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border-subtle bg-surface-raised px-3.5 py-2.5 text-[13px] font-medium text-text-primary shadow-sm">
+                      <input
+                        type="checkbox"
+                        checked={pharmacyToken}
+                        onChange={(e) => setPharmacyToken(e.target.checked)}
+                        className="size-4 accent-brand-600"
+                      />
+                      Pharmacy collection token
+                    </label>
                   </div>
                   <div className="mt-4 flex gap-2">
                     <Button loading={startVisit.isPending} onClick={handleStartVisit}>
@@ -2096,9 +2166,9 @@ function DemographicsCard({ patient, isOrgAdmin }: { patient: Patient; isOrgAdmi
           <Field label="Gender" value={titleCase(patient.gender)} />
           <Field
             label="Citizenship"
-            value={patient.citizenshipStatus === "SA_CITIZEN" ? "SA citizen" : "Permanent resident"}
+            value={patient.citizenshipStatus === "SA_CITIZEN" ? "SA citizen" : patient.citizenshipStatus === "PERMANENT_RESIDENT" ? "Permanent resident" : "Not recorded"}
           />
-          <Field label="ID number" value={patient.idNumber} />
+          <Field label="ID number" value={patient.idNumber ?? "Not recorded"} />
           <Field label="Contact number" value={patient.contactNumber} />
           <Field label="Email" value={patient.email ?? "—"} />
           <Field label="Address" value={patient.address} />

@@ -49,6 +49,7 @@ const CITIZENSHIP_FILTER_OPTIONS: { value: CitizenshipStatus | ""; label: string
   { value: "", label: "All citizenship" },
   { value: "SA_CITIZEN", label: "SA citizen" },
   { value: "PERMANENT_RESIDENT", label: "Permanent resident" },
+  { value: "UNKNOWN", label: "Not recorded" },
 ];
 
 // One combined dropdown value per sortBy+sortDir pair, phrased for a
@@ -107,7 +108,8 @@ function initials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
 
-function calculateAge(dateOfBirth: string): number {
+function calculateAge(dateOfBirth: string | null): number | null {
+  if (!dateOfBirth) return null;
   const dob = new Date(dateOfBirth);
   const now = new Date();
   let age = now.getFullYear() - dob.getFullYear();
@@ -124,6 +126,7 @@ function calculateAge(dateOfBirth: string): number {
 export function PatientSearchPage() {
   const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
+  const [dateOfBirthFilter, setDateOfBirthFilter] = useState("");
   const [page, setPage] = useState(0);
   const [sortBy, setSortBy] = useState<PatientSortBy>("registered");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
@@ -154,9 +157,9 @@ export function PatientSearchPage() {
   // top rather than risk stranding them on an out-of-range page.
   useEffect(() => {
     setPage(0);
-  }, [query, sortBy, sortDir, genderFilter, medicalAidFilter, citizenshipFilter, mpiFilter, createdFrom, createdTo]);
+  }, [query, dateOfBirthFilter, sortBy, sortDir, genderFilter, medicalAidFilter, citizenshipFilter, mpiFilter, createdFrom, createdTo]);
 
-  const isBrowsing = query.length === 0;
+  const isBrowsing = query.length === 0 && dateOfBirthFilter === "";
   const hasActiveFilters =
     sortBy !== "name" ||
     sortDir !== "asc" ||
@@ -285,8 +288,8 @@ export function PatientSearchPage() {
   });
 
   const searchQuery = useQuery({
-    queryKey: ["patients", "search", query],
-    queryFn: () => searchPatients(query),
+    queryKey: ["patients", "search", query, dateOfBirthFilter],
+    queryFn: () => searchPatients(query, dateOfBirthFilter || undefined),
     enabled: !isBrowsing,
   });
 
@@ -298,8 +301,8 @@ export function PatientSearchPage() {
   return (
     <div>
       <PageHeader
-        title="Patients"
-        description="Browse the roster, or search by name, MPI number, or ID number."
+        title="Patient registration & visit check-in"
+        description="Search existing records first, then open a patient to register today’s visit and route their queue token."
         action={
           <Link
             to="/app/patients/new"
@@ -311,14 +314,22 @@ export function PatientSearchPage() {
         }
       />
 
-      <div className="mb-4">
+      <InProgressConsultations />
+
+      <div className="mb-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
         <Input
           label="Search"
-          placeholder="Search by name, MPI, or ID number…"
+          placeholder="Search name, MPI, SA ID, or passport number…"
           icon={<Search className="size-4" aria-hidden />}
           value={queryInput}
           onChange={(e) => setQueryInput(e.target.value)}
           autoFocus
+        />
+        <Input
+          label="Date of birth"
+          type="date"
+          value={dateOfBirthFilter}
+          onChange={(e) => setDateOfBirthFilter(e.target.value)}
         />
       </div>
 
@@ -348,8 +359,6 @@ export function PatientSearchPage() {
             onChange={setMedicalAidFilter}
             options={MEDICAL_AID_FILTER_OPTIONS}
           />
-          {false && (
-            <>
           <FilterPill
             label="Filter by citizenship"
             value={citizenshipFilter}
@@ -384,8 +393,6 @@ export function PatientSearchPage() {
               className="h-8 rounded-full border border-border-strong bg-surface-raised px-2.5 text-[13px] text-text-primary outline-none transition-colors duration-150 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
-            </>
-          )}
         </div>
       )}
 
@@ -427,7 +434,11 @@ export function PatientSearchPage() {
                 ? hasActiveFilters
                   ? "No patients match these filters."
                   : "No patients registered yet."
-                : `No patient matches “${query}”.`}
+                : query && dateOfBirthFilter
+                  ? `No patient matches “${query}” with that date of birth.`
+                  : dateOfBirthFilter
+                    ? `No patient has a date of birth of ${formatDate(dateOfBirthFilter)}.`
+                    : `No patient matches “${query}”.`}
             </p>
             {isBrowsing && hasActiveFilters && (
               <button
@@ -536,7 +547,9 @@ export function PatientSearchPage() {
                           <p className="truncate text-[14px] font-semibold text-text-primary">
                             {p.firstName} {p.lastName}
                           </p>
-                          <p className="truncate text-[12.5px] text-text-secondary">{p.idNumber}</p>
+                          <p className="truncate text-[12.5px] text-text-secondary">
+                            {p.idNumber ?? p.passportNumber ?? "No identity document on file"}
+                          </p>
                         </div>
                       </Link>
                     </td>
@@ -544,7 +557,7 @@ export function PatientSearchPage() {
                       {p.mpiNumber}
                     </td>
                     <td className="px-5 py-3.5 text-[13.5px] text-text-primary">
-                      {calculateAge(p.dateOfBirth)} · {p.gender.charAt(0) + p.gender.slice(1).toLowerCase()}
+                      {calculateAge(p.dateOfBirth) ?? "Age unavailable"} · {p.gender ? p.gender.charAt(0) + p.gender.slice(1).toLowerCase() : "Gender not recorded"}
                     </td>
                     <td className="px-5 py-3.5 text-[13.5px] text-text-primary">{p.contactNumber}</td>
                     <td className="px-5 py-3.5 font-mono text-[13px] text-text-secondary tabular-nums">

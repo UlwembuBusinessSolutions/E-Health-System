@@ -3,10 +3,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Hash, Mail, MailCheck, MapPin, Phone, User } from "lucide-react";
 import { AuthLayout } from "@/auth/AuthLayout";
-import { registerPatientAccount, verifyPatientRegistrationEmail } from "@/shared/api/patientAuth";
+import { registerPatientAccount, resendPatientRegistrationCode, verifyPatientRegistrationEmail } from "@/shared/api/patientAuth";
 import { ApiError } from "@/shared/api/client";
 import { usePatientAuth } from "./PatientAuthContext";
 import { Input } from "@/shared/components/Input";
@@ -91,12 +91,23 @@ function PatientSetupSteps({ currentStep }: { currentStep: number }) {
 export function PatientRegisterScreen() {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { setAccount } = usePatientAuth();
   const [formError, setFormError] = useState<string | null>(null);
-  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
-  const [verificationExpiresInMinutes, setVerificationExpiresInMinutes] = useState(10);
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(() => (location.state as { verificationEmail?: string } | null)?.verificationEmail ?? null);
+  const [verificationExpiresInMinutes, setVerificationExpiresInMinutes] = useState(() => (location.state as { verificationExpiresInMinutes?: number } | null)?.verificationExpiresInMinutes ?? 10);
   const [verificationCode, setVerificationCode] = useState("");
   const [resendNotice, setResendNotice] = useState<string | null>(null);
+  const [deliveryWarning, setDeliveryWarning] = useState<string | null>(null);
+
+  const showVerificationStep = (email: string, expiresInMinutes = 10) => {
+    setVerificationEmail(email);
+    setVerificationExpiresInMinutes(expiresInMinutes);
+    navigate(`/org/${tenantSlug}/patient/register?step=verify`, {
+      replace: true,
+      state: { verificationEmail: email, verificationExpiresInMinutes: expiresInMinutes },
+    });
+  };
 
   const {
     register,
@@ -125,30 +136,43 @@ export function PatientRegisterScreen() {
         setFormError("The server did not start email verification. Reload the registration page and try again.");
         return;
       }
-      setVerificationEmail(result.email);
-      setVerificationExpiresInMinutes(result.expiresInMinutes);
+      showVerificationStep(result.email, result.expiresInMinutes);
       setResendNotice(null);
+      setDeliveryWarning(null);
       setFormError(null);
     },
     onError: (error) => {
+      // Registration is committed before synchronous SMTP delivery. If delivery
+      // fails, the pending code still exists, so keep the user on verification
+      // and let them retry delivery from there.
+      if (error instanceof ApiError && error.message.toLowerCase().includes("couldn't deliver the verification email")) {
+        const email = getValues("email").trim();
+        if (email) {
+          showVerificationStep(email);
+          setDeliveryWarning(error.message);
+          setFormError(null);
+          return;
+        }
+      }
       setFormError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
     },
   });
 
   const resendMutation = useMutation({
-    mutationFn: registerPatientAccount,
-    onSuccess: (result) => {
-      if (!result?.verificationRequired || !result.email) {
-        setFormError("The server did not resend the verification code. Please try again.");
-        return;
-      }
-      setVerificationEmail(result.email);
-      setVerificationExpiresInMinutes(result.expiresInMinutes);
+    mutationFn: resendPatientRegistrationCode,
+    onSuccess: () => {
+      setVerificationExpiresInMinutes(10);
       setVerificationCode("");
-      setResendNotice(`A new code was sent to ${result.email}. Use the newest code.`);
+      setResendNotice(`A new code was sent to ${verificationEmail}. Use the newest code.`);
+      setDeliveryWarning(null);
       setFormError(null);
     },
     onError: (error) => {
+      if (error instanceof ApiError && error.message.toLowerCase().includes("couldn't deliver the verification email")) {
+        setDeliveryWarning(error.message);
+        setFormError(null);
+        return;
+      }
       setResendNotice(null);
       setFormError(error instanceof ApiError ? error.message : "We couldn't resend the code. Please try again.");
     },
@@ -179,16 +203,10 @@ export function PatientRegisterScreen() {
   };
 
   const onResendCode = () => {
-    if (!tenantSlug) return;
-    const values = registerSchema.safeParse(getValues());
-    if (!values.success) {
-      setFormError("Your registration details are no longer available. Start account creation again to request a code.");
-      return;
-    }
-    const { firstName, lastName, idNumber, address, contactNumber, email, password } = values.data;
+    if (!tenantSlug || !verificationEmail) return;
     setFormError(null);
     setResendNotice(null);
-    resendMutation.mutate({ tenantSlug, firstName, lastName, idNumber, address, contactNumber, email, password });
+    resendMutation.mutate({ tenantSlug, email: verificationEmail });
   };
 
   if (!tenantSlug) return <Navigate to="/login" replace />;
@@ -216,12 +234,18 @@ export function PatientRegisterScreen() {
             <MailCheck className="size-5" aria-hidden />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-800">Check your inbox</p>
+            <p className="text-sm font-semibold text-slate-800">{deliveryWarning ? "Verification is ready" : "Check your inbox"}</p>
             <p className="mt-1 break-words text-xs leading-relaxed text-slate-600">
-              We sent a six-digit code to <strong className="font-semibold text-slate-800">{verificationEmail}</strong>.
+              {deliveryWarning ? "A six-digit code was created for " : "We sent a six-digit code to "}
+              <strong className="font-semibold text-slate-800">{verificationEmail}</strong>.
               It expires in {verificationExpiresInMinutes} minutes. Check Spam or Junk if it isn’t there.
             </p>
           </div>
+        </div>
+      )}
+      {verificationEmail && deliveryWarning && (
+        <div role="status" className="mb-5 rounded-lg border border-amber-500/30 bg-amber-50 px-3.5 py-2.5 text-[13.5px] text-amber-800">
+          The registration is saved, but the email could not be delivered. Check the clinic email settings or try Resend code.
         </div>
       )}
       {verificationEmail ? (
@@ -245,7 +269,7 @@ export function PatientRegisterScreen() {
           <button type="button" className="text-sm font-medium text-brand-600 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60" onClick={onResendCode} disabled={resendMutation.isPending}>
             {resendMutation.isPending ? "Sending a new code…" : "Resend code"}
           </button>
-          <button type="button" className="text-sm text-slate-600 hover:text-slate-800" onClick={() => { setVerificationEmail(null); setVerificationCode(""); setResendNotice(null); setFormError(null); }}>
+          <button type="button" className="text-sm text-slate-600 hover:text-slate-800" onClick={() => { setVerificationEmail(null); setVerificationCode(""); setResendNotice(null); setFormError(null); navigate(`/org/${tenantSlug}/patient/register`, { replace: true, state: null }); }}>
             Change registration details
           </button>
         </form>

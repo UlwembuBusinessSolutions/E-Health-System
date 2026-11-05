@@ -280,6 +280,7 @@ class Component extends DCLogic {
       prescriptions: s.prescriptions.map((rx) =>
         rx.id !== rxId ? rx : { ...rx, items: rx.items.map((it) => (it.id !== itemId ? it : { ...it, status })) },
       ),
+      lookupDb: Object.assign({}, s.lookupDb, this.completedPrescription(s.prescriptions.find((rx) => rx.id === rxId), status, itemId)),
     }));
   }
 
@@ -290,7 +291,25 @@ class Component extends DCLogic {
           ? rx
           : { ...rx, items: rx.items.map((it) => (it.status === "PENDING" ? { ...it, status: "DISPENSED" } : it)) },
       ),
+      lookupDb: Object.assign({}, s.lookupDb, this.completedPrescription(s.prescriptions.find((rx) => rx.id === rxId))),
     }));
+  }
+
+  completedPrescription(rx, overrideStatus, overrideItemId) {
+    if (!rx) return {};
+    const items = rx.items.map((item) => item.id === overrideItemId ? { ...item, status: overrideStatus } : item);
+    if (items.some((item) => item.status === "PENDING")) return {};
+    return {
+      [rx.serial]: {
+        serial: rx.serial,
+        patientName: rx.patientName,
+        patientMpi: rx.patientMpi,
+        prescriberName: rx.prescriberName,
+        prescriberReg: rx.prescriberReg,
+        issuedDate: rx.issuedTime,
+        items: items.map((item) => ({ ...item })),
+      },
+    };
   }
 
   openComposer(rxId) {
@@ -331,9 +350,16 @@ class Component extends DCLogic {
 
   runLookup() {
     const q = (this.state.lookupQuery || "").trim().toUpperCase();
-    if (!q) return;
+    if (!q) {
+      this.setState({ lookupResult: null });
+      return;
+    }
     const found = this.state.lookupDb[q];
     this.setState({ lookupResult: found ? Object.assign({}, found) : "not_found" });
+  }
+
+  changeLookupQuery(value) {
+    this.setState({ lookupQuery: value, lookupResult: null });
   }
 
   dispenseLookupItem(itemId) {
@@ -420,7 +446,7 @@ class Component extends DCLogic {
       prescriptions,
       queueCount: prescriptions.filter((rx) => !rx.resolved).length,
       lookupQuery: this.state.lookupQuery,
-      onLookupChange: (e) => this.setState({ lookupQuery: e.target.value }),
+      onLookupChange: (e) => this.changeLookupQuery(e.target.value),
       onLookupSearch: () => this.runLookup(),
       showNotFound: lookupResult === "not_found",
       lookupFound,

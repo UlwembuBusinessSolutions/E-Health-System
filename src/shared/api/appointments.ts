@@ -8,7 +8,7 @@ export interface AppointmentSettings { facilityId: string; facilityName: string;
 // There's no "online" source to distinguish from yet — every appointment
 // today is staff-booked through this same page; that only becomes a real
 // field once patient self-service booking exists as a second path.
-export interface Appointment { id: string; patientId: string; patientName: string; mpiNumber: string; date: string; time: string; startsAt: string; status: "CONFIRMED" | "CANCELLED"; cancelReason: string | null; notes: string | null; version: number; assignedStaffId: string | null; assignedStaffName: string | null; createdByName: string | null; createdAt: string; serviceCode: string }
+export interface Appointment { id: string; patientId: string; patientName: string; mpiNumber: string; date: string; time: string; startsAt: string; status: "CONFIRMED" | "CANCELLED"; cancelReason: string | null; notes: string | null; version: number; assignedStaffId: string | null; assignedStaffName: string | null; createdByName: string | null; createdAt: string; serviceCode: string; facilityId: string; facilityName: string; bookingSource: "STAFF" | "PATIENT_PORTAL" }
 export interface AppointmentStaff { id: string; name: string; designation: string | null }
 export async function getAppointmentStaff(facilityId: string) {
   return (await apiClient.get<{ items: AppointmentStaff[] }>(`/api/v1/facilities/${facilityId}/appointment-staff`, { headers: tenantAuthHeaders() })).items;

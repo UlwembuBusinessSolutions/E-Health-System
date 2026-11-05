@@ -46,7 +46,12 @@ export function PatientLoginScreen() {
       navigate(`/org/${tenantSlug}/patient/portal`, { replace: true });
     },
     onError: (error) => {
-      setFormError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
+      if (error instanceof ApiError && error.status === 423 && error.retryAfterSeconds !== undefined) {
+        const minutes = Math.max(1, Math.ceil(error.retryAfterSeconds / 60));
+        setFormError(`Your account is temporarily locked. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`);
+      } else {
+        setFormError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
+      }
     },
   });
 
@@ -60,7 +65,7 @@ export function PatientLoginScreen() {
 
   const base = `/org/${encodeURIComponent(tenantSlug)}`;
   const orgName = orgQuery.data?.displayName ?? "Patient portal";
-  const busy = isSubmitting || mutation.isPending;
+  const busy = isSubmitting || mutation.isPending || orgQuery.isPending || orgQuery.isError;
   return <div className="patient-login">
     <aside className="pl-story" aria-label="Welcome to your patient portal">
       <img className="pl-photo" src="/login-background.jpg" alt="A healthcare professional with a patient" />
@@ -75,6 +80,9 @@ export function PatientLoginScreen() {
         <p className="pl-eyebrow">YOUR PATIENT PORTAL</p>
         <h2>Welcome back<span>.</span></h2>
         <p className="pl-subtitle">A moment to sign in. A step closer to your care.</p>
+        {orgQuery.isError && <div role="alert" className="pl-error-banner">
+          This clinic address could not be verified. Check the clinic link or <Link to="/patient-login">find your clinic</Link>.
+        </div>}
         <form onSubmit={handleSubmit(onSubmit)} noValidate className="pl-form" aria-label="Patient sign in">
           {formError && <div role="alert" className="pl-error-banner">{formError}</div>}
           <fieldset disabled={busy}>

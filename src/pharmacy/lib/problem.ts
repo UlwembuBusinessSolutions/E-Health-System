@@ -14,6 +14,10 @@ export function isWitnessRequired(error: unknown): boolean {
   return error instanceof ApiError && error.status === 422 && error.message === WITNESS_REQUIRED_MESSAGE;
 }
 
+export function isPbpaClinicScheduleRequired(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409 && error.message.includes("PBPA");
+}
+
 function describeDuplicateSupplier(error: ApiError): string {
   return error.existing
     ? `A supplier called "${error.existing.name}" already exists. Use it, or choose a different name.`

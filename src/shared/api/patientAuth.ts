@@ -109,6 +109,13 @@ export async function registerPatientAccount(
   );
 }
 
+export async function resendPatientRegistrationCode(payload: { email: string; tenantSlug: string }): Promise<void> {
+  await apiClient.post<void>(
+    "/api/v1/patient/resend-verification",
+    { email: payload.email },
+    { headers: { "X-Tenant-ID": payload.tenantSlug } },
+  );
+}
 export async function verifyPatientRegistrationEmail(payload: {
   email: string;
   code: string;

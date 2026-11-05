@@ -118,3 +118,4 @@ api-reference.html       Endpoint-by-endpoint reference — request/response sha
 - Real email delivery and real S3 upload both need credentials you'll have to provision yourself (SMTP account, AWS bucket + IAM user) — see `backend-auth-guide.html` Section 7 for the exact setup.
 - The frontend's tenant resolution is a manual slug field, not real subdomain routing — fine for local testing, not how a real deployment would work.
 - Several screens (facilities list, roles list, password reset) are still on frontend mocks, not the real backend.
+
