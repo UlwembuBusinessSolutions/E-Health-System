@@ -167,7 +167,10 @@ public class TriageController {
                                             Integer tewsScore, String scoringVersion, TriageColour calculatedColour,
                                             TriageColour finalColour, String overrideReason,
                                             UUID overriddenByUserId, UUID capturedByUserId, Instant observedAt,
-                                            Instant recordedAt, AdditionalObservations additionalObservations) {
+                                            Instant recordedAt, AdditionalObservations additionalObservations,
+                                            Integer ageMonthsAtCapture, String temperatureClassification,
+                                            String respiratoryRateClassification, String bloodPressureClassification,
+                                            java.util.List<String> icd10Indications) {
         static TriageAssessmentResponse from(TriageAssessment a) {
             return new TriageAssessmentResponse(a.getId(), a.getVisitId(), a.getStatus(),
                     a.getSupersedesAssessmentId(), a.getCorrectionReason(), a.isEmergencySign(),
@@ -178,7 +181,10 @@ public class TriageController {
                     a.getPresentingComplaint(), a.isOutOfRangeConfirmed(), a.getValidationWarnings(),
                     a.getDiscriminators(), a.getTewsScore(), a.getScoringVersion(),
                     a.getCalculatedColour(), a.getFinalColour(), a.getOverrideReason(), a.getOverriddenByUserId(),
-                    a.getCapturedByUserId(), a.getObservedAt(), a.getRecordedAt(), a.getAdditionalObservations());
+                    a.getCapturedByUserId(), a.getObservedAt(), a.getRecordedAt(), a.getAdditionalObservations(),
+                    a.getAgeMonthsAtCapture(), a.getTemperatureClassification(),
+                    a.getRespiratoryRateClassification(), a.getBloodPressureClassification(),
+                    a.getIcd10Indications());
         }
     }
 }

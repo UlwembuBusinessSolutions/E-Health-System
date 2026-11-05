@@ -150,6 +150,9 @@ public class TriageService {
                 discriminators, result.tewsScore(), TewsCalculator.SCORING_VERSION,
                 result.calculatedColour(), result.calculatedColour(), staffUserId, cmd.observedAt() != null
                         ? cmd.observedAt() : now, now, cmd.idempotencyKey());
+        LocalDate observationDate = (cmd.observedAt() != null ? cmd.observedAt() : now)
+                .atZone(ZoneOffset.UTC).toLocalDate();
+        assessment.setAgeMonthsAtCapture(Math.toIntExact(Period.between(patient.getDateOfBirth(), observationDate).toTotalMonths()));
 
         if (superseded != null) {
             assessment.linkSupersedes(superseded.getId());
