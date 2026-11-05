@@ -1,4 +1,4 @@
-﻿package co.ehealth.platform.patient;
+package co.ehealth.platform.patient;
 
 import co.ehealth.platform.appointment.AppointmentService;
 import co.ehealth.platform.core.security.PatientPrincipal;
