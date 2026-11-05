@@ -314,8 +314,6 @@ export function PatientSearchPage() {
         }
       />
 
-      <InProgressConsultations />
-
       <div className="mb-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
         <Input
           label="Search"

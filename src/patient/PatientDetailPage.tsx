@@ -738,6 +738,7 @@ function PatientVitalsHistoryTab({
 // header already uses.
 export function PatientDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const patientId = id ?? "";
   const { user } = useAuth();
   const isOrgAdmin = user?.role === "ORG_ADMIN";
@@ -908,7 +909,6 @@ export function PatientDetailPage() {
   // here with ?visitId=, since a nurse capturing vitals is very often
   // visiting a patient's page for a visit someone else (or an earlier
   // page load) already started, not one they're starting right now.
-  const [searchParams] = useSearchParams();
   const linkedVisitId = searchParams.get("visitId");
   const activeVisitId = startedVisit?.visit.id ?? linkedVisitId ?? null;
 
