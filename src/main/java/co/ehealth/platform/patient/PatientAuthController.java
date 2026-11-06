@@ -3,6 +3,7 @@ package co.ehealth.platform.patient;
 import co.ehealth.platform.core.security.PatientJwtService;
 import co.ehealth.platform.core.security.PatientPrincipal;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 // The patient portal has its own authentication surface, including the public registration and email confirmation steps.
@@ -36,7 +38,7 @@ public class PatientAuthController {
         PatientAuthService.RegistrationStarted result = patientAuthService.register(
                 new PatientAuthService.RegisterAccountCommand(request.firstName(), request.lastName(),
                         request.idNumber(), request.address(), request.contactNumber(), request.email(),
-                        request.password()));
+                        request.password(), request.dateOfBirth()));
         return ResponseEntity.ok(new RegistrationStartedResponse(true, result.email(), result.expiresInMinutes()));
     }
 
@@ -90,10 +92,15 @@ public class PatientAuthController {
 
     public record RegisterRequest(
             @NotBlank @Size(max = 100) String firstName, @NotBlank @Size(max = 100) String lastName,
-            @NotBlank @Pattern(regexp = "^\\d{13}$", message = "Enter a valid 13-digit SA ID number") String idNumber,
+            @Pattern(regexp = "^\\s*$|^\\d{13}$", message = "Enter a valid 13-digit SA ID number") String idNumber,
             @NotBlank @Size(max = 300) String address,
             @NotBlank @Pattern(regexp = "^\\+?[0-9]{9,15}$") String contactNumber,
-            @NotBlank @Email String email, @NotBlank @Size(min = 8, max = 100) String password) {
+            @NotBlank @Email String email, @NotBlank @Size(min = 8, max = 100) String password,
+            LocalDate dateOfBirth) {
+        @AssertTrue(message = "Date of birth is required when ID number is not provided")
+        public boolean isDateOfBirthProvidedWhenIdNumberIsMissing() {
+            return idNumber != null && !idNumber.isBlank() || dateOfBirth != null;
+        }
     }
 
     public record LoginRequest(@NotBlank @Size(max = 255) String identifier, @NotBlank String password) { }

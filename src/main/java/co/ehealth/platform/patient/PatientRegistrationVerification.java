@@ -7,6 +7,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -20,8 +21,10 @@ public class PatientRegistrationVerification {
     private String firstName;
     @Column(name = "last_name", nullable = false, length = 100)
     private String lastName;
-    @Column(name = "id_number", nullable = false, unique = true, length = 13)
+    @Column(name = "id_number", unique = true, length = 13)
     private String idNumber;
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
     @Column(nullable = false, length = 300)
     private String address;
     @Column(name = "contact_number", nullable = false, length = 20)
@@ -49,6 +52,7 @@ public class PatientRegistrationVerification {
         this.firstName = command.firstName();
         this.lastName = command.lastName();
         this.idNumber = command.idNumber();
+        this.dateOfBirth = command.dateOfBirth();
         this.address = command.address();
         this.contactNumber = command.contactNumber();
         this.email = command.email();
@@ -68,6 +72,7 @@ public class PatientRegistrationVerification {
     public String getFirstName() { return firstName; }
     public String getLastName() { return lastName; }
     public String getIdNumber() { return idNumber; }
+    public LocalDate getDateOfBirth() { return dateOfBirth; }
     public String getAddress() { return address; }
     public String getContactNumber() { return contactNumber; }
     public String getPasswordHash() { return passwordHash; }

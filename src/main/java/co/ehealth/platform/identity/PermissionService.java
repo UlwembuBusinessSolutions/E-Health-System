@@ -43,6 +43,13 @@ public class PermissionService {
         }
     }
 
+    public void requireAccessOrAnyRole(
+            ModuleCode module, PermissionLevel required, Set<String> allowedRoleNames, String deniedMessage) {
+        if (!hasAccess(module, required)) {
+            requireAnyRole(allowedRoleNames, deniedMessage);
+        }
+    }
+
     public boolean hasAccess(ModuleCode module, PermissionLevel required) {
         List<String> roleNames = currentRoleNames();
         if (roleNames.isEmpty()) {

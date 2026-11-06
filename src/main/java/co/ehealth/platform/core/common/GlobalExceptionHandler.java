@@ -52,7 +52,9 @@ import co.ehealth.platform.visit.InvalidTokenTransitionException;
 import co.ehealth.platform.visit.InvalidQueueReasonException;
 import co.ehealth.platform.visit.InvalidTransferException;
 import co.ehealth.platform.visit.QueueTokenNotFoundException;
+import co.ehealth.platform.visit.QueueTokenAlreadyLinkedException;
 import co.ehealth.platform.visit.VisitNotFoundException;
+import co.ehealth.platform.visit.UnregisteredWalkInVisitException;
 import co.ehealth.platform.triage.InvalidTriageCaptureException;
 import co.ehealth.platform.triage.TriageAssessmentNotFoundException;
 import co.ehealth.platform.pharmacy.csvimport.ImportBatchNotFoundException;
@@ -395,6 +397,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
+    @ExceptionHandler(UnregisteredWalkInVisitException.class)
+    public ResponseEntity<ApiErrorResponse> handleUnregisteredWalkIn(UnregisteredWalkInVisitException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     // QueueService.callNext() against an empty queue — the facility and
     // request are both valid, the current state just has no one to call.
     // Same "conflicts with current state" shape as LastRemainingAdminException/
@@ -410,6 +417,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(QueueTokenNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleQueueTokenNotFound(QueueTokenNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(QueueTokenAlreadyLinkedException.class)
+    public ResponseEntity<ApiErrorResponse> handleQueueTokenAlreadyLinked(QueueTokenAlreadyLinkedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     // QueueToken's transition guards — e.g. recalling a token that was

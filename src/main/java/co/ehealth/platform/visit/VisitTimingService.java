@@ -36,12 +36,18 @@ public class VisitTimingService {
 
     public Snapshot get(UUID visitId) {
         Visit visit = visits.findById(visitId).orElseThrow(VisitNotFoundException::new);
-        return forPatient(visit.getPatientId()).stream().filter(s -> s.visitId().equals(visitId))
+        List<Snapshot> snapshots = visit.getPatientId() == null
+                ? forVisits(List.of(visit))
+                : forPatient(visit.getPatientId());
+        return snapshots.stream().filter(s -> s.visitId().equals(visitId))
                 .findFirst().orElseThrow(VisitNotFoundException::new);
     }
 
     public List<Snapshot> forPatient(UUID patientId) {
-        List<Visit> all = visits.findByPatientIdOrderByVisitDateTimeDesc(patientId);
+        return forVisits(visits.findByPatientIdOrderByVisitDateTimeDesc(patientId));
+    }
+
+    private List<Snapshot> forVisits(List<Visit> all) {
         if (all.isEmpty()) return List.of();
         Map<UUID, Visit> byId = all.stream().collect(Collectors.toMap(Visit::getId, Function.identity()));
         Map<UUID, UUID> roots = new HashMap<>();

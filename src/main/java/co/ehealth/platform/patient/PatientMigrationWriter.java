@@ -67,7 +67,8 @@ public class PatientMigrationWriter {
         // before (a patient_migrations row for it) — never for an unrelated
         // reason like being marked deceased, which needs a human to sort
         // out instead (Patient.reactivateFromMigration()'s own why-note).
-        Optional<Patient> existing = patientRepository.findByIdNumber(cmd.idNumber());
+        Optional<Patient> existing = cmd.idNumber() == null
+                ? Optional.empty() : patientRepository.findByIdNumber(cmd.idNumber());
         Patient destinationPatient;
         boolean reactivated = false;
         if (existing.isPresent()) {

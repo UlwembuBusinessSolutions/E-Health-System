@@ -107,7 +107,7 @@ public class PrescriptionService {
                 .map(item -> new PrescribingStockService.StockLine(item.productId(), item.quantity())).toList());
 
         String serialNumber = "RX-" + String.format("%07d", prescriptionRepository.nextSerialSequenceValue());
-        Prescription prescription = new Prescription(serialNumber, visit.getId(), visit.getPatientId(),
+        Prescription prescription = new Prescription(serialNumber, visit.getId(), visit.requirePatientId(),
                 visit.getFacilityId(), prescriberId, clock.instant(), cmd.consultationId());
         if (cmd.items().isEmpty()) {
             // Everything on it is for the patient to buy, so the pharmacy has nothing to hand over.

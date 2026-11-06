@@ -13,5 +13,6 @@ public interface PatientRegistrationVerificationRepository
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<PatientRegistrationVerification> findTopByEmailAndConsumedAtIsNullOrderByCreatedAtDesc(String email);
     void deleteByEmailOrIdNumber(String email, String idNumber);
+    void deleteByEmail(String email);
     void deleteByExpiresAtBefore(Instant cutoff);
 }

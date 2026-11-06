@@ -290,7 +290,7 @@ public class PatientController {
 
     public record RegisterPatientRequest(
             @NotBlank String firstName, @NotBlank String lastName,
-            @NotBlank @Pattern(regexp = "^\\d{13}$", message = "ID number must be 13 digits") String idNumber,
+            @Pattern(regexp = "^\\s*$|^\\d{13}$", message = "ID number must be 13 digits") String idNumber,
             @NotBlank String address,
             @NotBlank @Pattern(regexp = "^\\+?[0-9]{9,15}$") String contactNumber,
             // Optional — cross-tenant patient migration's own notification

@@ -70,7 +70,9 @@ public class OfflineRegistrationProcessor {
         // Conflict pre-check. Deliberately not relying on
         // DuplicateFieldException: a conflict is an outcome to record, not an
         // exception that would mark this transaction rollback-only and lose it.
-        Optional<Patient> clash = patientRepository.findByIdNumber(item.data().idNumber());
+        String idNumber = item.data().idNumber();
+        Optional<Patient> clash = idNumber == null || idNumber.isBlank()
+                ? Optional.empty() : patientRepository.findByIdNumber(idNumber.trim());
         if (clash.isPresent()) {
             Patient other = clash.get();
             record.markConflict(OfflineConflictType.ID_NUMBER_EXISTS, other.getId(),
@@ -107,10 +109,12 @@ public class OfflineRegistrationProcessor {
                     .map(v -> v.getPropertyPath() + ": " + v.getMessage())
                     .sorted().collect(Collectors.joining("; "));
         }
-        try {
-            SouthAfricanIdNumber.parse(registration.idNumber());
-        } catch (InvalidIdNumberException e) {
-            return e.getMessage();
+        if (registration.idNumber() != null && !registration.idNumber().isBlank()) {
+            try {
+                SouthAfricanIdNumber.parse(registration.idNumber().trim());
+            } catch (InvalidIdNumberException e) {
+                return e.getMessage();
+            }
         }
         return null;
     }

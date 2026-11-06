@@ -1,5 +1,6 @@
 package co.ehealth.platform.patient;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
@@ -19,9 +20,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PatientRegistrationFieldsTest {
@@ -60,6 +64,31 @@ class PatientRegistrationFieldsTest {
     }
 
     @Test
+    void registrationAcceptsMissingIdNumberWhenDateOfBirthIsProvided() {
+        try (var factory = Validation.buildDefaultValidatorFactory()) {
+            Validator validator = factory.getValidator();
+            assertTrue(validator.validate(request(null, LocalDate.of(1990, 5, 15),
+                    ParentRelationship.MOTHER, null)).isEmpty());
+            assertTrue(validator.validate(request("", LocalDate.of(1990, 5, 15),
+                    ParentRelationship.MOTHER, null)).isEmpty());
+        }
+    }
+
+    @Test
+    void publicRegistrationRequiresDateOfBirthWhenIdNumberIsMissing() {
+        try (var factory = Validation.buildDefaultValidatorFactory()) {
+            Validator validator = factory.getValidator();
+            PatientAuthController.RegisterRequest request = new PatientAuthController.RegisterRequest(
+                    "Lindiwe", "Mokoena", null, "Street", "+27821234567", "lindiwe@example.com",
+                    "correct-horse-battery", null);
+
+            assertTrue(validator.validate(request).stream()
+                    .anyMatch(violation -> violation.getPropertyPath().toString()
+                            .equals("dateOfBirthProvidedWhenIdNumberIsMissing")));
+        }
+    }
+
+    @Test
     void servicePersistsSubmittedDateAndNewFieldsInsteadOfReplacingDateFromId() {
         PatientRepository patients = mock(PatientRepository.class);
         OrganizationRepository organizations = mock(OrganizationRepository.class);
@@ -92,9 +121,76 @@ class PatientRegistrationFieldsTest {
         assertEquals("00A-57", response.patientFileNumber());
     }
 
+    @Test
+    void servicePersistsPatientWithoutIdNumberAndLeavesDerivedDemographicsUnknown() {
+        PatientRepository patients = mock(PatientRepository.class);
+        OrganizationRepository organizations = mock(OrganizationRepository.class);
+        Organization organization = mock(Organization.class);
+        when(patients.nextMpiSequenceValue()).thenReturn(1L);
+        when(organizations.findBySchemaName("test_tenant")).thenReturn(Optional.of(organization));
+        when(organization.getTenantCode()).thenReturn("TEST");
+        when(patients.save(any(Patient.class))).thenAnswer(invocation -> {
+            Patient saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", UUID.randomUUID());
+            return saved;
+        });
+        TenantContext.setCurrentTenant("test_tenant");
+        PatientService service = new PatientService(patients, mock(PatientFieldHistoryRepository.class),
+                mock(AuditLogService.class),
+                Clock.fixed(Instant.parse("2026-10-28T00:00:00Z"), ZoneOffset.UTC),
+                mock(PermissionService.class), organizations);
+
+        Patient patient = service.register(new PatientService.RegisterPatientCommand(
+                "Lindiwe", "Mokoena", "", "Street", "+27821234567", null,
+                null, null, null, null, LocalDate.of(1980, 1, 2), null, null), null);
+
+        assertEquals(LocalDate.of(1980, 1, 2), patient.getDateOfBirth());
+        assertNull(patient.getIdNumber());
+        assertNull(patient.getGender());
+        assertNull(patient.getCitizenshipStatus());
+        verify(patients, never()).existsByIdNumber(any());
+    }
+
+    @Test
+    void offlineSyncAcceptsRegistrationWithoutIdNumber() {
+        OfflineSyncRecordRepository syncRecords = mock(OfflineSyncRecordRepository.class);
+        PatientRepository patients = mock(PatientRepository.class);
+        PatientService patientService = mock(PatientService.class);
+        Instant now = Instant.parse("2026-10-28T00:00:00Z");
+        UUID patientId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Patient savedPatient = mock(Patient.class);
+        when(savedPatient.getId()).thenReturn(patientId);
+        when(savedPatient.getMpiNumber()).thenReturn("MPI-TEST-1");
+        when(patientService.registerOffline(any(), any(), any())).thenReturn(savedPatient);
+        when(patients.findById(patientId)).thenReturn(Optional.of(savedPatient));
+
+        try (var factory = Validation.buildDefaultValidatorFactory()) {
+            OfflineRegistrationProcessor processor = new OfflineRegistrationProcessor(syncRecords, patients,
+                    patientService, factory.getValidator(), new ObjectMapper().findAndRegisterModules(),
+                    Clock.fixed(now, ZoneOffset.UTC));
+            PatientController.RegisterPatientRequest registration = request(
+                    null, LocalDate.of(1980, 1, 2), null, null);
+            OfflineSyncService.SyncResult result = processor.process(
+                    new OfflineSyncService.SyncItem(UUID.randomUUID(), now, registration), "device-1", userId);
+
+            assertEquals(OfflineSyncStatus.SYNCED, result.status());
+            assertEquals(patientId, result.patientId());
+            assertEquals("MPI-TEST-1", result.mpiNumber());
+            verify(patients, never()).findByIdNumber(any());
+            verify(patientService).registerOffline(any(PatientService.RegisterPatientCommand.class),
+                    org.mockito.ArgumentMatchers.eq(userId), org.mockito.ArgumentMatchers.eq(now));
+        }
+    }
+
     private static PatientController.RegisterPatientRequest request(LocalDate dateOfBirth,
             ParentRelationship parentRelationship, String patientFileNumber) {
-        return new PatientController.RegisterPatientRequest("Lindiwe", "Mokoena", "8001015009087", "Street",
+        return request("8001015009087", dateOfBirth, parentRelationship, patientFileNumber);
+    }
+
+    private static PatientController.RegisterPatientRequest request(String idNumber, LocalDate dateOfBirth,
+            ParentRelationship parentRelationship, String patientFileNumber) {
+        return new PatientController.RegisterPatientRequest("Lindiwe", "Mokoena", idNumber, "Street",
                 "+27821234567", null, null, null, null, null, dateOfBirth, parentRelationship, patientFileNumber);
     }
 }

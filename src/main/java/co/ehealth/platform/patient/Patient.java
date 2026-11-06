@@ -25,8 +25,9 @@ import java.util.UUID;
 // idNumber, dateOfBirth, gender, and citizenshipStatus have no setter at
 // all — mpiNumber per PREG-US-016's own AC2 ("not editable by any role"),
 // and the identity fields because they're fixed at registration; gender
-// and citizenship are derived from idNumber, while dateOfBirth is accepted
-// explicitly from the registration form. PatientService.update() is the only caller of these setters,
+// and citizenship are derived when an ID number is available, while
+// dateOfBirth is accepted explicitly from the registration form.
+// PatientService.update() is the only caller of these setters,
 // and only reaches them after PatientFieldHistory has recorded the prior
 // value — never call these directly from anywhere else.
 @Entity
@@ -49,9 +50,8 @@ public class Patient {
     @Column(name = "last_name", nullable = false, length = 100)
     private String lastName;
 
-    // Derived from idNumber at registration (SouthAfricanIdNumber.parse()),
-    // not taken directly from the request — PREG-US-003's "DOB/gender
-    // auto-derived."
+    // Derived from idNumber at registration when available; registration
+    // without an ID supplies dateOfBirth directly.
     @Column(name = "date_of_birth", nullable = false)
     private LocalDate dateOfBirth;
 
@@ -63,14 +63,14 @@ public class Patient {
     private String patientFileNumber;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
+    @Column(length = 10)
     private Gender gender;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "citizenship_status", nullable = false, length = 20)
+    @Column(name = "citizenship_status", length = 20)
     private CitizenshipStatus citizenshipStatus;
 
-    @Column(name = "id_number", nullable = false, unique = true, length = 13)
+    @Column(name = "id_number", unique = true, length = 13)
     private String idNumber;
 
     @Column(nullable = false, length = 500)
@@ -94,9 +94,8 @@ public class Patient {
     @Column(name = "medical_aid_number", length = 50)
     private String medicalAidNumber;
 
-    // Supplementary, not an alternative identity path — idNumber stays the
-    // required field this class is constructed from; see V15's own
-    // migration comment on why this doesn't replace it.
+    // Supplementary identity document; it does not replace an SA ID when one
+    // is available.
     @Column(name = "passport_number", length = 20)
     private String passportNumber;
 
