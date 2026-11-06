@@ -158,6 +158,7 @@ export function AppRouter() {
             reception/clinical work, not admin territory. */}
         <Route path="patients" element={<PatientSearchPage />} />
         <Route path="patients/new" element={<RegisterPatientScreen />} />
+        <Route path="patients/walk-in" element={<PatientDetailPage />} />
         <Route path="patients/:id" element={<PatientDetailPage />} />
         <Route path="reception" element={<ReceptionPage />} />
         <Route path="queue" element={<QueuePage />} />

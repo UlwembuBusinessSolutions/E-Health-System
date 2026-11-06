@@ -82,6 +82,7 @@ export interface CaptureTriagePayload {
   additionalObservations?: AdditionalObservations;
   emergencySign: boolean;
   emergencySignNote?: string;
+  dateOfBirth?: string;
   scoringProfileOverride?: ScoringProfile;
   respiratoryRate?: number;
   heartRate?: number;
@@ -164,7 +165,7 @@ export interface VitalsAssessmentDetail {
   assessment: TriageAssessment;
   capturedByName: string | null;
   patientName: string;
-  patientMpi: string;
+  patientMpi: string | null;
 }
 
 // VitalsPrintPage — one assessment by id. Unlike PatientVitalsEntry above,

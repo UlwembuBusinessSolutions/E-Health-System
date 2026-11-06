@@ -136,6 +136,7 @@ interface VitalsFormState {
   confirmOutOfRange: boolean;
   clinicianConfirmedColour: TriageColour | "";
   colourConfirmationReason: string;
+  dateOfBirth: string;
 }
 
 const EMPTY_VITALS_FORM: VitalsFormState = {
@@ -161,6 +162,7 @@ const EMPTY_VITALS_FORM: VitalsFormState = {
   confirmOutOfRange: false,
   clinicianConfirmedColour: "",
   colourConfirmationReason: "",
+  dateOfBirth: "",
 };
 
 // "" means not entered — distinct from 0, which is a real (if extreme)
@@ -709,6 +711,8 @@ export function PatientDetailPage() {
   // ?tab=vitals/consultation opens directly on the selected visit workflow;
   // ?tab=medication onto the prescriptions, e.g. from a pharmacy message on the Dashboard.
   const [searchParams] = useSearchParams();
+  const isWalkIn = searchParams.get("walkIn") === "true" || !id;
+  const walkInTokenNumber = searchParams.get("tokenNumber");
   const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(() => {
     const tab = searchParams.get("tab");
     return tab === "vitals" || tab === "consultation" || tab === "medication" ? tab : "overview";
@@ -898,6 +902,10 @@ export function PatientDetailPage() {
       setVitalsError("Select whether an injury occurred within the past 48 hours.");
       return;
     }
+    if (isWalkIn && !vitalsForm.dateOfBirth) {
+      setVitalsError("Date of birth is required to determine the walk-in scoring profile.");
+      return;
+    }
     for (const key of ["weightKg", "heightCm", "glucoseMmolL", "haemoglobinGdl"] as const) {
       const value = vitalsForm.additional[key];
       if (value !== "" && (!Number.isFinite(Number(value)) || Number(value) <= 0)) {
@@ -912,7 +920,7 @@ export function PatientDetailPage() {
     }
     const paediatricProfile = vitalsForm.scoringProfileOverride
       ? vitalsForm.scoringProfileOverride.startsWith("PAEDIATRIC")
-      : isPaediatric(patientQuery.data?.dateOfBirth);
+      : isPaediatric(isWalkIn ? vitalsForm.dateOfBirth : patientQuery.data?.dateOfBirth);
     if (!vitalsForm.emergencySign && paediatricProfile
         && (!vitalsForm.clinicianConfirmedColour || !vitalsForm.colourConfirmationReason.trim())) {
       setVitalsError("Select and explain the clinician-confirmed paediatric triage colour.");
@@ -922,6 +930,7 @@ export function PatientDetailPage() {
       additionalObservations: additionalPayload(vitalsForm.additional),
       emergencySign: vitalsForm.emergencySign,
       emergencySignNote: vitalsForm.emergencySignNote.trim() || undefined,
+      dateOfBirth: isWalkIn ? vitalsForm.dateOfBirth : undefined,
       scoringProfileOverride: vitalsForm.scoringProfileOverride || undefined,
       respiratoryRate: numberOrUndefined(vitalsForm.respiratoryRate),
       heartRate: numberOrUndefined(vitalsForm.heartRate),
@@ -1009,7 +1018,7 @@ export function PatientDetailPage() {
 
   // The vitals / triage card: shows the latest reading with a Take vitals button, and the capture
   // form. It is shown on both the Overview and the Vitals tab, so vitals can be taken from either.
-  const vitalsCard = patient && !patient.archived ? (
+  const vitalsCard = (isWalkIn || (patient && !patient.archived)) ? (
     <Card className="mb-6 p-6">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <h2 className="text-[14.5px] font-semibold text-text-primary">Vitals / triage</h2>
@@ -1024,7 +1033,7 @@ export function PatientDetailPage() {
                     {canCaptureVitals && (
                       <Link
                         to="/app/reception"
-                        state={{ registeredPatientId: patient.id }}
+                        state={{ registeredPatientId: patient?.id }}
                         className="mt-3 inline-flex h-10 items-center rounded-lg border border-border-strong bg-surface-raised px-3 text-[13px] font-semibold text-text-primary hover:bg-surface-sunken"
                       >
                         Continue at Reception
@@ -1059,6 +1068,16 @@ export function PatientDetailPage() {
                       </label>
                     ) : (
                       <div className="flex flex-col gap-4">
+                        {isWalkIn && (
+                          <Input
+                            label="Date of birth"
+                            type="date"
+                            required
+                            max={new Date().toISOString().slice(0, 10)}
+                            value={vitalsForm.dateOfBirth}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
+                          />
+                        )}
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                           <Input
                             label="Respiratory rate (breaths/min)"
@@ -1116,7 +1135,7 @@ export function PatientDetailPage() {
                           />
                           {(vitalsForm.scoringProfileOverride
                             ? vitalsForm.scoringProfileOverride.startsWith("PAEDIATRIC")
-                            : isPaediatric(patient?.dateOfBirth)) && (
+                            : isPaediatric(isWalkIn ? vitalsForm.dateOfBirth : patient?.dateOfBirth)) && (
                             <>
                               <Select
                                 label="Clinician-confirmed final colour"
@@ -1329,8 +1348,8 @@ export function PatientDetailPage() {
                           <VitalsHistoryRow
                             key={assessment.id}
                             assessment={assessment}
-                            patientName={`${patient.firstName} ${patient.lastName}`}
-                            patientMpi={patient.mpiNumber}
+                            patientName={isWalkIn ? "Unregistered walk-in" : `${patient?.firstName} ${patient?.lastName}`}
+                            patientMpi={isWalkIn ? undefined : patient?.mpiNumber}
                           />
                         ))}
                       </div>
@@ -1339,6 +1358,54 @@ export function PatientDetailPage() {
                 )}
               </Card>
   ) : null;
+
+  if (isWalkIn) {
+    return (
+      <div>
+        <Link
+          to="/app/vitals"
+          className="mb-5 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-text-secondary hover:text-text-primary"
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+          Back to Take Vitals
+        </Link>
+        <Card className="mb-6 p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-full border border-brand-500/25 bg-brand-50 text-brand-600">
+              <HeartPulse className="size-5" aria-hidden />
+            </span>
+            <div>
+              <h1 className="text-[19px] font-semibold text-text-primary">Unregistered walk-in</h1>
+              <p className="font-mono text-[13px] text-text-secondary">
+                {walkInTokenNumber ? `Token #${walkInTokenNumber}` : "Reception-issued visit"} · not registered
+              </p>
+            </div>
+          </div>
+        </Card>
+        {activeVisitId && <VisitTimingPanel key={activeVisitId} visitId={activeVisitId} />}
+        <div role="tablist" aria-label="Walk-in record sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-border-subtle">
+          {(["overview", "vitals"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
+              onClick={() => setActiveTab(tab)}
+              className={clsx(
+                "-mb-px shrink-0 border-b-2 px-3.5 py-2.5 text-[13.5px] font-medium capitalize transition-colors duration-150",
+                activeTab === tab
+                  ? "border-brand-500 text-brand-600"
+                  : "border-transparent text-text-secondary hover:text-text-primary",
+              )}
+            >
+              {tab === "overview" ? "Overview" : "Vitals"}
+            </button>
+          ))}
+        </div>
+        {vitalsCard}
+      </div>
+    );
+  }
 
   return (
     <div>
