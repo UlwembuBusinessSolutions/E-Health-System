@@ -30,7 +30,10 @@ export const registerPatientSchema = z
   .object({
     firstName: z.string().trim().min(1, "First name is required").max(100),
     lastName: z.string().trim().min(1, "Last name is required").max(100),
-    idNumber: z.string().trim().regex(/^[0-9]{13}$/, "Enter a valid 13-digit SA ID number"),
+    idNumber: z
+      .string()
+      .trim()
+      .refine((value) => value === "" || /^[0-9]{13}$/.test(value), "Enter a valid 13-digit SA ID number"),
     dateOfBirth: z.string().trim().min(1, "Date of birth is required"),
     parentRelationship: z.enum(["MOTHER", "FATHER"]).optional().or(z.literal("")),
     patientFileNumber: z.string().trim().max(100),

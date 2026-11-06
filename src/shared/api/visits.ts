@@ -10,9 +10,16 @@ export type VisitType = "NEW" | "FOLLOW_UP";
 // not an invented taxonomy.
 export type ServiceStream = "GENERAL" | "CHRONIC_CARE" | "MATERNAL_CHILD" | "OCCUPATIONAL_HEALTH";
 
+export const SERVICE_STREAM_DETAILS: Record<ServiceStream, { label: string; code: string }> = {
+  GENERAL: { label: "General / acute care", code: "A" },
+  CHRONIC_CARE: { label: "Chronic care", code: "C" },
+  OCCUPATIONAL_HEALTH: { label: "Occupational health", code: "O" },
+  MATERNAL_CHILD: { label: "Maternal & child health", code: "N" },
+};
+
 export interface Visit {
   id: string;
-  patientId: string;
+  patientId: string | null;
   facilityId: string;
   visitType: VisitType;
   serviceStream: ServiceStream;
@@ -21,6 +28,12 @@ export interface Visit {
 
 export interface CreateVisitPayload {
   patientId: string;
+  facilityId: string;
+  visitType: VisitType;
+  serviceStream: ServiceStream;
+}
+
+export interface CreateWalkInVisitPayload {
   facilityId: string;
   visitType: VisitType;
   serviceStream: ServiceStream;
@@ -36,6 +49,16 @@ export interface VisitWithToken {
 
 export async function createVisit(payload: CreateVisitPayload): Promise<VisitWithToken> {
   return apiClient.post<VisitWithToken>("/api/v1/visits", payload, { headers: tenantAuthHeaders() });
+}
+
+// Creates a walk-in visit and queue token without creating an unverified
+// patient record.
+export async function createWalkInVisit(payload: CreateWalkInVisitPayload): Promise<VisitWithToken> {
+  return apiClient.post<VisitWithToken>("/api/v1/visits/walk-in", payload, { headers: tenantAuthHeaders() });
+}
+
+export async function getVisit(visitId: string): Promise<Visit> {
+  return apiClient.get<Visit>(`/api/v1/visits/${visitId}`, { headers: tenantAuthHeaders() });
 }
 
 // The patient record's Visits tab — every visit this patient has ever had,

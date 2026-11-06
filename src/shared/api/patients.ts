@@ -33,8 +33,8 @@ export interface RegisterPatientPayload {
   passportExpiry?: string; // "yyyy-MM-dd"
 }
 
-// gender/citizenshipStatus are derived from idNumber. dateOfBirth is
-// supplied explicitly on registration and returned as part of this shape.
+// gender/citizenshipStatus are derived from idNumber when one is provided.
+// dateOfBirth is supplied explicitly on registration.
 export interface Patient {
   id: string;
   mpiNumber: string;
@@ -43,9 +43,9 @@ export interface Patient {
   dateOfBirth: string;
   parentRelationship: ParentRelationship | null;
   patientFileNumber: string | null;
-  gender: Gender;
-  citizenshipStatus: CitizenshipStatus;
-  idNumber: string;
+  gender: Gender | null;
+  citizenshipStatus: CitizenshipStatus | null;
+  idNumber: string | null;
   address: string;
   contactNumber: string;
   email: string | null;

@@ -125,7 +125,9 @@ export function VitalsIntakePage() {
                   </td>
                   <td className="px-5 py-3.5">
                     <p className="text-[13.5px] font-medium text-text-primary">{entry.patientName}</p>
-                    <p className="text-[12px] text-text-secondary">{entry.patientMpi}</p>
+                    <p className="text-[12px] text-text-secondary">
+                      {entry.patientMpi ?? "Unregistered walk-in"}
+                    </p>
                   </td>
                   <td className="px-5 py-3.5">
                     <StatusPill tone={entry.token.status === "CALLED" ? "success" : "neutral"}>
@@ -136,14 +138,18 @@ export function VitalsIntakePage() {
                     {formatTime(entry.token.issuedAt)}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      icon={<HeartPulse className="size-3.5" aria-hidden />}
-                      onClick={() => navigate(`/app/patients/${entry.patientId}?visitId=${entry.token.visitId}`)}
-                    >
-                      Take vitals
-                    </Button>
+                    {entry.patientId ? (
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        icon={<HeartPulse className="size-3.5" aria-hidden />}
+                        onClick={() => navigate(`/app/patients/${entry.patientId}?visitId=${entry.token.visitId}`)}
+                      >
+                        Take vitals
+                      </Button>
+                    ) : (
+                      <span className="text-[12px] text-text-secondary">Create a patient-linked visit before taking vitals</span>
+                    )}
                   </td>
                 </tr>
               ))}
