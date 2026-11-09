@@ -1,6 +1,6 @@
 import { StartConsultationPanel } from "./StartConsultationPanel";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { ChevronDown, ClipboardCheck, FlaskConical, Pill, Plus, Stethoscope, Trash2, TriangleAlert } from "lucide-react";
@@ -123,8 +123,15 @@ export function PatientConsultationTab({
           <h2 className="mb-3 text-[14.5px] font-semibold text-text-primary">Consultation</h2>
           <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
             <p className="text-[13.5px] text-text-secondary">
-              Start a visit from the Overview tab before beginning a consultation. Earlier consultations are listed below.
+              Check in at Reception before beginning a consultation. Earlier consultations are listed below.
             </p>
+            <Link
+              to="/app/reception"
+              state={{ registeredPatientId: patientId }}
+              className="mt-3 inline-flex text-[13px] font-semibold text-brand-600 hover:underline"
+            >
+              Continue at Reception
+            </Link>
           </div>
         </Card>
       )}

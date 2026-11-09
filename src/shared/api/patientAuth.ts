@@ -52,7 +52,7 @@ export interface PatientOwnRecords {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
-  gender: string;
+  gender: string | null;
   address: string;
   contactNumber: string;
   email: string | null;
@@ -84,6 +84,7 @@ export interface RegisterPatientAccountPayload {
   firstName: string;
   lastName: string;
   idNumber: string;
+  dateOfBirth: string;
   address: string;
   contactNumber: string;
   email: string;
@@ -99,7 +100,8 @@ export async function registerPatientAccount(
     {
       firstName: payload.firstName,
       lastName: payload.lastName,
-      idNumber: payload.idNumber,
+      idNumber: payload.idNumber || undefined,
+      dateOfBirth: payload.idNumber.trim() ? undefined : payload.dateOfBirth || undefined,
       address: payload.address,
       contactNumber: payload.contactNumber,
       email: payload.email,

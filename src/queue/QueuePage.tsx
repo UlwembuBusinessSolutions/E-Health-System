@@ -192,7 +192,7 @@ function buildRowActions(params: {
       onClick: params.onBoost,
     });
   }
-  if (params.canTakeVitals && (status === "ISSUED" || status === "CALLED")) {
+  if (params.canTakeVitals && entry.patientId && (status === "ISSUED" || status === "CALLED")) {
     items.push({
       key: "vitals",
       label: "Vitals",
@@ -696,8 +696,22 @@ export function QueuePage() {
                         #{entry.token.tokenNumber}
                       </td>
                       <td className="px-5 py-3.5">
-                        <p className="text-[13.5px] font-medium text-text-primary">{entry.patientName}</p>
-                        <p className="font-mono text-[12px] text-text-secondary">{entry.patientMpi}</p>
+                        {entry.patientId ? (
+                          <button
+                            type="button"
+                            className="text-left text-[13.5px] font-medium text-text-primary hover:text-brand-600 hover:underline"
+                            onClick={() =>
+                              navigate(`/app/patients/${entry.patientId}?visitId=${encodeURIComponent(entry.token.visitId)}`)
+                            }
+                          >
+                            {entry.patientName}
+                          </button>
+                        ) : (
+                          <p className="text-[13.5px] font-medium text-text-primary">{entry.patientName}</p>
+                        )}
+                        <p className="font-mono text-[12px] text-text-secondary">
+                          {entry.patientMpi ?? "Registration needed for clinical care"}
+                        </p>
                       </td>
                       <td className="px-5 py-3.5">
                         <StatusPill tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</StatusPill>

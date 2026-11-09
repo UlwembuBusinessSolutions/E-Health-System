@@ -1,8 +1,8 @@
 import { useRef, useState, type ComponentType } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
-import { Link, useLocation, useNavigate } from "react-router-dom"; // OFFLINE: useLocation
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"; // OFFLINE: useLocation
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import {
@@ -27,7 +27,11 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { registerPatientSchema, type RegisterPatientValues } from "./validation";
+import {
+  extractSouthAfricanIdDateOfBirth,
+  registerPatientSchema,
+  type RegisterPatientValues,
+} from "./validation";
 import {
   addGuardian,
   registerPatient,
@@ -40,6 +44,7 @@ import {
   type RegisterPatientPayload, // OFFLINE
 } from "@/shared/api/patients";
 import { ApiError } from "@/shared/api/client";
+import { linkQueueTokenToPatient } from "@/shared/api/queue";
 import { Input } from "@/shared/components/Input";
 import { Button } from "@/shared/components/Button";
 import { Card } from "@/shared/components/Card";
@@ -52,6 +57,7 @@ import { useOffline } from "@/offline/OfflineContext"; // OFFLINE
 import { generateUUID } from "@/utils/uuid"; // OFFLINE
 
 const MAX_GUARDIANS = 5;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const RELATIONSHIP_OPTIONS: { value: GuardianRelationship; label: string }[] = [
   { value: "PARENT", label: "Parent" },
@@ -316,9 +322,8 @@ function GuardianEntry({
 
 // PREG-US-001: "Given a person is not already registered, When I complete
 // the registration form with all mandatory fields, Then an EPR is created
-// and a unique MPI number is generated." dateOfBirth/gender/citizenship
-// aren't form fields at all — PatientController derives all three from
-// idNumber alone.
+// and a unique MPI number is generated." Gender and citizenship are derived
+// from idNumber when provided; dateOfBirth is collected explicitly.
 //
 // OFFLINE: when the device is offline (or the request never gets an answer),
 // the demographics are saved to the encrypted on-device outbox instead and
@@ -327,15 +332,24 @@ function GuardianEntry({
 // patient's record after sync.
 export function RegisterPatientScreen() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
   // OFFLINE
   const offline = useOffline();
   const location = useLocation();
-  const resend = (
-    location.state as { resend?: { clientRecordId: string; values: RegisterPatientPayload } } | null
-  )?.resend;
+  const locationState = location.state as {
+    resend?: { clientRecordId: string; values: RegisterPatientPayload };
+    reception?: { facilityId: string };
+  } | null;
+  const resend = locationState?.resend;
+  const receptionFacilityId = locationState?.reception?.facilityId;
+  const requestedQueueTokenId = searchParams.get("queueTokenId")?.trim() ?? "";
+  const queueTokenId = UUID_PATTERN.test(requestedQueueTokenId) ? requestedQueueTokenId : undefined;
+  const invalidQueueToken = requestedQueueTokenId.length > 0 && !queueTokenId;
   const [savedOffline, setSavedOffline] = useState<{ name: string; skipped: boolean } | null>(null);
 
   const [formError, setFormError] = useState<string | null>(null);
+  const [tokenLinkError, setTokenLinkError] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [idCopyFile, setIdCopyFile] = useState<File | null>(null);
   const [birthCertificateFile, setBirthCertificateFile] = useState<File | null>(null);
@@ -359,6 +373,7 @@ export function RegisterPatientScreen() {
   const {
     register,
     handleSubmit,
+    setValue,
     reset, // OFFLINE
     formState: { errors, isSubmitting },
   } = useForm<RegisterPatientValues>({
@@ -368,6 +383,12 @@ export function RegisterPatientScreen() {
       firstName: resend?.values.firstName ?? "",
       lastName: resend?.values.lastName ?? "",
       idNumber: resend?.values.idNumber ?? "",
+      dateOfBirth:
+        resend?.values.dateOfBirth ??
+        (resend?.values.idNumber ? extractSouthAfricanIdDateOfBirth(resend.values.idNumber) : null) ??
+        "",
+      parentRelationship: resend?.values.parentRelationship ?? "",
+      patientFileNumber: resend?.values.patientFileNumber ?? "",
       address: resend?.values.address ?? "",
       contactNumber: resend?.values.contactNumber ?? "",
       email: resend?.values.email ?? "",
@@ -378,11 +399,16 @@ export function RegisterPatientScreen() {
     },
   });
 
+  const idNumberField = register("idNumber");
+
   // OFFLINE: form values -> API payload (same mapping the online mutation uses).
   const toPayload = (v: RegisterPatientValues): RegisterPatientPayload => ({
     firstName: v.firstName,
     lastName: v.lastName,
     idNumber: v.idNumber,
+    dateOfBirth: v.dateOfBirth,
+    parentRelationship: v.parentRelationship || undefined,
+    patientFileNumber: v.patientFileNumber || undefined,
     address: v.address,
     contactNumber: v.contactNumber,
     email: v.email || undefined,
@@ -415,21 +441,25 @@ export function RegisterPatientScreen() {
     }
   };
 
+  const tokenLinkMutation = useMutation({
+    mutationFn: ({ tokenId, patientId }: { tokenId: string; patientId: string }) =>
+      linkQueueTokenToPatient(tokenId, patientId),
+    onSuccess: (_result, variables) => {
+      setTokenLinkError(null);
+      void queryClient.invalidateQueries({ queryKey: ["queue"] });
+      void queryClient.invalidateQueries({ queryKey: ["queue-token", variables.tokenId] });
+    },
+    onError: (error) => {
+      setTokenLinkError(error instanceof ApiError
+        ? error.message
+        : "Patient registered, but the queue token could not be linked. Retry below.");
+    },
+  });
+
   const mutation = useMutation({
-    mutationFn: (values: RegisterPatientValues) =>
-      registerPatient({
-        firstName: values.firstName,
-        lastName: values.lastName,
-        idNumber: values.idNumber,
-        address: values.address,
-        contactNumber: values.contactNumber,
-        email: values.email || undefined,
-        medicalAidProvider: values.medicalAidProvider || undefined,
-        medicalAidNumber: values.medicalAidNumber || undefined,
-        passportNumber: values.passportNumber || undefined,
-        passportExpiry: values.passportExpiry || undefined,
-      }),
+    mutationFn: (values: RegisterPatientValues) => registerPatient(toPayload(values)),
     onSuccess: (patient: Patient) => {
+      if (queueTokenId) tokenLinkMutation.mutate({ tokenId: queueTokenId, patientId: patient.id });
       const staged: { documentType: PatientDocumentType; file: File }[] = [];
       if (photoFile) staged.push({ documentType: "PATIENT_PHOTO", file: photoFile });
       if (idCopyFile) staged.push({ documentType: "ID_COPY", file: idCopyFile });
@@ -547,6 +577,38 @@ export function RegisterPatientScreen() {
               {mutation.data.mpiNumber}
             </p>
 
+            {invalidQueueToken && (
+              <p role="alert" className="max-w-sm text-[13px] text-danger-600">
+                The registration link contains an invalid queue token. The patient was registered, but no token could be linked.
+              </p>
+            )}
+            {queueTokenId && tokenLinkMutation.isPending && (
+              <p role="status" className="text-[13px] text-text-secondary">Linking the check-in token to this patient…</p>
+            )}
+            {queueTokenId && tokenLinkMutation.isSuccess && (
+              <p role="status" className="text-[13px] text-success-600">
+                Check-in token linked to MPI {mutation.data.mpiNumber}.
+              </p>
+            )}
+            {tokenLinkError && (
+              <div role="alert" className="max-w-sm text-[13px] text-danger-600">
+                <p>{tokenLinkError}</p>
+                <Button
+                  className="mt-2"
+                  size="md"
+                  variant="secondary"
+                  loading={tokenLinkMutation.isPending}
+                  onClick={() => {
+                    if (queueTokenId) {
+                      tokenLinkMutation.mutate({ tokenId: queueTokenId, patientId: mutation.data.id });
+                    }
+                  }}
+                >
+                  Retry token link
+                </Button>
+              </div>
+            )}
+
             {documentUploadStatus === "uploading" && (
               <p className="flex items-center gap-1.5 text-[13px] text-text-secondary">
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
@@ -586,9 +648,23 @@ export function RegisterPatientScreen() {
             )}
 
             <div className="mt-2 flex w-full flex-col gap-2">
-              <Button size="lg" className="w-full" onClick={() => navigate(`/app/patients/${mutation.data.id}`)}>
-                View patient record
-              </Button>
+              {receptionFacilityId ? (
+                <Button
+                  size="lg"
+                  className="w-full"
+                  onClick={() =>
+                    navigate("/app/reception", {
+                      state: { facilityId: receptionFacilityId, registeredPatientId: mutation.data.id },
+                    })
+                  }
+                >
+                  Continue to visit registration
+                </Button>
+              ) : (
+                <Button size="lg" className="w-full" onClick={() => navigate(`/app/patients/${mutation.data.id}`)}>
+                  View patient record
+                </Button>
+              )}
               <Button
                 variant="secondary"
                 size="lg"
@@ -633,6 +709,11 @@ export function RegisterPatientScreen() {
               <p className="flex items-center gap-1.5 text-[13px] text-amber-600">
                 <AlertCircle className="size-3.5 shrink-0" aria-hidden />
                 The photo, documents and guardians weren't included. Add them from the patient's record after syncing.
+              </p>
+            )}
+            {queueTokenId && (
+              <p className="max-w-sm text-[13px] text-amber-700">
+                The check-in token has not been linked. This registration needs to sync before its MPI can be connected to the token.
               </p>
             )}
             <div className="mt-2 flex w-full flex-col gap-2">
@@ -686,6 +767,11 @@ export function RegisterPatientScreen() {
                 {formError}
               </div>
             )}
+            {invalidQueueToken && (
+              <p role="alert" className="rounded-lg border border-amber-500/30 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-800">
+                This registration link contains an invalid queue token. The patient can still be registered, but no token will be linked.
+              </p>
+            )}
 
             <div className="flex flex-col items-center gap-3 rounded-lg border border-border-subtle bg-surface-sunken p-4">
               <p className="text-[13px] font-semibold text-text-secondary">Patient photo (optional)</p>
@@ -724,14 +810,52 @@ export function RegisterPatientScreen() {
 
             <Input
               label="SA ID number"
-              required
               icon={<CreditCard className="size-4" aria-hidden />}
-              placeholder="9005155001084"
+              placeholder="Optional"
               inputMode="numeric"
               autoComplete="off"
-              hint={!errors.idNumber ? "Date of birth, gender and citizenship are derived from this." : undefined}
+              hint={!errors.idNumber ? "If provided, date of birth is filled from this ID number and must match it." : undefined}
               error={errors.idNumber?.message}
-              {...register("idNumber")}
+              {...idNumberField}
+              onChange={(event) => {
+                void idNumberField.onChange(event);
+                const dateOfBirth = extractSouthAfricanIdDateOfBirth(event.target.value);
+                if (dateOfBirth) {
+                  setValue("dateOfBirth", dateOfBirth, { shouldDirty: true, shouldValidate: true });
+                }
+              }}
+            />
+
+            <FormRow>
+              <Input
+                label="Date of birth"
+                type="date"
+                required
+                autoComplete="bday"
+                error={errors.dateOfBirth?.message}
+                {...register("dateOfBirth")}
+              />
+              <Select
+                label="Parent relationship"
+                options={[
+                  { value: "MOTHER", label: "Mother" },
+                  { value: "FATHER", label: "Father" },
+                ]}
+                placeholder="Optional"
+                error={errors.parentRelationship?.message}
+                {...register("parentRelationship")}
+              />
+            </FormRow>
+
+            <Input
+              label="Patient file number"
+              icon={<Hash className="size-4" aria-hidden />}
+              placeholder="Optional"
+              autoComplete="off"
+              maxLength={100}
+              hint={!errors.patientFileNumber ? "Letters and numbers are accepted." : undefined}
+              error={errors.patientFileNumber?.message}
+              {...register("patientFileNumber")}
             />
 
             <FormRow>

@@ -36,9 +36,9 @@ export interface QueueToken {
 // that's a different, unbuilt screen.
 export interface QueueEntry {
   token: QueueToken;
-  patientId: string;
+  patientId: string | null;
   patientName: string;
-  patientMpi: string;
+  patientMpi: string | null;
 }
 
 export interface QueuePageResult {
@@ -85,6 +85,14 @@ export async function listQueue(facilityId: string, filters: QueueFilters): Prom
 // ticket is harmless even outside the live queue view.
 export async function getQueueToken(tokenId: string): Promise<QueueEntry> {
   return apiClient.get<QueueEntry>(`/api/v1/queue/tokens/${tokenId}`, { headers: tenantAuthHeaders() });
+}
+
+export async function linkQueueTokenToPatient(tokenId: string, patientId: string): Promise<void> {
+  return apiClient.post<void>(
+    `/api/v1/queue/tokens/${tokenId}/patient`,
+    { patientId },
+    { headers: tenantAuthHeaders() },
+  );
 }
 
 // RECQ-US-002 — issues a genuinely NEW token against a visit that doesn't

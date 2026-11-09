@@ -15,19 +15,31 @@ import { Button } from "@/shared/components/Button";
 import { FormRow } from "@/shared/components/FormRow";
 import "@/auth/auth-fields.css";
 
-// Mirrors PatientAuthController.RegisterRequest's own validation exactly
-// (13-digit SA ID, 9-15 digit phone, 8+ char password) so a form error
-// surfaces before the request round-trips at all.
+// Mirrors PatientAuthController.RegisterRequest's own validation so a form
+// error surfaces before the request round-trips at all.
 const registerSchema = z
   .object({
     firstName: z.string().trim().min(1, "First name is required").max(100),
     lastName: z.string().trim().min(1, "Last name is required").max(100),
-    idNumber: z.string().trim().refine(isValidSouthAfricanId, "Enter a valid 13-digit SA ID with a real birth date and checksum"),
+    idNumber: z.string().trim().refine(
+      (value) => value === "" || isValidSouthAfricanId(value),
+      "Enter a valid 13-digit SA ID with a real birth date and checksum",
+    ),
+    dateOfBirth: z.string().trim(),
     address: z.string().trim().min(1, "Address is required").max(300),
     contactNumber: z.string().trim().regex(/^\+?[0-9]{9,15}$/, "Enter a valid contact number, e.g. +27821234567"),
     email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
     password: z.string().min(8, "At least 8 characters"),
     confirmPassword: z.string().min(1, "Confirm your password"),
+  })
+  .superRefine((values, context) => {
+    if (!values.idNumber && !values.dateOfBirth) {
+      context.addIssue({
+        code: "custom",
+        path: ["dateOfBirth"],
+        message: "Date of birth is required when ID number is not provided",
+      });
+    }
   })
   .refine((values) => values.password === values.confirmPassword, {
     message: "Passwords don't match",
@@ -57,7 +69,6 @@ function isValidSouthAfricanId(value: string): boolean {
 type RegisterValues = z.infer<typeof registerSchema>;
 
 const PATIENT_SETUP_STEPS = ["Your details", "Verify email", "Book care"];
-
 function PatientSetupSteps({ currentStep }: { currentStep: number }) {
   return (
     <ol aria-label="Patient account progress" className="mb-5 grid grid-cols-3 gap-2">
@@ -102,6 +113,7 @@ export function PatientRegisterScreen() {
     register,
     handleSubmit,
     getValues,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
@@ -110,6 +122,7 @@ export function PatientRegisterScreen() {
       firstName: "",
       lastName: "",
       idNumber: "",
+      dateOfBirth: "",
       address: "",
       contactNumber: "",
       email: "",
@@ -117,6 +130,8 @@ export function PatientRegisterScreen() {
       confirmPassword: "",
     },
   });
+
+  const idNumber = watch("idNumber");
 
   const mutation = useMutation({
     mutationFn: registerPatientAccount,
@@ -185,10 +200,12 @@ export function PatientRegisterScreen() {
       setFormError("Your registration details are no longer available. Start account creation again to request a code.");
       return;
     }
-    const { firstName, lastName, idNumber, address, contactNumber, email, password } = values.data;
+    const { firstName, lastName, idNumber, dateOfBirth, address, contactNumber, email, password } = values.data;
     setFormError(null);
     setResendNotice(null);
-    resendMutation.mutate({ tenantSlug, firstName, lastName, idNumber, address, contactNumber, email, password });
+    resendMutation.mutate({
+      tenantSlug, firstName, lastName, idNumber, dateOfBirth, address, contactNumber, email, password,
+    });
   };
 
   if (!tenantSlug) return <Navigate to="/login" replace />;
@@ -278,13 +295,21 @@ export function PatientRegisterScreen() {
         </FormRow>
 
         <Input
-          label="SA ID number"
-          required
+          label="SA ID number (optional)"
           icon={<Hash className="size-4" aria-hidden />}
           placeholder="13-digit ID number"
-          hint="If you've already been seen at this clinic, this links your new account to your existing record."
+          hint="If you've already been seen at this clinic, this links your new account to your existing record. If you don't have an ID number, enter your date of birth below."
           error={errors.idNumber?.message}
           {...register("idNumber")}
+        />
+
+        <Input
+          label="Date of birth"
+          type="date"
+          required={!idNumber.trim()}
+          hint={idNumber.trim() ? "Your date of birth will be taken from your ID number." : undefined}
+          error={errors.dateOfBirth?.message}
+          {...register("dateOfBirth")}
         />
 
         <Input

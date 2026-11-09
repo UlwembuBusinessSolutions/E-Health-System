@@ -67,7 +67,7 @@ export function VitalsPrintPage() {
           assessment={query.data.assessment}
           capturedByName={query.data.capturedByName}
           patientName={query.data.patientName}
-          patientMpi={query.data.patientMpi}
+          patientMpi={query.data.patientMpi ?? undefined}
         />
       </div>
       <button

@@ -13,6 +13,7 @@ import {
 import { Button } from "@/shared/components/Button";
 import { Card } from "@/shared/components/Card";
 import { Input } from "@/shared/components/Input";
+import { AuthenticatorSetupHelpDialog } from "./AuthenticatorSetupHelpDialog";
 
 export function SecurityPage() {
   const queryClient = useQueryClient();
@@ -21,12 +22,18 @@ export function SecurityPage() {
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [showAuthenticatorHelp, setShowAuthenticatorHelp] = useState(false);
   const statusQuery = useQuery({ queryKey: ["auth", "mfa-status"], queryFn: getMfaStatus });
 
   const refreshStatus = () => queryClient.invalidateQueries({ queryKey: ["auth", "mfa-status"] });
   const setup = useMutation({
     mutationFn: startMfaSetup,
-    onSuccess: (result) => { setSecret(result); setCodes(null); setError(null); },
+    onSuccess: (result) => {
+      setSecret(result);
+      setCodes(null);
+      setShowAuthenticatorHelp(false);
+      setError(null);
+    },
     onError: (reason) => setError(reason instanceof ApiError ? reason.message : "Couldn't start MFA setup. Please try again."),
   });
   const confirm = useMutation({
@@ -109,7 +116,13 @@ export function SecurityPage() {
             <h3 className="text-[15px] font-semibold text-text-primary">Add your authenticator</h3>
             <p className="mt-1 text-[13px] text-text-secondary">In your authenticator app, add an account manually and enter this setup key.</p>
             <code className="mt-3 block break-all rounded-lg bg-surface-sunken px-3 py-2.5 font-mono text-[13px] text-text-primary">{secret.secret}</code>
-            <a href={secret.otpauthUri} className="mt-3 inline-block text-[13px] font-medium text-brand-600 underline">Open in an authenticator app</a>
+            <button
+              type="button"
+              className="mt-3 inline-block text-[13px] font-medium text-brand-600 underline"
+              onClick={() => setShowAuthenticatorHelp(true)}
+            >
+              Open in an authenticator app
+            </button>
           </div>
           <form onSubmit={(event) => { event.preventDefault(); setError(null); confirm.mutate(); }} className="flex flex-col gap-4">
             <Input label="6-digit verification code" required inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} maxLength={6} />
@@ -119,6 +132,13 @@ export function SecurityPage() {
             </div>
           </form>
         </Card>
+      )}
+
+      {secret && showAuthenticatorHelp && (
+        <AuthenticatorSetupHelpDialog
+          setupKey={secret.secret}
+          onClose={() => setShowAuthenticatorHelp(false)}
+        />
       )}
 
       {codes && (

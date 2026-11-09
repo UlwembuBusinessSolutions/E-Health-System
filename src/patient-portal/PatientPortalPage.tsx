@@ -83,7 +83,7 @@ export function PatientPortalPage() {
               <dl className="grid gap-4 text-sm sm:grid-cols-2">
                 <div><dt className="text-text-secondary">Name</dt><dd className="font-medium text-text-primary">{records.data.firstName} {records.data.lastName}</dd></div>
                 <div><dt className="text-text-secondary">Date of birth</dt><dd className="font-medium text-text-primary">{records.data.dateOfBirth}</dd></div>
-                <div><dt className="text-text-secondary">Gender</dt><dd className="font-medium text-text-primary">{records.data.gender.replaceAll("_", " ")}</dd></div>
+                <div><dt className="text-text-secondary">Gender</dt><dd className="font-medium text-text-primary">{records.data.gender?.replaceAll("_", " ") ?? "Not recorded"}</dd></div>
                 <div><dt className="text-text-secondary">Contact number</dt><dd className="font-medium text-text-primary">{records.data.contactNumber}</dd></div>
                 <div className="sm:col-span-2"><dt className="text-text-secondary">Address</dt><dd className="font-medium text-text-primary">{records.data.address}</dd></div>
               </dl>

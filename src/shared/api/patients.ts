@@ -11,11 +11,15 @@ import { tenantAuthHeaders } from "./auth";
 
 // Matches identity.CitizenshipStatus field-for-field.
 export type CitizenshipStatus = "SA_CITIZEN" | "PERMANENT_RESIDENT";
+export type ParentRelationship = "MOTHER" | "FATHER";
 
 export interface RegisterPatientPayload {
   firstName: string;
   lastName: string;
   idNumber: string;
+  dateOfBirth: string;
+  parentRelationship?: ParentRelationship;
+  patientFileNumber?: string;
   address: string;
   contactNumber: string;
   // Optional — cross-tenant patient migration's own notification email is
@@ -29,18 +33,19 @@ export interface RegisterPatientPayload {
   passportExpiry?: string; // "yyyy-MM-dd"
 }
 
-// dateOfBirth/gender/citizenshipStatus are never supplied by the caller —
-// the backend derives all three from idNumber alone (SouthAfricanIdNumber.parse()'s
-// own why-note) — this is the response shape, not the request shape.
+// gender/citizenshipStatus are derived from idNumber when one is provided.
+// dateOfBirth is supplied explicitly on registration.
 export interface Patient {
   id: string;
   mpiNumber: string;
   firstName: string;
   lastName: string;
   dateOfBirth: string;
-  gender: Gender;
-  citizenshipStatus: CitizenshipStatus;
-  idNumber: string;
+  parentRelationship: ParentRelationship | null;
+  patientFileNumber: string | null;
+  gender: Gender | null;
+  citizenshipStatus: CitizenshipStatus | null;
+  idNumber: string | null;
   address: string;
   contactNumber: string;
   email: string | null;

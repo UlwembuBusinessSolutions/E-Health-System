@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { InProgressConsultations } from "./InProgressConsultations";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   ArrowUpDown,
   ChevronDown,
@@ -123,6 +124,8 @@ function calculateAge(dateOfBirth: string): number {
 // own search is (350ms) rather than firing a request per keystroke; the
 // empty-state below is that "registration path."
 export function PatientSearchPage() {
+  const location = useLocation();
+  const fromReception = (location.state as { fromReception?: boolean } | null)?.fromReception === true;
   const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
@@ -302,13 +305,24 @@ export function PatientSearchPage() {
         title="Patients"
         description="Browse the roster, or search by name, MPI number, or ID number."
         action={
-          <Link
-            to="/app/patients/new"
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 text-[14px] font-semibold text-white shadow-sm transition-colors duration-150 hover:bg-brand-600"
-          >
-            <Plus className="size-4" aria-hidden />
-            Register patient
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {fromReception && (
+              <Link
+                to="/app/reception"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface-raised px-4 text-[14px] font-semibold text-text-primary transition-colors hover:bg-surface-sunken"
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+                Return to reception
+              </Link>
+            )}
+            <Link
+              to="/app/patients/new"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 text-[14px] font-semibold text-white shadow-sm transition-colors duration-150 hover:bg-brand-600"
+            >
+              <Plus className="size-4" aria-hidden />
+              Register patient
+            </Link>
+          </div>
         }
       />
 
@@ -531,7 +545,11 @@ export function PatientSearchPage() {
                 {patients.map((p) => (
                   <tr key={p.id} className="transition-colors duration-150 hover:bg-surface-sunken">
                     <td className="px-5 py-3.5">
-                      <Link to={`/app/patients/${p.id}`} className="flex items-center gap-3">
+                      <Link
+                        to={`/app/patients/${p.id}`}
+                        state={fromReception ? { fromReception: true } : undefined}
+                        className="flex items-center gap-3"
+                      >
                         <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-brand-500/25 bg-brand-50 text-[12px] font-semibold text-brand-600">
                           {initials(p.firstName, p.lastName)}
                         </span>
@@ -539,7 +557,7 @@ export function PatientSearchPage() {
                           <p className="truncate text-[14px] font-semibold text-text-primary">
                             {p.firstName} {p.lastName}
                           </p>
-                          <p className="truncate text-[12.5px] text-text-secondary">{p.idNumber}</p>
+                          <p className="truncate text-[12.5px] text-text-secondary">{p.idNumber ?? "No ID number"}</p>
                         </div>
                       </Link>
                     </td>
@@ -547,7 +565,9 @@ export function PatientSearchPage() {
                       {p.mpiNumber}
                     </td>
                     <td className="px-5 py-3.5 text-[13.5px] text-text-primary">
-                      {calculateAge(p.dateOfBirth)} · {p.gender.charAt(0) + p.gender.slice(1).toLowerCase()}
+                      {calculateAge(p.dateOfBirth)} · {p.gender
+                        ? p.gender.charAt(0) + p.gender.slice(1).toLowerCase()
+                        : "Gender not recorded"}
                     </td>
                     <td className="px-5 py-3.5 text-[13.5px] text-text-primary">{p.contactNumber}</td>
                     <td className="px-5 py-3.5 font-mono text-[13px] text-text-secondary tabular-nums">

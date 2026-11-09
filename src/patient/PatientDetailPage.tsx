@@ -7,7 +7,7 @@ import { PatientConsultationTab } from "./PatientConsultationTab";
 import { AdditionalVitalsForm, AdditionalVitalsSummary, EMPTY_ADDITIONAL_VITALS, additionalPayload, type AdditionalVitalsState } from "./AdditionalVitals";
 import { useEffect, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import clsx from "clsx";
 import {
@@ -33,7 +33,6 @@ import {
   PenLine,
   Plus,
   Printer,
-  Ticket,
   Trash2,
   Upload,
   Users,
@@ -65,16 +64,8 @@ import {
   type PatientDocumentType,
 } from "@/shared/api/patients";
 import {
-  createVisit,
-  type ServiceStream,
-  type VisitType,
-  type VisitWithToken,
-} from "@/shared/api/visits";
-import {
   getPatientPrescriptions,
 } from "@/shared/api/pharmacy";
-import { getFacilities } from "@/shared/api/facilities";
-import { printQueueTicket } from "@/shared/lib/printTicket";
 import { printVitalsReading } from "@/shared/lib/printVitals";
 import { printPrescription } from "@/shared/lib/printPrescription";
 import {
@@ -113,18 +104,6 @@ import { StatusPill } from "@/shared/components/StatusPill";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 
 
-const VISIT_TYPE_OPTIONS: { value: VisitType; label: string }[] = [
-  { value: "NEW", label: "New visit" },
-  { value: "FOLLOW_UP", label: "Follow-up visit" },
-];
-
-const SERVICE_STREAM_OPTIONS: { value: ServiceStream; label: string }[] = [
-  { value: "GENERAL", label: "General / acute care" },
-  { value: "CHRONIC_CARE", label: "Chronic care" },
-  { value: "MATERNAL_CHILD", label: "Maternal & child health" },
-  { value: "OCCUPATIONAL_HEALTH", label: "Occupational health" },
-];
-
 function isPaediatric(dateOfBirth?: string): boolean {
   if (!dateOfBirth) return false;
   const birth = new Date(`${dateOfBirth}T00:00:00`);
@@ -157,6 +136,7 @@ interface VitalsFormState {
   confirmOutOfRange: boolean;
   clinicianConfirmedColour: TriageColour | "";
   colourConfirmationReason: string;
+  dateOfBirth: string;
 }
 
 const EMPTY_VITALS_FORM: VitalsFormState = {
@@ -182,6 +162,7 @@ const EMPTY_VITALS_FORM: VitalsFormState = {
   confirmOutOfRange: false,
   clinicianConfirmedColour: "",
   colourConfirmationReason: "",
+  dateOfBirth: "",
 };
 
 // "" means not entered — distinct from 0, which is a real (if extreme)
@@ -719,28 +700,23 @@ function PatientVitalsHistoryTab({
 // laid out the same "profile card" shape OrganizationDetailPage's own
 // header already uses.
 export function PatientDetailPage() {
+  const location = useLocation();
+  const fromReception = (location.state as { fromReception?: boolean } | null)?.fromReception === true;
   const { id } = useParams<{ id: string }>();
   const patientId = id ?? "";
   const { user } = useAuth();
   const isOrgAdmin = user?.role === "ORG_ADMIN";
   const canCaptureVitals = canTakeVitals(user?.role);
-  // Starting a visit stays outside the tabs below — it's a primary action
-  // relevant no matter which tab someone's looking at, not "content" that
-  // should hide when the Vitals tab (a different, cross-visit view of the
-  // same clinical data) is selected.
-  // ?tab=consultation opens straight onto the consultation, e.g. from the list of unsigned ones;
+  // Reception issues the visit/token. ?visitId links its clinical workflows;
+  // ?tab=vitals/consultation opens directly on the selected visit workflow;
   // ?tab=medication onto the prescriptions, e.g. from a pharmacy message on the Dashboard.
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const isWalkIn = searchParams.get("walkIn") === "true" || !id;
+  const walkInTokenNumber = searchParams.get("tokenNumber");
   const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(() => {
     const tab = searchParams.get("tab");
-    return tab === "consultation" || tab === "medication" ? tab : "overview";
+    return tab === "vitals" || tab === "consultation" || tab === "medication" ? tab : "overview";
   });
-  const [isStartingVisit, setIsStartingVisit] = useState(false);
-  const [facilityId, setFacilityId] = useState("");
-  const [visitType, setVisitType] = useState<VisitType | "">("");
-  const [serviceStream, setServiceStream] = useState<ServiceStream | "">("");
-  const [visitError, setVisitError] = useState<string | null>(null);
-  const [startedVisit, setStartedVisit] = useState<VisitWithToken | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [archiveReason, setArchiveReason] = useState("");
   const [archiveDeceasedDate, setArchiveDeceasedDate] = useState("");
@@ -788,10 +764,7 @@ export function PatientDetailPage() {
   };
 
   // Destination-picker queries — organizations load once the panel opens,
-  // facilities are a dependent query keyed on the chosen organization, same
-  // "enabled once the parent selection exists" shape the Start-a-visit
-  // facility select above (and PatientVitalsHistoryTab's own filters)
-  // already use elsewhere on this page.
+  // facilities are a dependent query keyed on the chosen organization.
   const migrationOrgsQuery = useQuery({
     queryKey: ["migration-destination-organizations"],
     queryFn: listMigrationDestinationOrganizations,
@@ -843,49 +816,10 @@ export function PatientDetailPage() {
     migrate.mutate();
   };
 
-  const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities, enabled: isStartingVisit });
-
-  const startVisit = useMutation({
-    mutationFn: () =>
-      createVisit({
-        patientId,
-        facilityId,
-        visitType: visitType as VisitType,
-        serviceStream: serviceStream as ServiceStream,
-      }),
-    onSuccess: (result) => {
-      setStartedVisit(result);
-      setSearchParams((previous) => {
-        const next = new URLSearchParams(previous);
-        next.set("visitId", result.visit.id);
-        return next;
-      }, { replace: true });
-      void queryClient.invalidateQueries({ queryKey: ["patients", patientId, "visits"] });
-      void queryClient.invalidateQueries({ queryKey: ["patient-visit-timings", patientId] });
-      setIsStartingVisit(false);
-    },
-    onError: (error) => {
-      setVisitError(error instanceof ApiError ? error.message : "Couldn't start that visit. Try again.");
-    },
-  });
-
-  const handleStartVisit = () => {
-    setVisitError(null);
-    if (!facilityId || !visitType || !serviceStream) {
-      setVisitError("Select a facility, visit type, and service stream.");
-      return;
-    }
-    startVisit.mutate();
-  };
-
-  // A visit reached this page two different ways: just started in this
-  // same session (startedVisit, local state) or an existing one being
-  // returned to — the queue page's "Vitals" action on a CALLED token links
-  // here with ?visitId=, since a nurse capturing vitals is very often
-  // visiting a patient's page for a visit someone else (or an earlier
-  // page load) already started, not one they're starting right now.
+  // Reception-issued tokens carry their linked visitId into this patient
+  // record so vitals and consultation stay attached to that check-in.
   const linkedVisitId = searchParams.get("visitId");
-  const activeVisitId = startedVisit?.visit.id ?? linkedVisitId ?? null;
+  const activeVisitId = linkedVisitId;
 
   const [isCapturingVitals, setIsCapturingVitals] = useState(false);
   const [vitalsForm, setVitalsForm] = useState<VitalsFormState>(EMPTY_VITALS_FORM);
@@ -968,6 +902,10 @@ export function PatientDetailPage() {
       setVitalsError("Select whether an injury occurred within the past 48 hours.");
       return;
     }
+    if (isWalkIn && !vitalsForm.dateOfBirth) {
+      setVitalsError("Date of birth is required to determine the walk-in scoring profile.");
+      return;
+    }
     for (const key of ["weightKg", "heightCm", "glucoseMmolL", "haemoglobinGdl"] as const) {
       const value = vitalsForm.additional[key];
       if (value !== "" && (!Number.isFinite(Number(value)) || Number(value) <= 0)) {
@@ -982,7 +920,7 @@ export function PatientDetailPage() {
     }
     const paediatricProfile = vitalsForm.scoringProfileOverride
       ? vitalsForm.scoringProfileOverride.startsWith("PAEDIATRIC")
-      : isPaediatric(patientQuery.data?.dateOfBirth);
+      : isPaediatric(isWalkIn ? vitalsForm.dateOfBirth : patientQuery.data?.dateOfBirth);
     if (!vitalsForm.emergencySign && paediatricProfile
         && (!vitalsForm.clinicianConfirmedColour || !vitalsForm.colourConfirmationReason.trim())) {
       setVitalsError("Select and explain the clinician-confirmed paediatric triage colour.");
@@ -992,6 +930,7 @@ export function PatientDetailPage() {
       additionalObservations: additionalPayload(vitalsForm.additional),
       emergencySign: vitalsForm.emergencySign,
       emergencySignNote: vitalsForm.emergencySignNote.trim() || undefined,
+      dateOfBirth: isWalkIn ? vitalsForm.dateOfBirth : undefined,
       scoringProfileOverride: vitalsForm.scoringProfileOverride || undefined,
       respiratoryRate: numberOrUndefined(vitalsForm.respiratoryRate),
       heartRate: numberOrUndefined(vitalsForm.heartRate),
@@ -1079,7 +1018,7 @@ export function PatientDetailPage() {
 
   // The vitals / triage card: shows the latest reading with a Take vitals button, and the capture
   // form. It is shown on both the Overview and the Vitals tab, so vitals can be taken from either.
-  const vitalsCard = patient && !patient.archived ? (
+  const vitalsCard = (isWalkIn || (patient && !patient.archived)) ? (
     <Card className="mb-6 p-6">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <h2 className="text-[14.5px] font-semibold text-text-primary">Vitals / triage</h2>
@@ -1089,18 +1028,16 @@ export function PatientDetailPage() {
                 {!activeVisitId ? (
                   <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
                     <p className="text-[13.5px] text-text-secondary">
-                      Start a visit before recording vitals so the readings are linked to the correct consultation.
+                      Check in at Reception before recording vitals so the readings are linked to the correct visit.
                     </p>
-                    {!isStartingVisit && canCaptureVitals && (
-                      <Button
-                        className="mt-3"
-                        variant="secondary"
-                        size="md"
-                        icon={<HeartPulse className="size-3.5" aria-hidden />}
-                        onClick={() => setIsStartingVisit(true)}
+                    {canCaptureVitals && (
+                      <Link
+                        to="/app/reception"
+                        state={{ registeredPatientId: patient?.id }}
+                        className="mt-3 inline-flex h-10 items-center rounded-lg border border-border-strong bg-surface-raised px-3 text-[13px] font-semibold text-text-primary hover:bg-surface-sunken"
                       >
-                        Start visit to take vitals
-                      </Button>
+                        Continue at Reception
+                      </Link>
                     )}
                   </div>
                 ) : isCapturingVitals ? (
@@ -1131,6 +1068,16 @@ export function PatientDetailPage() {
                       </label>
                     ) : (
                       <div className="flex flex-col gap-4">
+                        {isWalkIn && (
+                          <Input
+                            label="Date of birth"
+                            type="date"
+                            required
+                            max={new Date().toISOString().slice(0, 10)}
+                            value={vitalsForm.dateOfBirth}
+                            onChange={(e) => setVitalsForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
+                          />
+                        )}
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                           <Input
                             label="Respiratory rate (breaths/min)"
@@ -1188,7 +1135,7 @@ export function PatientDetailPage() {
                           />
                           {(vitalsForm.scoringProfileOverride
                             ? vitalsForm.scoringProfileOverride.startsWith("PAEDIATRIC")
-                            : isPaediatric(patient?.dateOfBirth)) && (
+                            : isPaediatric(isWalkIn ? vitalsForm.dateOfBirth : patient?.dateOfBirth)) && (
                             <>
                               <Select
                                 label="Clinician-confirmed final colour"
@@ -1401,8 +1348,8 @@ export function PatientDetailPage() {
                           <VitalsHistoryRow
                             key={assessment.id}
                             assessment={assessment}
-                            patientName={`${patient.firstName} ${patient.lastName}`}
-                            patientMpi={patient.mpiNumber}
+                            patientName={isWalkIn ? "Unregistered walk-in" : `${patient?.firstName} ${patient?.lastName}`}
+                            patientMpi={isWalkIn ? undefined : patient?.mpiNumber}
                           />
                         ))}
                       </div>
@@ -1412,14 +1359,63 @@ export function PatientDetailPage() {
               </Card>
   ) : null;
 
+  if (isWalkIn) {
+    return (
+      <div>
+        <Link
+          to="/app/vitals"
+          className="mb-5 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-text-secondary hover:text-text-primary"
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+          Back to Take Vitals
+        </Link>
+        <Card className="mb-6 p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-full border border-brand-500/25 bg-brand-50 text-brand-600">
+              <HeartPulse className="size-5" aria-hidden />
+            </span>
+            <div>
+              <h1 className="text-[19px] font-semibold text-text-primary">Unregistered walk-in</h1>
+              <p className="font-mono text-[13px] text-text-secondary">
+                {walkInTokenNumber ? `Token #${walkInTokenNumber}` : "Reception-issued visit"} · not registered
+              </p>
+            </div>
+          </div>
+        </Card>
+        {activeVisitId && <VisitTimingPanel key={activeVisitId} visitId={activeVisitId} />}
+        <div role="tablist" aria-label="Walk-in record sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-border-subtle">
+          {(["overview", "vitals"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
+              onClick={() => setActiveTab(tab)}
+              className={clsx(
+                "-mb-px shrink-0 border-b-2 px-3.5 py-2.5 text-[13.5px] font-medium capitalize transition-colors duration-150",
+                activeTab === tab
+                  ? "border-brand-500 text-brand-600"
+                  : "border-transparent text-text-secondary hover:text-text-primary",
+              )}
+            >
+              {tab === "overview" ? "Overview" : "Vitals"}
+            </button>
+          ))}
+        </div>
+        {vitalsCard}
+      </div>
+    );
+  }
+
   return (
     <div>
       <Link
-        to="/app/patients"
+        to={fromReception ? "/app/reception" : "/app/patients"}
+        state={fromReception ? { fromReception: true } : undefined}
         className="mb-5 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-text-secondary hover:text-text-primary"
       >
         <ArrowLeft className="size-4" aria-hidden />
-        Back to patients
+        {fromReception ? "Return to reception" : "Back to patients"}
       </Link>
 
       {patientQuery.isLoading ? (
@@ -1507,15 +1503,6 @@ export function PatientDetailPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                {!patient.archived && !isStartingVisit && !startedVisit && (
-                  <Button
-                    variant="secondary"
-                    icon={<Ticket className="size-4" aria-hidden />}
-                    onClick={() => setIsStartingVisit(true)}
-                  >
-                    Start visit
-                  </Button>
-                )}
                 {!patient.archived && isOrgAdmin && !isMigrating && (
                   <Button
                     variant="ghost"
@@ -1658,92 +1645,6 @@ export function PatientDetailPage() {
                   </Button>
                 </div>
               </div>
-            </Card>
-          )}
-
-          {(isStartingVisit || startedVisit) && (
-            <Card className="mb-6 p-6">
-              {startedVisit ? (
-                <div className="flex flex-col items-center gap-2 text-center">
-                  <span className="flex size-11 items-center justify-center rounded-full bg-success-50 text-success-500">
-                    <Ticket className="size-6" aria-hidden />
-                  </span>
-                  <h2 className="text-[16px] font-semibold text-text-primary">Visit started</h2>
-                  <p className="rounded-lg bg-surface-sunken px-3 py-1.5 font-mono text-[18px] font-semibold text-text-primary">
-                    Token #{startedVisit.token.tokenNumber}
-                  </p>
-                  <p className="text-[13.5px] text-text-secondary">
-                    {patient.firstName} is now in the queue.{" "}
-                    <Link to="/app/queue" className="font-medium text-brand-600 hover:text-brand-700">
-                      View queue
-                    </Link>
-                  </p>
-                  <div className="mt-1 flex gap-2">
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      icon={<Printer className="size-3.5" aria-hidden />}
-                      onClick={() => printQueueTicket(startedVisit.token.id)}
-                    >
-                      Print ticket
-                    </Button>
-                    {canCaptureVitals && <Button
-                      variant="secondary"
-                      size="md"
-                      icon={<HeartPulse className="size-3.5" aria-hidden />}
-                      onClick={() => {
-                        setActiveTab("vitals");
-                        setIsCapturingVitals(true);
-                      }}
-                    >
-                      Take vitals
-                    </Button>}
-                    <Button variant="secondary" size="md" onClick={() => setStartedVisit(null)}>
-                      Dismiss
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <h2 className="mb-4 text-[14.5px] font-semibold text-text-primary">Start a visit</h2>
-                  {visitError && (
-                    <p role="alert" className="mb-4 text-[13.5px] text-danger-600">
-                      {visitError}
-                    </p>
-                  )}
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <Select
-                      label="Facility"
-                      required
-                      options={(facilitiesQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }))}
-                      value={facilityId}
-                      onChange={(e) => setFacilityId(e.target.value)}
-                    />
-                    <Select
-                      label="Visit type"
-                      required
-                      options={VISIT_TYPE_OPTIONS}
-                      value={visitType}
-                      onChange={(e) => setVisitType(e.target.value as VisitType)}
-                    />
-                    <Select
-                      label="Service stream"
-                      required
-                      options={SERVICE_STREAM_OPTIONS}
-                      value={serviceStream}
-                      onChange={(e) => setServiceStream(e.target.value as ServiceStream)}
-                    />
-                  </div>
-                  <div className="mt-4 flex gap-2">
-                    <Button loading={startVisit.isPending} onClick={handleStartVisit}>
-                      Issue queue token
-                    </Button>
-                    <Button variant="secondary" onClick={() => setIsStartingVisit(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </>
-              )}
             </Card>
           )}
 
@@ -2044,12 +1945,14 @@ function DemographicsCard({ patient, isOrgAdmin }: { patient: Patient; isOrgAdmi
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Date of birth" value={formatDate(patient.dateOfBirth)} />
-          <Field label="Gender" value={titleCase(patient.gender)} />
+          <Field label="Gender" value={patient.gender ? titleCase(patient.gender) : "Not recorded"} />
           <Field
             label="Citizenship"
-            value={patient.citizenshipStatus === "SA_CITIZEN" ? "SA citizen" : "Permanent resident"}
+            value={patient.citizenshipStatus
+              ? patient.citizenshipStatus === "SA_CITIZEN" ? "SA citizen" : "Permanent resident"
+              : "Not recorded"}
           />
-          <Field label="ID number" value={patient.idNumber} />
+          <Field label="ID number" value={patient.idNumber ?? "Not provided"} />
           <Field label="Contact number" value={patient.contactNumber} />
           <Field label="Email" value={patient.email ?? "—"} />
           <Field label="Address" value={patient.address} />

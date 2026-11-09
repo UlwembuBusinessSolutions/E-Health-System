@@ -12,6 +12,7 @@ import { StaffListPage } from "@/staff/StaffListPage";
 import { PatientSearchPage } from "@/patient/PatientSearchPage";
 import { RegisterPatientScreen } from "@/patient/RegisterPatientScreen";
 import { PatientDetailPage } from "@/patient/PatientDetailPage";
+import { ReceptionPage } from "@/reception/ReceptionPage";
 import { QueuePage } from "@/queue/QueuePage";
 import { VitalsIntakePage } from "@/queue/VitalsIntakePage";
 import { TicketPrintPage } from "@/queue/TicketPrintPage";
@@ -157,7 +158,9 @@ export function AppRouter() {
             reception/clinical work, not admin territory. */}
         <Route path="patients" element={<PatientSearchPage />} />
         <Route path="patients/new" element={<RegisterPatientScreen />} />
+        <Route path="patients/walk-in" element={<PatientDetailPage />} />
         <Route path="patients/:id" element={<PatientDetailPage />} />
+        <Route path="reception" element={<ReceptionPage />} />
         <Route path="queue" element={<QueuePage />} />
         {/* OFFLINE: pending records on this device + conflicts needing a decision.
             No RequireRole — resolving a conflict is admin-only on the server. */}
