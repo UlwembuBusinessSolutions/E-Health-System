@@ -148,7 +148,7 @@ public class User {
     }
 
     public User(String employeeNumber, String email, String firstName, String lastName,
-                String contactNumber, String passwordHash, UUID facilityId, Gender gender) {
+            String contactNumber, String passwordHash, UUID facilityId, Gender gender) {
         this.employeeNumber = employeeNumber;
         this.email = email;
         this.firstName = firstName;
@@ -319,6 +319,10 @@ public class User {
         this.passwordHash = hash;
         this.tokenVersion++;
         this.mustChangePassword = true;
+    }
+
+    public void revokeSessions() {
+        this.tokenVersion++;
     }
 
     public UUID getId() {

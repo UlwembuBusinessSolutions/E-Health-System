@@ -1,5 +1,6 @@
 package co.ehealth.platform.identity;
 
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -24,4 +25,29 @@ public interface PermissionRepository extends JpaRepository<Permission, UUID> {
             WHERE r.name IN (:roleNames)
             """, nativeQuery = true)
     List<String> findCodesByRoleNames(@Param("roleNames") Collection<String> roleNames);
+
+    @Query("SELECT p.code FROM Permission p")
+    List<String> findAllCodes();
+
+    @Query(value = """
+            SELECT p.code FROM permissions p
+            JOIN role_permissions rp ON rp.permission_id = p.id
+            WHERE rp.role_id = :roleId
+            """, nativeQuery = true)
+    List<String> findCodesByRoleId(@Param("roleId") UUID roleId);
+
+    @Modifying
+    @Query(value = """
+            DELETE FROM role_permissions WHERE role_id = :roleId
+            AND permission_id IN (SELECT id FROM permissions WHERE code IN (:codes))
+            """, nativeQuery = true)
+    void removeFromRole(@Param("roleId") UUID roleId, @Param("codes") Collection<String> codes);
+
+    @Modifying
+    @Query(value = """
+            INSERT INTO role_permissions (role_id, permission_id)
+            SELECT CAST(:roleId AS uuid), id FROM permissions WHERE code IN (:codes)
+            ON CONFLICT DO NOTHING
+            """, nativeQuery = true)
+    void addToRole(@Param("roleId") UUID roleId, @Param("codes") Collection<String> codes);
 }

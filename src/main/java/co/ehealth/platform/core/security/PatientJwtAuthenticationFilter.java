@@ -95,6 +95,8 @@ public class PatientJwtAuthenticationFilter extends OncePerRequestFilter {
         // (including everything outside /api/v1/patient/**) is skipped
         // entirely, mirroring PlatformJwtAuthenticationFilter's own scoping.
         return !uri.startsWith("/api/v1/patient/") || uri.equals("/api/v1/patient/register")
-                || uri.equals("/api/v1/patient/auth/login");
+                || uri.equals("/api/v1/patient/verify-email")
+                || uri.equals("/api/v1/patient/auth/login")
+                || uri.startsWith("/api/v1/patient/auth/password-reset/");
     }
 }

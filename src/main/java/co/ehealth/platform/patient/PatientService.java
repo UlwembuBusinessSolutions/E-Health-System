@@ -56,17 +56,15 @@ public class PatientService {
 
     // PREG-US-001: "an EPR is created and a unique MPI number is
     // generated ... the patient is immediately available in search and an
-    // AUDT PATIENT_REGISTERED event is recorded." idNumber is the only
-    // identity input the form takes — dateOfBirth/gender/citizenship all
-    // come from SouthAfricanIdNumber.parse(), never from the request
-    // directly, so there's no way for a caller to submit a DOB that
-    // disagrees with the ID number it was supposedly derived from.
+    // AUDT PATIENT_REGISTERED event is recorded." Gender and citizenship
+    // are derived from the South African ID number when provided. Without
+    // one, these remain unknown; dateOfBirth must be supplied.
     //
     // Reception hitting an idNumber that a patient already self-registered
     // under (PatientAuthService.register() already ran registerSelf()
     // below for them) lands on the same DuplicateFieldException as any
     // other pre-existing patient — that's correct, not a gap: registerSelf()
-    // always creates (or finds and links to) a real Patient row before its
+    // creates (or finds and links to) a real Patient row before its
     // PatientAccount is ever saved, so there's no "account exists but has
     // no Patient yet" state for this method to catch up on. Only the
     // reverse order needs reconciling — see registerSelf()'s own why-note.
@@ -113,19 +111,27 @@ public class PatientService {
     }
 
     private Patient createPatient(RegisterPatientCommand cmd, UUID registeredByUserId) {
-        if (patientRepository.existsByIdNumber(cmd.idNumber())) {
+        String idNumber = normalizeOptionalIdNumber(cmd.idNumber());
+        if (idNumber != null && patientRepository.existsByIdNumber(idNumber)) {
             throw new DuplicateFieldException("idNumber", "A patient with this ID number is already registered.");
         }
-        SouthAfricanIdNumber parsed = SouthAfricanIdNumber.parse(cmd.idNumber());
+        SouthAfricanIdNumber parsed = idNumber == null ? null : SouthAfricanIdNumber.parse(idNumber);
+        LocalDate dateOfBirth = cmd.dateOfBirth() != null ? cmd.dateOfBirth()
+                : parsed == null ? null : parsed.dateOfBirth();
+        if (dateOfBirth == null) {
+            throw new IllegalArgumentException("Date of birth is required when ID number is not provided.");
+        }
 
         Organization organization = organizationRepository.findBySchemaName(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new IllegalStateException("Unknown organization for current tenant"));
         String mpiNumber = MpiNumberFormat.generate(organization.getTenantCode(),
                 patientRepository.nextMpiSequenceValue());
-        Patient patient = new Patient(mpiNumber, cmd.firstName(), cmd.lastName(), parsed.dateOfBirth(),
-                parsed.gender(), parsed.citizenshipStatus(), cmd.idNumber(), cmd.address(), cmd.contactNumber(),
+        Patient patient = new Patient(mpiNumber, cmd.firstName(), cmd.lastName(), dateOfBirth,
+                parsed == null ? null : parsed.gender(), parsed == null ? null : parsed.citizenshipStatus(),
+                idNumber, cmd.address(), cmd.contactNumber(),
                 cmd.email(), cmd.medicalAidProvider(), cmd.medicalAidNumber(), cmd.passportNumber(),
-                cmd.passportExpiry(), registeredByUserId, clock.instant());
+                cmd.passportExpiry(), cmd.parentRelationship(), cmd.patientFileNumber(),
+                registeredByUserId, clock.instant());
         patientRepository.save(patient);
 
         auditLogService.append(registeredByUserId, null, "PATIENT_REGISTERED", "Patient",
@@ -379,7 +385,18 @@ public class PatientService {
 
     public record RegisterPatientCommand(String firstName, String lastName, String idNumber, String address,
             String contactNumber, String email, String medicalAidProvider,
-            String medicalAidNumber, String passportNumber, LocalDate passportExpiry) {
+            String medicalAidNumber, String passportNumber, LocalDate passportExpiry,
+            LocalDate dateOfBirth, ParentRelationship parentRelationship, String patientFileNumber) {
+        public RegisterPatientCommand(String firstName, String lastName, String idNumber, String address,
+                String contactNumber, String email, String medicalAidProvider,
+                String medicalAidNumber, String passportNumber, LocalDate passportExpiry) {
+            this(firstName, lastName, idNumber, address, contactNumber, email, medicalAidProvider,
+                    medicalAidNumber, passportNumber, passportExpiry, null, null, null);
+        }
+    }
+
+    private static String normalizeOptionalIdNumber(String idNumber) {
+        return idNumber == null || idNumber.isBlank() ? null : idNumber.trim();
     }
 
     // No idNumber/dateOfBirth/gender/citizenshipStatus/mpiNumber here at

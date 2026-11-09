@@ -21,6 +21,10 @@ import java.util.stream.Collectors;
 @Service
 public class VisitService {
 
+    private static final Set<String> PHARMACIST_ROLE = Set.of("Pharmacist");
+    private static final String VISIT_START_ACCESS_MESSAGE =
+            "Starting a registered visit requires Reception access or the Pharmacist role.";
+
     private final VisitRepository visitRepository;
     private final PatientService patientService;
     private final FacilityService facilityService;
@@ -54,7 +58,8 @@ public class VisitService {
     // visit never touches PatientRepository or FacilityRepository directly.
     @Transactional
     public VisitWithToken createVisit(CreateVisitCommand cmd, UUID staffUserId) {
-        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        permissionService.requireAccessOrAnyRole(
+                ModuleCode.RECQ, PermissionLevel.MANAGE, PHARMACIST_ROLE, VISIT_START_ACCESS_MESSAGE);
         patientService.get(cmd.patientId());
         facilityService.get(cmd.facilityId());
 
@@ -66,6 +71,25 @@ public class VisitService {
 
         auditLogService.append(staffUserId, cmd.facilityId(), "VISIT_CREATED", "Visit", visit.getId().toString(),
                 null, null);
+
+        return new VisitWithToken(visit, token);
+    }
+
+    // Queue-only intake for a walk-in who has no patient record. Clinical
+    // workflows continue to require a real patient record.
+    @Transactional
+    public VisitWithToken createWalkInVisit(UUID facilityId, UUID staffUserId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        facilityService.get(facilityId);
+
+        Visit visit = new Visit(null, facilityId, VisitType.NEW, ServiceStream.GENERAL,
+                clock.instant(), staffUserId);
+        visitRepository.save(visit);
+
+        QueueToken token = queueService.issueAutomaticToken(visit, staffUserId);
+
+        auditLogService.append(staffUserId, facilityId, "WALK_IN_QUEUE_TOKEN_ISSUED", "QueueToken",
+                token.getId().toString(), null, null);
 
         return new VisitWithToken(visit, token);
     }

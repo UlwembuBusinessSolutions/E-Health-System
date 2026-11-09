@@ -1,5 +1,6 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
+import co.ehealth.platform.pharmacy.MedicineDirections;
 import co.ehealth.platform.pharmacy.PurchaseReason;
 
 import java.util.UUID;
@@ -9,5 +10,5 @@ import java.util.UUID;
 // the printed prescription lists it under "to buy", but it is never dispensed.
 public record PrescriptionPurchaseItemResponse(UUID id, String drugName, String dosage, int quantity,
                                                UUID productId, String productName, PurchaseReason reason,
-                                               String note) {
+                                               String note, MedicineDirections directions) {
 }

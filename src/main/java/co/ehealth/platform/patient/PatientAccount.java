@@ -29,9 +29,8 @@ import java.util.UUID;
 // level as a deliberate margin (a future admin-created account, or a
 // looser signup flow, might legitimately need to defer the link) rather
 // than because anything today produces an unlinked row. idNumber is stored
-// here too (not just resolved through patientId) since it's the same
-// matching key Patient itself is keyed on — see PatientAuthService's own
-// why-note on the duplicate checks that key off it.
+// here too (not just resolved through patientId) when supplied, since it's
+// the same matching key Patient itself uses.
 @Entity
 @Table(name = "patient_accounts")
 public class PatientAccount {
@@ -43,7 +42,7 @@ public class PatientAccount {
     @Column(name = "patient_id")
     private UUID patientId;
 
-    @Column(name = "id_number", nullable = false, unique = true, length = 13)
+    @Column(name = "id_number", unique = true, length = 13)
     private String idNumber;
 
     @Column(nullable = false, unique = true, length = 255)
@@ -121,6 +120,17 @@ public class PatientAccount {
 
     public void setLastLoginAt(Instant at) {
         this.lastLoginAt = at;
+    }
+
+    public void resetPassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+        this.tokenVersion++;
+        this.failedLoginCount = 0;
+        this.lastFailedLoginAt = null;
+        if (this.status == PatientAccountStatus.LOCKED) {
+            this.status = PatientAccountStatus.ACTIVE;
+            this.lockedAt = null;
+        }
     }
 
     public UUID getId() {

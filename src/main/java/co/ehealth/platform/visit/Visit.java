@@ -26,7 +26,7 @@ public class Visit {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "patient_id", nullable = false)
+    @Column(name = "patient_id")
     private UUID patientId;
 
     @Column(name = "facility_id", nullable = false)
@@ -78,6 +78,24 @@ public class Visit {
     }
 
     public UUID getPatientId() {
+        return patientId;
+    }
+
+    public boolean linkPatient(UUID patientId) {
+        if (this.patientId != null) {
+            return false;
+        }
+        if (patientId == null) {
+            throw new IllegalArgumentException("Patient id is required.");
+        }
+        this.patientId = patientId;
+        return true;
+    }
+
+    public UUID requirePatientId() {
+        if (patientId == null) {
+            throw new UnregisteredWalkInVisitException();
+        }
         return patientId;
     }
 

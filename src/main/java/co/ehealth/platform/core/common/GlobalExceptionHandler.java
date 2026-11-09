@@ -4,6 +4,7 @@ import co.ehealth.platform.consultation.ConsultationNotFoundException;
 import co.ehealth.platform.consultation.InvalidConsultationException;
 import co.ehealth.platform.consultation.InvalidConsultationStateException;
 import co.ehealth.platform.core.security.InvalidTokenException;
+import co.ehealth.platform.core.notification.EmailDeliveryFailedException;
 import co.ehealth.platform.identity.AccountLockedException;
 import co.ehealth.platform.identity.DuplicateFieldException;
 import co.ehealth.platform.identity.InvalidCredentialsException;
@@ -19,6 +20,7 @@ import co.ehealth.platform.platform.OrganizationNotFoundException;
 import co.ehealth.platform.platform.OrganizationSuspendedException;
 import co.ehealth.platform.platform.PlatformOperatorNotFoundException;
 import co.ehealth.platform.patient.InvalidIdNumberException;
+import co.ehealth.platform.patient.InvalidPatientVerificationCodeException;
 import co.ehealth.platform.patient.InvalidMigrationDestinationException;
 import co.ehealth.platform.patient.MigrationNotFoundException;
 import co.ehealth.platform.patient.PatientAlreadyArchivedException;
@@ -26,6 +28,7 @@ import co.ehealth.platform.patient.PatientAlreadyExistsAtDestinationException;
 import co.ehealth.platform.patient.PatientArchivedException;
 import co.ehealth.platform.patient.PatientDocumentNotFoundException;
 import co.ehealth.platform.patient.PatientGuardianNotFoundException;
+import co.ehealth.platform.patient.PatientIdentityMismatchException;
 import co.ehealth.platform.patient.PatientNotFoundException;
 import co.ehealth.platform.patient.TooManyGuardiansException;
 
@@ -181,6 +184,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.badRequest().body(new ApiErrorResponse("Incorrect or expired code.", null));
     }
 
+    @ExceptionHandler(InvalidPatientVerificationCodeException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidPatientVerificationCode(
+            InvalidPatientVerificationCodeException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(EmailDeliveryFailedException.class)
+    public ResponseEntity<ApiErrorResponse> handleEmailDeliveryFailed(EmailDeliveryFailedException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
     @ExceptionHandler(DuplicateFieldException.class)
     public ResponseEntity<ApiErrorResponse> handleDuplicateField(DuplicateFieldException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -289,6 +304,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(InvalidIdNumberException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidIdNumber(InvalidIdNumberException ex) {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PatientIdentityMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handlePatientIdentityMismatch(PatientIdentityMismatchException ex) {
+        return ResponseEntity.unprocessableEntity().body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(PatientNotFoundException.class)

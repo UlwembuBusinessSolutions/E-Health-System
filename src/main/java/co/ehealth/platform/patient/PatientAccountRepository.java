@@ -9,6 +9,8 @@ public interface PatientAccountRepository extends JpaRepository<PatientAccount, 
 
     Optional<PatientAccount> findByEmail(String email);
 
+    Optional<PatientAccount> findByEmailIgnoreCase(String email);
+
     // The reconciliation lookup both PatientService.register() (reception
     // path) and PatientAuthService.register() (self-service path) key off
     // — id_number is unique per tenant, same matching key Patient itself
@@ -16,4 +18,6 @@ public interface PatientAccountRepository extends JpaRepository<PatientAccount, 
     Optional<PatientAccount> findByIdNumber(String idNumber);
 
     boolean existsByEmail(String email);
+
+    boolean existsByEmailIgnoreCase(String email);
 }

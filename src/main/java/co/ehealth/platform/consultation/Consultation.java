@@ -99,6 +99,22 @@ public class Consultation {
 
     // A fresh draft — everything past the author/timestamps starts empty
     // and is filled in via updateFields()/addDiagnosis() while still DRAFT.
+    // Set only when the consultation was started with no vitals on the visit.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "vitals_bypass_reason", length = 30)
+    private VitalsBypassReason vitalsBypassReason;
+
+    @Column(name = "vitals_bypass_note", length = 300)
+    private String vitalsBypassNote;
+
+    // The doctor's unsigned prescription as JSON, kept so closing the record loses nothing.
+    @Column(name = "prescription_draft")
+    private String prescriptionDraft;
+
+    // The earlier signed consultation this one carries on from, when the patient came back on a new visit.
+    @Column(name = "continued_from_consultation_id")
+    private UUID continuedFromConsultationId;
+
     public Consultation(UUID visitId, UUID authorUserId, Instant now) {
         this.visitId = visitId;
         this.status = ConsultationStatus.DRAFT;
@@ -173,6 +189,38 @@ public class Consultation {
 
     public String getAmendmentReason() {
         return amendmentReason;
+    }
+
+    public String getPrescriptionDraft() {
+        return prescriptionDraft;
+    }
+
+    public void savePrescriptionDraft(String json) {
+        this.prescriptionDraft = json;
+    }
+
+    public VitalsBypassReason getVitalsBypassReason() {
+        return vitalsBypassReason;
+    }
+
+    public String getVitalsBypassNote() {
+        return vitalsBypassNote;
+    }
+
+    public UUID getContinuedFromConsultationId() {
+        return continuedFromConsultationId;
+    }
+
+    public void continueFrom(Consultation earlier, Instant now) {
+        this.continuedFromConsultationId = earlier.getId();
+        updateFields(earlier.getRelevantHistory(), earlier.getCurrentMedications(), earlier.getAllergyStatus(),
+                earlier.getAllergyDetail(), earlier.getExaminationNotes(), earlier.getInvestigationsNotes(),
+                earlier.getTreatmentPlan(), now);
+    }
+
+    public void recordVitalsBypass(VitalsBypassReason reason, String note) {
+        this.vitalsBypassReason = reason;
+        this.vitalsBypassNote = note;
     }
 
     public UUID getAuthorUserId() {

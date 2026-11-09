@@ -3,6 +3,7 @@ package co.ehealth.platform.core.notification;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
@@ -41,9 +42,17 @@ class EmailDeliveryWorker {
     private static final ClassPathResource LOGO_RESOURCE = new ClassPathResource("email/ulwembu-logo.png");
 
     private final JavaMailSender defaultMailSender;
+    private final MicrosoftGraphEmailSender microsoftGraphEmailSender;
+    private final String provider;
+    private final String fromName;
 
-    EmailDeliveryWorker(JavaMailSender defaultMailSender) {
+    EmailDeliveryWorker(JavaMailSender defaultMailSender, MicrosoftGraphEmailSender microsoftGraphEmailSender,
+                        @Value("${app.notifications.provider:smtp}") String provider,
+                        @Value("${app.notifications.from-name:Verify}") String fromName) {
         this.defaultMailSender = defaultMailSender;
+        this.microsoftGraphEmailSender = microsoftGraphEmailSender;
+        this.provider = provider;
+        this.fromName = fromName;
     }
 
     // Runs on emailTaskExecutor (EmailAsyncConfig), never the request
@@ -59,24 +68,33 @@ class EmailDeliveryWorker {
     @Async("emailTaskExecutor")
     void deliver(String toEmail, String subject, String textBody, String htmlBody, String fromAddress,
                  MailOverride override) {
-        JavaMailSender mailSender = override != null ? buildOverrideSender(override) : defaultMailSender;
+        deliverWithRetries(toEmail, subject, textBody, htmlBody, fromAddress, override);
+    }
+
+    boolean deliverNow(String toEmail, String subject, String textBody, String htmlBody, String fromAddress,
+                       MailOverride override) {
+        return deliverWithRetries(toEmail, subject, textBody, htmlBody, fromAddress, override);
+    }
+
+    private boolean deliverWithRetries(String toEmail, String subject, String textBody, String htmlBody,
+                                       String fromAddress, MailOverride override) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                MimeMessage message = mailSender.createMimeMessage();
-                // MULTIPART_MODE_RELATED, not the boolean-true overload —
-                // this is what lets setText(text, html) (a multipart/
-                // alternative part) and addInline() (the logo) coexist in
-                // one message; the boolean overload only gives
-                // multipart/mixed, which many clients render as a
-                // dangling attachment instead of an inline image.
-                MimeMessageHelper helper = new MimeMessageHelper(message, MimeMessageHelper.MULTIPART_MODE_RELATED,
-                        "UTF-8");
-                helper.setFrom(fromAddress);
-                helper.setTo(toEmail);
-                helper.setSubject(subject);
-                helper.setText(textBody, htmlBody);
-                helper.addInline(LOGO_CONTENT_ID, LOGO_RESOURCE);
-                mailSender.send(message);
+                if (override == null && "microsoft-graph".equalsIgnoreCase(provider)) {
+                    microsoftGraphEmailSender.send(toEmail, subject, htmlBody, fromAddress, fromName);
+                } else {
+                    JavaMailSender mailSender = override != null ? buildOverrideSender(override) : defaultMailSender;
+                    MimeMessage message = mailSender.createMimeMessage();
+                    // MULTIPART_MODE_RELATED lets the HTML body and inline logo coexist.
+                    MimeMessageHelper helper = new MimeMessageHelper(message, MimeMessageHelper.MULTIPART_MODE_RELATED,
+                            "UTF-8");
+                    helper.setFrom(fromAddress, fromName);
+                    helper.setTo(toEmail);
+                    helper.setSubject(subject);
+                    helper.setText(textBody, htmlBody);
+                    helper.addInline(LOGO_CONTENT_ID, LOGO_RESOURCE);
+                    mailSender.send(message);
+                }
                 // Logged unconditionally, including a first-try success —
                 // previously silent, which made a genuine send indistinguishable
                 // from the async task never having run at all. Found the hard
@@ -84,20 +102,16 @@ class EmailDeliveryWorker {
                 // succeeded with zero log output, and only manually checking the
                 // inbox confirmed it — logs alone couldn't tell the difference.
                 log.info("Email sent to {} on attempt {}/{}", toEmail, attempt, MAX_ATTEMPTS);
-                return;
+                return true;
             } catch (Exception ex) {
                 if (attempt == MAX_ATTEMPTS) {
-                    // Expected outcome in this environment: no real SMTP
-                    // credentials are configured, so every attempt fails
-                    // the same way and this is exactly what should happen.
-                    log.warn("Failed to send email to {} after {} attempts "
-                                    + "(expected without real SMTP credentials configured)",
-                            toEmail, MAX_ATTEMPTS, ex);
-                    return;
+                    log.warn("Failed to send email to {} after {} attempts", toEmail, MAX_ATTEMPTS, ex);
+                    return false;
                 }
                 sleepBeforeRetry(RETRY_DELAY_MS[attempt - 1], toEmail, attempt, ex);
             }
         }
+        return false;
     }
 
     // Built fresh per send rather than cached — a tenant can change its
