@@ -143,7 +143,7 @@ public class ConsultationService {
                                     String bypassNote, UUID continueFromConsultationId) {
         requireDraftAccess();
         Visit visit = visitRepository.findById(visitId).orElseThrow(VisitNotFoundException::new);
-        Patient patient = patientService.get(visit.getPatientId());
+        Patient patient = patientService.get(visit.requirePatientId());
         if (patient.isArchived()) {
             throw new PatientArchivedException();
         }
@@ -234,6 +234,7 @@ public class ConsultationService {
             return Optional.empty();
         }
         Visit visit = visitRepository.findById(visitId).orElseThrow(VisitNotFoundException::new);
+        visit.requirePatientId();
         UUID previous = visit.getTransferredFromVisitId();
         for (int step = 0; step < MAX_VISIT_CHAIN && previous != null; step++) {
             Optional<Visit> earlierVisit = visitRepository.findById(previous);

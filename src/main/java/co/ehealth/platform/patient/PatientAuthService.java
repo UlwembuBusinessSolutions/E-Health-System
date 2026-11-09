@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.security.SecureRandom;
 import java.util.Optional;
 import java.util.UUID;
@@ -70,15 +71,20 @@ public class PatientAuthService {
         this.clock = clock;
     }
 
-    // This validates the SA ID and sends a code to the supplied email. MPI lookup and patient creation happen only after confirmation.
+    // This validates a supplied SA ID and sends a code to the email. MPI lookup and patient creation happen only after confirmation.
     @Transactional
     public RegistrationStarted register(RegisterAccountCommand cmd) {
         String normalizedEmail = normalizeEmail(cmd.email());
-        SouthAfricanIdNumber.parse(cmd.idNumber());
+        String idNumber = cmd.idNumber() == null || cmd.idNumber().isBlank() ? null : cmd.idNumber().trim();
+        if (idNumber != null) {
+            SouthAfricanIdNumber.parse(idNumber);
+        } else if (cmd.dateOfBirth() == null) {
+            throw new IllegalArgumentException("Date of birth is required when ID number is not provided.");
+        }
         if (patientAccountRepository.existsByEmailIgnoreCase(normalizedEmail)) {
             throw new DuplicateFieldException("email", "An account with this email already exists.");
         }
-        if (patientAccountRepository.findByIdNumber(cmd.idNumber()).isPresent()) {
+        if (idNumber != null && patientAccountRepository.findByIdNumber(idNumber).isPresent()) {
             throw new DuplicateFieldException("idNumber", "An account for this ID number already exists.");
         }
 
@@ -93,7 +99,11 @@ public class PatientAuthService {
 
         // Do not create a searchable patient record until the supplied email has been verified.
         verificationRepository.deleteByExpiresAtBefore(now);
-        verificationRepository.deleteByEmailOrIdNumber(normalizedEmail, cmd.idNumber());
+        if (idNumber == null) {
+            verificationRepository.deleteByEmail(normalizedEmail);
+        } else {
+            verificationRepository.deleteByEmailOrIdNumber(normalizedEmail, idNumber);
+        }
         // Derived delete methods load matching rows and defer their DELETE
         // until the persistence context flushes. Flush before inserting the
         // replacement so a retry cannot hit the unique email/ID constraint
@@ -101,7 +111,8 @@ public class PatientAuthService {
         verificationRepository.flush();
         String code = String.format("%06d", RANDOM.nextInt(1_000_000));
         RegisterAccountCommand normalizedCommand = new RegisterAccountCommand(cmd.firstName(), cmd.lastName(),
-                cmd.idNumber(), cmd.address(), cmd.contactNumber(), normalizedEmail, cmd.password());
+                idNumber, cmd.address(), cmd.contactNumber(), normalizedEmail, cmd.password(),
+                idNumber == null ? cmd.dateOfBirth() : null);
         verificationRepository.saveAndFlush(new PatientRegistrationVerification(normalizedCommand,
                 passwordEncoder.encode(cmd.password()), passwordEncoder.encode(code),
                 now.plus(REGISTRATION_CODE_TTL), now));
@@ -126,7 +137,8 @@ public class PatientAuthService {
         }
 
         PatientRegistrationVerification pending = maybePending.get();
-        Optional<Patient> existingPatient = patientRepository.findByIdNumber(pending.getIdNumber());
+        Optional<Patient> existingPatient = pending.getIdNumber() == null
+                ? Optional.empty() : patientRepository.findByIdNumber(pending.getIdNumber());
         if (existingPatient.isPresent() && (existingPatient.get().isArchived()
                 || !matchesExistingPatientIdentity(pending, existingPatient.get()))) {
             throw new PatientIdentityMismatchException();
@@ -136,7 +148,8 @@ public class PatientAuthService {
                 .map(Patient::getId)
                 .orElseGet(() -> patientService.registerSelf(new PatientService.RegisterPatientCommand(
                         pending.getFirstName(), pending.getLastName(), pending.getIdNumber(), pending.getAddress(),
-                        pending.getContactNumber(), pending.getEmail(), null, null, null, null)).getId());
+                        pending.getContactNumber(), pending.getEmail(), null, null, null, null,
+                        pending.getDateOfBirth(), null, null)).getId());
         PatientAccount account = new PatientAccount(pending.getIdNumber(), pending.getEmail(), pending.getFirstName(),
                 pending.getLastName(), pending.getPasswordHash(), patientId, now);
         account = patientAccountRepository.save(account);
@@ -282,7 +295,11 @@ public class PatientAuthService {
     }
 
     public record RegisterAccountCommand(String firstName, String lastName, String idNumber, String address,
-                                          String contactNumber, String email, String password) {
+                                          String contactNumber, String email, String password, LocalDate dateOfBirth) {
+        public RegisterAccountCommand(String firstName, String lastName, String idNumber, String address,
+                String contactNumber, String email, String password) {
+            this(firstName, lastName, idNumber, address, contactNumber, email, password, null);
+        }
     }
 
     public record RegistrationStarted(String email, long expiresInMinutes) {

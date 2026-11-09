@@ -41,6 +41,13 @@ public class VisitController {
         return ResponseEntity.status(HttpStatus.CREATED).body(VisitWithTokenResponse.from(result));
     }
 
+    @PostMapping("/api/v1/visits/walk-in")
+    public ResponseEntity<VisitWithTokenResponse> createWalkIn(@Valid @RequestBody WalkInVisitRequest request,
+                                                                 @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        VisitService.VisitWithToken result = visitService.createWalkInVisit(request.facilityId(), staff.userId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(VisitWithTokenResponse.from(result));
+    }
+
     @GetMapping("/api/v1/visits/{id}")
     public ResponseEntity<VisitResponse> get(@PathVariable UUID id) {
         return ResponseEntity.ok(VisitResponse.from(visitService.get(id)));
@@ -58,6 +65,9 @@ public class VisitController {
 
     public record CreateVisitRequest(@NotNull UUID patientId, @NotNull UUID facilityId,
                                       @NotNull VisitType visitType, @NotNull ServiceStream serviceStream) {
+    }
+
+    public record WalkInVisitRequest(@NotNull UUID facilityId) {
     }
 
     public record VisitResponse(UUID id, UUID patientId, UUID facilityId, VisitType visitType,

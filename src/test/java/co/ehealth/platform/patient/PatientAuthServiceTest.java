@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -71,6 +72,24 @@ class PatientAuthServiceTest {
         verify(patients, never()).findByIdNumber(anyString());
         verify(patientService, never()).registerSelf(any());
         verify(accounts, never()).save(any(PatientAccount.class));
+    }
+
+    @Test
+    void registrationAllowsMissingIdWhenDateOfBirthIsProvided() {
+        PatientAuthService.RegisterAccountCommand command = new PatientAuthService.RegisterAccountCommand(
+                "Alex", "Patient", null, "1 Test Street", "+27821234567", "patient@example.com",
+                "correct-horse-battery", LocalDate.of(1980, 1, 2));
+
+        service.register(command);
+
+        org.mockito.ArgumentCaptor<PatientRegistrationVerification> pendingCaptor =
+                org.mockito.ArgumentCaptor.forClass(PatientRegistrationVerification.class);
+        verify(verifications).saveAndFlush(pendingCaptor.capture());
+        assertNull(pendingCaptor.getValue().getIdNumber());
+        assertEquals(LocalDate.of(1980, 1, 2), pendingCaptor.getValue().getDateOfBirth());
+        verify(verifications).deleteByEmail("patient@example.com");
+        verify(verifications, never()).deleteByEmailOrIdNumber(anyString(), anyString());
+        verify(accounts, never()).findByIdNumber(anyString());
     }
 
     @Test

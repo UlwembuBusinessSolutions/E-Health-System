@@ -67,6 +67,14 @@ public class QueueController {
         return ResponseEntity.ok(QueueEntryResponse.from(queueService.getToken(id)));
     }
 
+    @PostMapping("/api/v1/queue/tokens/{id}/patient")
+    public ResponseEntity<Void> linkPatient(@PathVariable UUID id,
+                                             @Valid @RequestBody LinkPatientRequest request,
+                                             @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        queueService.linkWalkInTokenToPatient(id, request.patientId(), staff.userId());
+        return ResponseEntity.noContent().build();
+    }
+
     // The normalized event history (V21) for one token — every issue/call/
     // miss/reactivate/complete/cancel/priority-change, oldest first, each
     // with whoever performed it and any reason captured at the time.
@@ -166,6 +174,9 @@ public class QueueController {
     }
 
     public record IssueManualTokenRequest(@NotNull UUID visitId, @NotNull TokenPriority priority) {
+    }
+
+    public record LinkPatientRequest(@NotNull UUID patientId) {
     }
 
     public record UpdatePriorityRequest(@NotNull TokenPriority priority, @NotNull QueueActionReason reasonCode,

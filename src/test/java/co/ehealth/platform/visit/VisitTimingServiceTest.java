@@ -48,6 +48,26 @@ class VisitTimingServiceTest {
         assertEquals(3600, result.beforeConsultationSeconds()); assertNull(result.finishedAt());
         assertEquals(result, service.forPatient(patient).getFirst());
     }
+    @Test void unregisteredVisitTimingUsesTheVisitWithoutRequiringAPatient() {
+        Visit walkIn = mock(Visit.class);
+        UUID visitId = UUID.randomUUID();
+        doReturn(visitId).when(walkIn).getId();
+        doReturn(null).when(walkIn).getPatientId();
+        doReturn(start).when(walkIn).getVisitDateTime();
+        doReturn(null).when(walkIn).getTransferredFromVisitId();
+        doReturn(Optional.of(walkIn)).when(visits).findById(visitId);
+        doReturn(List.of()).when(consultations).findByVisitIdIn(anyList());
+        doReturn(List.of()).when(tokens).findByVisitIdIn(anyList());
+        doReturn(List.of()).when(triage).findByVisitIdInOrderByObservedAtDesc(anyList());
+
+        var result = service.get(visitId);
+
+        assertEquals(visitId, result.visitId());
+        assertEquals(visitId, result.journeyVisitId());
+        assertTrue(result.active());
+        assertEquals(3600, result.elapsedSeconds());
+        verify(visits, never()).findByPatientIdOrderByVisitDateTimeDesc(any());
+    }
     @Test void consultationOnlyJourneyFinishesWithoutPharmacy() {
         Visit v = visit(start, null); given(v);
         doReturn(List.of(consultation(v, start.plusSeconds(1800), ConsultationStatus.SIGNED))).when(consultations).findByVisitIdIn(anyList());

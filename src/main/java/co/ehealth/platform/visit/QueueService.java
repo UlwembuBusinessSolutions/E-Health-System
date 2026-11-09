@@ -169,11 +169,30 @@ public class QueueService {
     private boolean matchesSearch(QueueEntryView view, String needle) {
         return String.valueOf(view.token().getTokenNumber()).contains(needle)
                 || view.patientName().toLowerCase().contains(needle)
-                || view.patientMpi().toLowerCase().contains(needle);
+                || (view.patientMpi() != null && view.patientMpi().toLowerCase().contains(needle));
+    }
+
+    @Transactional
+    public void linkWalkInTokenToPatient(UUID tokenId, UUID patientId, UUID staffUserId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        patientService.get(patientId);
+        QueueToken token = findToken(tokenId);
+        Visit visit = visitRepository.findByIdForUpdate(token.getVisitId())
+                .orElseThrow(VisitNotFoundException::new);
+        if (visit.getPatientId() != null) {
+            if (visit.getPatientId().equals(patientId)) return;
+            throw new QueueTokenAlreadyLinkedException();
+        }
+        visit.linkPatient(patientId);
+        auditLogService.append(staffUserId, token.getFacilityId(), "WALK_IN_TOKEN_LINKED_TO_PATIENT",
+                "QueueToken", token.getId().toString(), null, null);
     }
 
     private QueueEntryView toView(QueueToken token) {
         Visit visit = visitRepository.findById(token.getVisitId()).orElseThrow(VisitNotFoundException::new);
+        if (visit.getPatientId() == null) {
+            return new QueueEntryView(token, null, "Walk-in (unregistered)", null);
+        }
         Patient patient = patientService.get(visit.getPatientId());
         return new QueueEntryView(token, patient.getId(), patient.getFirstName() + " " + patient.getLastName(),
                 patient.getMpiNumber());
