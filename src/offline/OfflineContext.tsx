@@ -40,7 +40,10 @@ async function probe(): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 4000);
   try {
-    const res = await fetch(`${apiOrigin()}/actuator/health`, { cache: "no-store", signal: controller.signal });
+    // Keep the probe same-origin in development so Vite handles a stopped
+    // backend quietly instead of logging proxy errors on every interval.
+    const healthUrl = import.meta.env.DEV ? "/actuator/health" : `${apiOrigin()}/actuator/health`;
+    const res = await fetch(healthUrl, { cache: "no-store", signal: controller.signal });
     return res.ok;
   } catch {
     return false;
