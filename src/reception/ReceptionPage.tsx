@@ -33,12 +33,14 @@ import { Card } from "@/shared/components/Card";
 import { Input } from "@/shared/components/Input";
 import { Select } from "@/shared/components/Select";
 import { printQueueTicket } from "@/shared/lib/printTicket";
+import { announceQueueToken, isQueueSpeakerEnabled } from "@/shared/lib/queueAnnouncement";
 
 type ReceptionStep = "clinic" | "arrival" | "identify" | "visit";
 
 interface ReceptionLocationState {
   facilityId?: string;
   registeredPatientId?: string;
+  fromQueue?: boolean;
   fromReception?: boolean;
 }
 
@@ -202,7 +204,7 @@ export function ReceptionPage() {
   const returnState = location.state as ReceptionLocationState | null;
   const [initialDraft] = useState(readReceptionDraft);
   const [step, setStep] = useState<ReceptionStep>(
-    returnState?.registeredPatientId ? "visit" : initialDraft?.step ?? "clinic",
+    returnState?.registeredPatientId ? "visit" : returnState?.fromQueue ? "identify" : initialDraft?.step ?? "clinic",
   );
   const [facilityId, setFacilityId] = useState(returnState?.facilityId ?? initialDraft?.facilityId ?? "");
   const [searchInput, setSearchInput] = useState("");
@@ -220,6 +222,7 @@ export function ReceptionPage() {
   const [priorityError, setPriorityError] = useState<string | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [queueConflict, setQueueConflict] = useState(false);
 
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
   const registrationReturnQuery = useQuery({
@@ -292,6 +295,7 @@ export function ReceptionPage() {
     onSuccess: (entry) => {
       setVisitResult((current) => (current ? { ...current, token: entry.token } : current));
       setCallError(null);
+      if (isQueueSpeakerEnabled()) announceQueueToken(entry.token.tokenNumber);
     },
     onError: (error) => setCallError(errorMessage(error, "Couldn't call this patient. Try again.")),
   });
@@ -306,6 +310,7 @@ export function ReceptionPage() {
     onSuccess: (result) => {
       setVisitResult(result);
       setFormError(null);
+      setQueueConflict(false);
       if (priority === "PRIORITY" && priorityReason) {
         setPriorityError(null);
         priorityMutation.mutate({
@@ -315,7 +320,10 @@ export function ReceptionPage() {
         });
       }
     },
-    onError: (error) => setFormError(errorMessage(error, "Couldn't register this visit. Try again.")),
+    onError: (error) => {
+      setFormError(errorMessage(error, "Couldn't register this visit. Try again."));
+      setQueueConflict(error instanceof ApiError && error.status === 409);
+    },
   });
 
   const walkInMutation = useMutation({
@@ -323,6 +331,7 @@ export function ReceptionPage() {
     onSuccess: (result) => {
       setVisitResult(result);
       setFormError(null);
+      setQueueConflict(false);
       if (priority === "PRIORITY" && priorityReason) {
         setPriorityError(null);
         priorityMutation.mutate({
@@ -332,7 +341,10 @@ export function ReceptionPage() {
         });
       }
     },
-    onError: (error) => setFormError(errorMessage(error, "Couldn't issue a walk-in token. Try again.")),
+    onError: (error) => {
+      setFormError(errorMessage(error, "Couldn't issue a walk-in token. Try again."));
+      setQueueConflict(error instanceof ApiError && error.status === 409);
+    },
   });
 
   const facilities = facilitiesQuery.data ?? [];
@@ -372,6 +384,7 @@ export function ReceptionPage() {
 
   function startVisit() {
     setFormError(null);
+    setQueueConflict(false);
     setPriorityError(null);
     setCallError(null);
     if (!facilityId) {
@@ -899,6 +912,11 @@ export function ReceptionPage() {
                     {formError && (
                       <p role="alert" className="rounded-lg border border-danger-500/30 bg-danger-50 p-3 text-[13px] text-danger-600">
                         {formError}
+                        {queueConflict && (
+                          <Link to="/app/vitals" className="ml-1 font-semibold underline">
+                            Open the existing queue visit
+                          </Link>
+                        )}
                       </p>
                     )}
                     {(walkInMutation.isPending || createVisitMutation.isPending) && (
