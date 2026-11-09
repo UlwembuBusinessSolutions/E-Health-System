@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Mail, Plus, RefreshCw, Search, StickyNote, Stethoscope, UserRound, X } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
-import { bookAppointment, cancelAppointment, getAppointments, getAppointmentStaff, rescheduleAppointment, type Appointment, type AppointmentDiary, type AppointmentStaff } from "@/shared/api/appointments";
+import { bookAppointment, cancelAppointment, checkInAppointment, getAppointments, getAppointmentStaff, rescheduleAppointment, type Appointment, type AppointmentDiary, type AppointmentStaff } from "@/shared/api/appointments";
 import { getFacilities } from "@/shared/api/facilities";
 import { searchPatients, type Patient } from "@/shared/api/patients";
 import { Button } from "@/shared/components/Button";
@@ -558,6 +558,8 @@ function adjacentDate(date: string, delta: number) {
 
 export function AppointmentsPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [selectedFacility, setSelectedFacility] = useState("");
   const [date, setDate] = useState("");
   const [page, setPage] = useState(0);
@@ -584,6 +586,11 @@ export function AppointmentsPage() {
     enabled: !!facilityId,
     refetchInterval: 15000,
   });
+  const checkIn = useMutation({
+    mutationFn: (appointment: Appointment) => checkInAppointment(facilityId, appointment),
+    onSuccess: () => { showToast("Patient checked in.", "success"); void queryClient.invalidateQueries({ queryKey: ["appointments"] }); },
+    onError: (error: Error) => showToast(error.message || "Could not check in this appointment.", "error"),
+  });
   const diary = query.data;
   function resetView() { setPage(0); setBooking(false); setEditing(null); }
 
@@ -591,7 +598,7 @@ export function AppointmentsPage() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Appointments"
-        description="View the daily diary and manage patient bookings."
+        description="Daily diary and patient bookings."
         action={
           diary?.canManage && (
             <Button icon={<Plus className="size-4" aria-hidden />} disabled={query.isError || booking} onClick={() => { setBooking(true); setEditing(null); }}>
@@ -601,8 +608,26 @@ export function AppointmentsPage() {
         }
       />
 
-      <Card className="rounded-[22px] border-[#d7e4e1] bg-white p-4 shadow-[0_10px_30px_rgba(7,28,43,0.05)] sm:p-5">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-[1.1fr_1fr_1.35fr_0.85fr]">
+      <Card className="rounded-2xl border-[#d7e4e1] bg-white p-4 shadow-[0_8px_24px_rgba(7,28,43,0.04)] sm:p-5">
+        <div className="flex flex-wrap items-center gap-3 border-b border-[#e5eeeb] pb-4">
+          <div className="mr-auto flex min-w-0 items-center gap-3">
+            <div className="hidden sm:block">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-secondary">Diary date</p>
+              <p className="mt-1 text-[15px] font-semibold text-text-primary">{diary ? readableDate(diary.date) : "Loading date…"}</p>
+              <p className="text-[12px] text-text-secondary">{date ? "Selected date" : "Today"}</p>
+            </div>
+            <div className="flex gap-2 sm:ml-5">
+              <Button size="md" variant="secondary" aria-label="Previous day" disabled={!diary} onClick={() => { if (diary) { setDate(adjacentDate(date || diary.date, -1)); resetView(); } }}><ChevronLeft className="size-4" aria-hidden /></Button>
+              <Button size="md" variant="secondary" aria-label="Next day" disabled={!diary} onClick={() => { if (diary) { setDate(adjacentDate(date || diary.date, 1)); resetView(); } }}><ChevronRight className="size-4" aria-hidden /></Button>
+            </div>
+          </div>
+          <Button size="md" variant="secondary" onClick={() => { setDate(""); resetView(); }}>Today</Button>
+          <Button size="md" variant="secondary" icon={<RefreshCw className="size-3.5" aria-hidden />} loading={query.isFetching || facilities.isFetching} onClick={() => { void facilities.refetch(); if (facilityId) void query.refetch(); }}>
+            Refresh
+          </Button>
+          {diary && <span className="hidden items-center gap-1.5 text-[12px] text-text-secondary lg:flex"><Clock3 className="size-3.5" aria-hidden />{diary.timezone.replaceAll("_", " ")}</span>}
+        </div>
+        <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 xl:grid-cols-[1.1fr_1fr_1.35fr_0.85fr]">
         <div className="min-w-0">
           <Select
             label="Facility"
@@ -613,7 +638,7 @@ export function AppointmentsPage() {
             options={facilities.data?.map((f) => ({ value: f.id, label: f.name })) ?? []}
           />
         </div>
-        <Input label="Diary date" type="date" value={date || diary?.date || ""} onChange={(e) => { setDate(e.target.value); resetView(); }} />
+        <Input label="Choose date" type="date" value={date || diary?.date || ""} onChange={(e) => { setDate(e.target.value); resetView(); }} />
         <div className="min-w-0">
           <StaffCombobox
             id="filter-staff"
@@ -647,17 +672,6 @@ export function AppointmentsPage() {
             ))}
           </select>
         </div>
-        </div>
-        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-[#e5eeeb] pt-4">
-        <Button size="md" variant="secondary" aria-label="Previous day" disabled={!diary} onClick={() => { if (diary) { setDate(adjacentDate(date || diary.date, -1)); resetView(); } }}><ChevronLeft className="size-4" aria-hidden /></Button>
-        <Button size="md" variant="secondary" onClick={() => { setDate(""); resetView(); }}>
-          Today
-        </Button>
-        <Button size="md" variant="secondary" aria-label="Next day" disabled={!diary} onClick={() => { if (diary) { setDate(adjacentDate(date || diary.date, 1)); resetView(); } }}><ChevronRight className="size-4" aria-hidden /></Button>
-        <Button size="md" variant="secondary" className="ml-auto" icon={<RefreshCw className="size-3.5" aria-hidden />} loading={query.isFetching || facilities.isFetching} onClick={() => { void facilities.refetch(); if (facilityId) void query.refetch(); }}>
-          Refresh
-        </Button>
-        {diary && <span className="hidden items-center gap-1.5 text-[12px] text-text-secondary lg:flex"><Clock3 className="size-3.5" aria-hidden />{diary.timezone.replaceAll("_", " ")}</span>}
         </div>
       </Card>
 
@@ -698,26 +712,14 @@ export function AppointmentsPage() {
               AppointmentService.diary()'s own why-note) would otherwise
               read as a confusing mismatch against their own, much shorter,
               filtered list below. */}
+          {diary.canManage && <div className="flex flex-wrap items-center gap-0 overflow-hidden rounded-xl border border-[#dce7e4] bg-white shadow-[0_4px_14px_rgba(7,28,43,0.03)]">
+                <div className="flex min-w-[145px] flex-1 items-center gap-2.5 px-4 py-3.5"><span className="size-2 rounded-full bg-[#2ba48f]"/><strong className="text-[20px] tabular-nums text-[#071c2b]">{diary.items.filter((item) => item.status === "CONFIRMED").length}</strong><span className="text-[12px] text-text-secondary">Awaiting arrival</span></div>
+                <div className="flex min-w-[135px] flex-1 items-center gap-2.5 border-l border-[#e5eeeb] px-4 py-3.5"><span className="size-2 rounded-full bg-[#75b99e]"/><strong className="text-[20px] tabular-nums text-[#071c2b]">{diary.checkedIn}</strong><span className="text-[12px] text-text-secondary">Checked in</span></div>
+                <div className="flex min-w-[145px] flex-1 items-center gap-2.5 border-l border-[#e5eeeb] px-4 py-3.5"><span className="size-2 rounded-full bg-[#bfcfc8]"/><strong className="text-[20px] tabular-nums text-[#071c2b]">{diary.booked}</strong><span className="text-[12px] text-text-secondary">Total bookings</span></div>
+                <div className="ml-auto border-l border-[#e5eeeb] px-4 py-3.5 text-[12px] text-text-secondary">{diary.dailyLimit === null ? "No daily limit set" : `Daily limit: ${diary.dailyLimit} · ${diary.remaining ?? 0} available`}</div>
+              </div>}
           {diary.canManage && (
             <>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-                <Card className="rounded-[22px] border-[#d7e4e1] bg-white p-4 shadow-[0_10px_30px_rgba(7,28,43,0.05)] sm:p-5">
-                  <p className="text-[12px] font-medium text-[#617883] sm:text-[14px]">Booked</p>
-                  <strong className="mt-1 block text-[28px] tabular-nums tracking-tight text-[#071c2b] sm:text-[32px]">{diary.booked}</strong>
-                  <p className="mt-2 text-[12px] text-[#718595] sm:text-[13px]">Confirmed visits at this facility</p>
-                </Card>
-                <Card className="rounded-[22px] border-[#d7e4e1] bg-white p-4 shadow-[0_10px_30px_rgba(7,28,43,0.05)] sm:p-5">
-                  <p className="text-[12px] font-medium text-[#617883] sm:text-[14px]">Daily limit</p>
-                  <strong className="mt-1 block text-[24px] tabular-nums text-text-primary sm:text-[28px]">{diary.dailyLimit ?? "—"}</strong>
-                  <p className="mt-2 text-[12px] text-[#718595] sm:text-[13px]">{diary.dailyLimit === null ? "No daily limit configured" : "Maximum bookings for the day"}</p>
-                </Card>
-                <Card className="rounded-[22px] border-[#a8d8d1] bg-[#f7fcfb] p-4 shadow-[0_10px_30px_rgba(7,28,43,0.05)] sm:p-5">
-                  <p className="text-[12px] font-medium text-[#617883] sm:text-[14px]">Available</p>
-                  <strong className={`mt-1 block text-[24px] tabular-nums sm:text-[28px] ${diary.remaining === 0 ? "text-amber-600" : "text-brand-600"}`}>{diary.remaining ?? "∞"}</strong>
-                  <p className="mt-2 text-[12px] text-[#718595] sm:text-[13px]">{diary.remaining === null ? "Unlimited places" : "Places left to book"}</p>
-                </Card>
-              </div>
-
               {diary.remaining === 0 && (
                 <div role="status" className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-50 px-4 py-3">
                   <CalendarDays className="size-5 shrink-0 text-amber-600" aria-hidden />
@@ -736,7 +738,7 @@ export function AppointmentsPage() {
             <BookingForm key={`${facilityId}:${diary.date}`} facilityId={facilityId} diary={diary} close={() => setBooking(false)} onBooked={(bookedDate) => { setDate(bookedDate); setPage(0); setBooking(false); }} />
           )}
 
-          <Card className="overflow-hidden rounded-[22px] border-[#d7e4e1] bg-white shadow-[0_10px_30px_rgba(7,28,43,0.05)]">
+              <Card className="overflow-hidden rounded-2xl border-[#d7e4e1] bg-white shadow-[0_8px_24px_rgba(7,28,43,0.04)]">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e5eeeb] px-4 py-4 sm:px-6">
               <div>
               <h2 className="text-[17px] font-semibold text-text-primary">
@@ -771,15 +773,10 @@ export function AppointmentsPage() {
                               {appointment.patientName}
                             </Link>
                           )}
-                          <p className="text-[12.5px] text-text-secondary">
-                            <span className="font-medium text-text-primary">{appointment.serviceCode.replaceAll("_", " ")}</span>
-                            {" · "}
-                            {appointment.mpiNumber}
-                            {appointment.createdByName && ` · Booked by ${appointment.createdByName}`}
-                          </p>
+                          <p className="text-[12.5px] text-text-secondary">{appointment.mpiNumber}{appointment.createdByName && ` · Booked by ${appointment.createdByName}`}</p>
                           {appointment.bookingSource === "PATIENT_PORTAL" && (
                             <span className="mt-1 inline-flex items-center rounded-full bg-[#e7f3f1] px-2 py-0.5 text-[11px] font-semibold text-[#087f75]">
-                              Online booking: {appointment.serviceCode.replaceAll("_", " ").toLowerCase()}
+                              Patient portal booking
                             </span>
                           )}
                           <p className={`mt-1 flex items-center gap-1.5 text-[12.5px] ${appointment.assignedStaffName ? "text-text-secondary" : "text-amber-600"}`}>
@@ -794,9 +791,10 @@ export function AppointmentsPage() {
                           )}
                           {appointment.cancelReason && <p className="mt-1.5 text-[12.5px] text-danger-600">Reason: {appointment.cancelReason}</p>}
                         </div>
-                        <StatusPill tone={cancelled ? "danger" : "success"}>{cancelled ? "Cancelled" : "Confirmed"}</StatusPill>
-                        {diary.canManage && !cancelled && (
+                        <StatusPill tone={cancelled ? "danger" : "success"}>{cancelled ? "Cancelled" : appointment.status === "CHECKED_IN" ? "Checked in" : "Booked"}</StatusPill>
+                        {diary.canManage && !cancelled && appointment.status === "CONFIRMED" && (
                           <div className="flex w-full gap-2 sm:w-auto">
+                            <Button size="md" onClick={() => checkIn.mutate(appointment)} loading={checkIn.isPending && checkIn.variables?.id === appointment.id}>Check in</Button>
                             <Button size="md" variant="secondary" onClick={() => { setBooking(false); setEditing({ appointment, action: "reschedule" }); }}>
                               Reschedule
                             </Button>

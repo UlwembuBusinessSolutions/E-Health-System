@@ -4,8 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'node:path'
 
-// Native Maven runs publish the API on 8082; Docker Compose uses 8081.
-// Docker users can override this with VITE_API_PROXY_TARGET=http://127.0.0.1:8081.
+// The README's default Docker Compose setup publishes the API on 8081.
+// Override this for a native backend or a different local API address.
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:8082'
 
 // https://vite.dev/config/

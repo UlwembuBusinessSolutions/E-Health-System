@@ -8,12 +8,12 @@ export interface AppointmentSettings { facilityId: string; facilityName: string;
 // There's no "online" source to distinguish from yet — every appointment
 // today is staff-booked through this same page; that only becomes a real
 // field once patient self-service booking exists as a second path.
-export interface Appointment { id: string; patientId: string; patientName: string; mpiNumber: string; date: string; time: string; startsAt: string; status: "CONFIRMED" | "CANCELLED"; cancelReason: string | null; notes: string | null; version: number; assignedStaffId: string | null; assignedStaffName: string | null; createdByName: string | null; createdAt: string; serviceCode: string; facilityId: string; facilityName: string; bookingSource: "STAFF" | "PATIENT_PORTAL" }
+export interface Appointment { id: string; patientId: string; patientName: string; mpiNumber: string; date: string; time: string; startsAt: string; status: "CONFIRMED" | "CHECKED_IN" | "CANCELLED"; cancelReason: string | null; notes: string | null; version: number; assignedStaffId: string | null; assignedStaffName: string | null; createdByName: string | null; createdAt: string; serviceCode: string; facilityId: string; facilityName: string; bookingSource: "STAFF" | "PATIENT_PORTAL" }
 export interface AppointmentStaff { id: string; name: string; designation: string | null }
 export async function getAppointmentStaff(facilityId: string) {
   return (await apiClient.get<{ items: AppointmentStaff[] }>(`/api/v1/facilities/${facilityId}/appointment-staff`, { headers: tenantAuthHeaders() })).items;
 }
-export interface AppointmentDiary { items: Appointment[]; totalItems: number; hasMore: boolean; date: string; timezone: string; booked: number; dailyLimit: number | null; remaining: number | null; canManage: boolean }
+export interface AppointmentDiary { items: Appointment[]; totalItems: number; hasMore: boolean; date: string; timezone: string; booked: number; checkedIn: number; dailyLimit: number | null; remaining: number | null; canManage: boolean }
 const path = (facilityId: string) => `/api/v1/facilities/${facilityId}/appointments`;
 export async function getAppointmentSettings() {
   return (await apiClient.get<{ items: AppointmentSettings[] }>("/api/v1/admin/appointment-settings", { headers: tenantAuthHeaders() })).items;
@@ -44,4 +44,7 @@ export function rescheduleAppointment(facilityId: string, appointment: Appointme
 }
 export function cancelAppointment(facilityId: string, appointment: Appointment, reason: string) {
   return apiClient.post<Appointment>(`${path(facilityId)}/${appointment.id}/cancel`, { reason, version: appointment.version }, { headers: tenantAuthHeaders() });
+}
+export function checkInAppointment(facilityId: string, appointment: Appointment) {
+  return apiClient.post<Appointment>(`${path(facilityId)}/${appointment.id}/check-in`, { version: appointment.version }, { headers: tenantAuthHeaders() });
 }
