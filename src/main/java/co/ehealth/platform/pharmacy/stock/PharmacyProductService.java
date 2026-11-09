@@ -46,6 +46,21 @@ public class PharmacyProductService {
         return productRepository.findById(productId).orElseThrow(PharmacyProductNotFoundException::new);
     }
 
+    public List<PharmacyProduct> atcCatalog() {
+        return productRepository.findByActiveTrueAndAtcCodeIsNotNullOrderByDisplayNameAsc();
+    }
+
+    @Transactional
+    public PharmacyProduct updateAtcCode(UUID productId, String atcCode) {
+        if (atcCode != null && !atcCode.isBlank() && !atcCode.trim().toUpperCase(java.util.Locale.ROOT)
+                .matches("[A-Z][0-9]{2}[A-Z]{2}([A-Z0-9]{1,2})?")) {
+            throw new PharmacyValidationException("ATC code must be a valid 5 or 7 character code.");
+        }
+        PharmacyProduct product = get(productId);
+        product.setAtcCode(atcCode == null || atcCode.isBlank() ? null : atcCode.trim().toUpperCase(java.util.Locale.ROOT));
+        return productRepository.save(product);
+    }
+
     // Product creation never moves quantity (rule 1) — a fresh product
     // always starts with zero stock accounts. facilityId is required so
     // the very first assortment entry exists immediately (plan section 4's

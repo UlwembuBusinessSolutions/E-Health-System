@@ -46,11 +46,11 @@ public class PrescribingStockService {
         IN_STOCK, LOW, OUT
     }
 
-    public record Alternative(UUID productId, String name, long available) {
+    public record Alternative(UUID productId, String name, long available, String atcCode) {
     }
 
     public record Medicine(UUID productId, String code, String name, String genericName, String strength,
-                           String dosageForm, StockBaseUnit unit, Integer packSize, DrugSchedule schedule,
+                           String dosageForm, String atcCode, StockBaseUnit unit, Integer packSize, DrugSchedule schedule,
                            long available, StockLevel level, LocalDate nearestExpiry,
                            List<Alternative> alternatives) {
     }
@@ -188,7 +188,8 @@ public class PrescribingStockService {
         for (PharmacyProduct candidate : candidates) {
             long available = shelf.shelf(facilityId, candidate.getId()).usableTotal();
             if (available > 0) {
-                alternatives.add(new Alternative(candidate.getId(), candidate.getDisplayName(), available));
+                alternatives.add(new Alternative(candidate.getId(), candidate.getDisplayName(), available,
+                        candidate.getAtcCode()));
             }
         }
         alternatives.sort(Comparator.comparingLong(Alternative::available).reversed());
@@ -205,7 +206,7 @@ public class PrescribingStockService {
         LocalDate nearestExpiry = picture.usableLots().stream().map(LotAvailability::expiryDate)
                 .filter(date -> date != null).min(Comparator.naturalOrder()).orElse(null);
         return new Medicine(product.getId(), product.getCode(), product.getDisplayName(), product.getGenericName(),
-                product.getStrength(), product.getDosageForm(), product.getBaseUnit(), product.getPackSize(),
+                product.getStrength(), product.getDosageForm(), product.getAtcCode(), product.getBaseUnit(), product.getPackSize(),
                 product.getSchedule(), available, level, nearestExpiry, alternatives);
     }
 }
