@@ -5,7 +5,7 @@ import { Switch } from "@/shared/components/Switch";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Drawer } from "../components/Drawer";
 import { blobToDataUrl } from "../lib/blobToDataUrl";
-import { describeError, isWitnessRequired } from "../lib/problem";
+import { describeError, isPbpaClinicScheduleRequired, isWitnessRequired } from "../lib/problem";
 import {
   EMPTY_COLLECTOR_FORM,
   hasCapturedData,
@@ -41,6 +41,10 @@ function OpenCollectionDrawer({ prescription, startWithThirdParty, onClose }: Om
   const [result, setResult] = useState<CollectResult | null>(null);
   // Set when the server refuses a Schedule 6 hand-over for lack of a witness.
   const [askingWitness, setAskingWitness] = useState(false);
+  const [askingManager, setAskingManager] = useState(false);
+  const [managerEmail, setManagerEmail] = useState("");
+  const [managerPassword, setManagerPassword] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
   const collect = useCollect(prescription.id);
 
   const hasScheduledItem = collectableItems(prescription).some((item) => item.schedule !== null);
@@ -64,13 +68,13 @@ function OpenCollectionDrawer({ prescription, startWithThirdParty, onClose }: Om
   }
 
   // `witness` is only passed on the retry that follows a "needs a witness" refusal.
-  async function confirmCollection(witness?: WitnessCredentials) {
+  async function confirmCollection(witness?: WitnessCredentials, manager?: { managerUserId: string; managerPassword: string; managerOverrideReason: string }) {
     const signature = !byPatient && form.signature ? await blobToDataUrl(form.signature) : undefined;
     collect.mutate(
       {
         proof: byPatient ? undefined : (form.proof ?? undefined),
         payload: byPatient
-          ? { collectedByPatient: true, idVerified: false, ...witness }
+          ? { collectedByPatient: true, idVerified: false, ...witness, ...manager }
           : {
               collectedByPatient: false,
               collector: toCollectorDetails(form),
@@ -78,6 +82,7 @@ function OpenCollectionDrawer({ prescription, startWithThirdParty, onClose }: Om
               signature,
               notes: form.notes.trim() || undefined,
               ...witness,
+              ...manager,
             },
       },
       {
@@ -87,6 +92,7 @@ function OpenCollectionDrawer({ prescription, startWithThirdParty, onClose }: Om
         },
         onError: (error) => {
           if (isWitnessRequired(error)) setAskingWitness(true);
+          if (isPbpaClinicScheduleRequired(error)) setAskingManager(true);
         },
       },
     );
@@ -147,6 +153,24 @@ function OpenCollectionDrawer({ prescription, startWithThirdParty, onClose }: Om
           onConfirm={(witness) => void confirmCollection(witness)}
           onCancel={() => setAskingWitness(false)}
         />
+      )}
+      {askingManager && (
+        <div role="dialog" aria-label="Manager clinic override" className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-base font-semibold text-text-primary">Manager approval required</h2>
+            <p className="mt-1 text-sm text-text-secondary">Enter the facility manager&apos;s credentials and the reason for this unscheduled clinic.</p>
+            <div className="mt-4 grid gap-3">
+              <input aria-label="Facility manager email" type="email" placeholder="Facility manager email" value={managerEmail} onChange={(event) => setManagerEmail(event.target.value)} className="rounded border border-border-subtle px-3 py-2 text-sm" />
+              <input aria-label="Manager password" type="password" placeholder="Manager password" value={managerPassword} onChange={(event) => setManagerPassword(event.target.value)} className="rounded border border-border-subtle px-3 py-2 text-sm" />
+              <input aria-label="Override reason" placeholder="Reason for override" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} className="rounded border border-border-subtle px-3 py-2 text-sm" />
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setAskingManager(false)}>Cancel</Button>
+              <Button disabled={!managerEmail || !managerPassword || !overrideReason || collect.isPending} loading={collect.isPending}
+                onClick={() => { setAskingManager(false); void confirmCollection(undefined, { managerUserId: managerEmail, managerPassword, managerOverrideReason: overrideReason }); }}>Approve and confirm</Button>
+            </div>
+          </div>
+        </div>
       )}
       <ConfirmDialog
         open={confirmingSwitch}

@@ -1,10 +1,9 @@
-
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Package } from "lucide-react";
 import { createProduct, type StockBaseUnit, type StockCategory } from "@/shared/api/pharmacyStock";
 import { getFacilities } from "@/shared/api/facilities";
@@ -58,6 +57,8 @@ type ProductValues = z.infer<typeof productSchema>;
 
 export function AddProductScreen() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const requestedFacilityId = params.get("facilityId");
   const { showToast } = useToast();
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -85,9 +86,9 @@ export function AddProductScreen() {
   // facility-default effect — only fires while the field is still empty.
   useEffect(() => {
     if (facilitiesQuery.data && facilitiesQuery.data.length > 0 && !getValues("facilityId")) {
-      setValue("facilityId", facilitiesQuery.data[0].id);
+      setValue("facilityId", facilitiesQuery.data.find(f => f.id === requestedFacilityId)?.id ?? facilitiesQuery.data[0].id);
     }
-  }, [facilitiesQuery.data, getValues, setValue]);
+  }, [facilitiesQuery.data, getValues, setValue, requestedFacilityId]);
 
   const mutation = useMutation({
     mutationFn: (values: ProductValues) =>
@@ -104,8 +105,6 @@ export function AddProductScreen() {
         manufacturer: values.manufacturer || undefined,
         batchTracked: values.batchTracked,
         expiryTracked: values.expiryTracked,
-        serialTracked: false,
-        coldChain: false,
         storageInstructions: values.storageInstructions || undefined,
         facilityId: values.facilityId,
         reorderThreshold: values.reorderThreshold ? Number(values.reorderThreshold) : undefined,
@@ -216,4 +215,3 @@ export function AddProductScreen() {
     </div>
   );
 }
-

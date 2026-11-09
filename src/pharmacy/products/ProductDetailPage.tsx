@@ -1,4 +1,3 @@
-
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Layers } from "lucide-react";
@@ -144,4 +143,3 @@ export function ProductDetailPage() {
     </div>
   );
 }
-

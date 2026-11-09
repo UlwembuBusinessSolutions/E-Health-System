@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // back, held for a few seconds so the person can see it.
 export type ConnectionStatus = "online" | "offline" | "restored";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const PROBE_TIMEOUT_MS = 5000;
 const RETRY_EVERY_MS = 5000;
 const RESTORED_SHOWN_MS = 4000;
@@ -18,7 +17,10 @@ async function serverIsReachable(): Promise<boolean> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
-    await fetch(`${API_BASE}/`, { method: "HEAD", mode: "no-cors", cache: "no-store", signal: controller.signal });
+    // In dev, use Vite's same-origin health route so a stopped API is handled
+    // as an offline state without proxy errors flooding the Vite terminal.
+    const probeUrl = import.meta.env.DEV ? "/actuator/health" : `${import.meta.env.VITE_API_BASE_URL ?? ""}/`;
+    await fetch(probeUrl, { method: import.meta.env.DEV ? "GET" : "HEAD", mode: "no-cors", cache: "no-store", signal: controller.signal });
     return true;
   } catch {
     return false;

@@ -1,5 +1,5 @@
 import type { Gender } from "./types";
-import { apiClient } from "./client";
+import { ApiError, apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
 
 // createStaff() and uploadStaffPhoto() are wired to the real backend; the
@@ -336,6 +336,20 @@ export async function getStaffDocumentDownloadUrl(staffId: string, documentId: s
     { headers: tenantAuthHeaders() },
   );
   return response.url;
+}
+
+export async function getStaffDocumentContent(staffId: string, documentId: string): Promise<Blob> {
+  const response = await fetch(`/api/v1/admin/staff/${staffId}/documents/${documentId}/content`, {
+    headers: tenantAuthHeaders(),
+  });
+  if (!response.ok) {
+    if ((response.status === 401 || response.status === 419)) {
+      window.dispatchEvent(new CustomEvent("ulwembu:session-ended", { detail: { status: response.status } }));
+    }
+    const body = await response.json().catch(() => null);
+    throw new ApiError(body?.message ?? response.statusText, response.status, body?.fieldErrors);
+  }
+  return response.blob();
 }
 
 export async function deleteStaffDocument(staffId: string, documentId: string): Promise<void> {

@@ -12,7 +12,11 @@ export const adminInputSchema = z.object({
   contactNumber: z
     .string()
     .trim()
-    .regex(/^\+?[0-9]{9,15}$/, "Enter a valid contact number, e.g. +27821234567"),
+    .regex(/^\+?[0-9 ()-]{9,24}$/, "Enter a valid contact number, e.g. +27 82 123 4567")
+    .refine((value) => {
+      const digits = value.replace(/\D/g, "");
+      return digits.length >= 9 && digits.length <= 15;
+    }, "Enter a valid contact number with 9–15 digits"),
   gender: z.string().min(1, "Select a gender"),
 });
 

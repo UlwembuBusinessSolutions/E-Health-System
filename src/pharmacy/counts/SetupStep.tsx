@@ -5,6 +5,7 @@ import { Button } from "@/shared/components/Button";
 import { Card } from "@/shared/components/Card";
 import { Switch } from "@/shared/components/Switch";
 import { useToast } from "@/shared/components/toast/ToastProvider";
+import { ErrorState } from "../components/ErrorState";
 import { describeError } from "../lib/problem";
 import { pharmacyKeys } from "../lib/queryKeys";
 import { DraftCountsList } from "./DraftCountsList";
@@ -31,13 +32,34 @@ export function SetupStep({ facilityId, onCountReady }: SetupStepProps) {
     staleTime: 60_000,
   });
 
+  const area = setup.data?.areas.find((item) => item.label === choice.areaLabel);
+  const facilityHasNoStock = setup.data !== undefined && setup.data.wholeFacilityLots === 0;
+  const noStockInScope = setup.data !== undefined && (
+    (choice.scope === "ALL" && facilityHasNoStock)
+    || (choice.scope === "AREA" && choice.areaLabel !== "" && (area?.lotCount ?? 0) === 0)
+  );
+  const noStockMessage =
+    choice.scope === "AREA"
+      ? "No stock is on hand in this area. Choose an area with stock or select a wider scope."
+      : "No stock is on hand at this facility yet. Receive stock or load its opening balance before starting a count.";
+
   const start = useMutation({
     mutationFn: () => startCount(toStartPayload(choice, facilityId, blind)),
     onSuccess: (count) => {
       void queryClient.invalidateQueries({ queryKey: pharmacyKeys.counts.list(facilityId, "DRAFT") });
       onCountReady(count.id);
     },
-    onError: (error) => showToast(describeError(error, "Couldn't start the count. Try again."), "error"),
+    onError: (error) => {
+      const message = describeError(error, "Couldn't start the count. Try again.");
+      const helpfulMessage = message.includes("No stock on hand matches this count")
+        ? choice.scope === "PRODUCT"
+          ? "No stock is on hand for this product. Choose a product with stock or select a wider scope."
+          : choice.scope === "AREA"
+            ? "No stock is on hand in this area. Choose an area with stock or select a wider scope."
+            : "No stock is on hand at this facility yet. Receive stock or load its opening balance before starting a count."
+        : message;
+      showToast(helpfulMessage, "error");
+    },
   });
 
   return (
@@ -53,6 +75,12 @@ export function SetupStep({ facilityId, onCountReady }: SetupStepProps) {
         </div>
 
         <ScopePicker choice={choice} setup={setup.data} onChange={setChoice} />
+        {setup.error && <ErrorState message={describeError(setup.error)} onRetry={() => void setup.refetch()} />}
+        {noStockInScope && (
+          <p role="status" className="rounded-xl bg-amber-50 p-4 text-[13px] text-amber-700">
+            {noStockMessage}
+          </p>
+        )}
 
         <div className="flex items-start justify-between gap-4 rounded-xl bg-surface-sunken p-4">
           <div>
@@ -69,7 +97,10 @@ export function SetupStep({ facilityId, onCountReady }: SetupStepProps) {
         </p>
 
         <div className="flex justify-end">
-          <Button size="lg" disabled={!isScopeComplete(choice)} loading={start.isPending} onClick={() => start.mutate()}>
+          <Button size="lg" disabled={setup.isLoading || Boolean(setup.error) || noStockInScope || !isScopeComplete(choice)}
+            loading={start.isPending}
+            onClick={() => start.mutate()}
+          >
             Start count
           </Button>
         </div>

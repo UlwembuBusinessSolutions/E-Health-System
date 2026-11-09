@@ -22,6 +22,7 @@ import {
   MapPin,
   Phone,
   Plus,
+  Search,
   Upload,
   User,
   Users,
@@ -360,6 +361,7 @@ export function RegisterPatientScreen() {
     register,
     handleSubmit,
     reset, // OFFLINE
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<RegisterPatientValues>({
     resolver: zodResolver(registerPatientSchema),
@@ -368,6 +370,7 @@ export function RegisterPatientScreen() {
       firstName: resend?.values.firstName ?? "",
       lastName: resend?.values.lastName ?? "",
       idNumber: resend?.values.idNumber ?? "",
+      dateOfBirth: resend?.values.dateOfBirth ?? "",
       address: resend?.values.address ?? "",
       contactNumber: resend?.values.contactNumber ?? "",
       email: resend?.values.email ?? "",
@@ -382,7 +385,10 @@ export function RegisterPatientScreen() {
   const toPayload = (v: RegisterPatientValues): RegisterPatientPayload => ({
     firstName: v.firstName,
     lastName: v.lastName,
-    idNumber: v.idNumber,
+    idNumber: v.idNumber || undefined,
+    dateOfBirth: v.dateOfBirth || undefined,
+    gender: v.gender || undefined,
+    citizenshipStatus: v.citizenshipStatus || undefined,
     address: v.address,
     contactNumber: v.contactNumber,
     email: v.email || undefined,
@@ -391,6 +397,8 @@ export function RegisterPatientScreen() {
     passportNumber: v.passportNumber || undefined,
     passportExpiry: v.passportExpiry || undefined,
   });
+  const hasSaId = Boolean(watch("idNumber").trim());
+  const hasPassport = Boolean(watch("passportNumber").trim());
 
   // OFFLINE: encrypt + store on the device. Needs the vault unlocked; asks
   // for the password if it isn't.
@@ -420,7 +428,10 @@ export function RegisterPatientScreen() {
       registerPatient({
         firstName: values.firstName,
         lastName: values.lastName,
-        idNumber: values.idNumber,
+        idNumber: values.idNumber || undefined,
+        dateOfBirth: values.dateOfBirth || undefined,
+        gender: values.gender || undefined,
+        citizenshipStatus: values.citizenshipStatus || undefined,
         address: values.address,
         contactNumber: values.contactNumber,
         email: values.email || undefined,
@@ -586,7 +597,10 @@ export function RegisterPatientScreen() {
             )}
 
             <div className="mt-2 flex w-full flex-col gap-2">
-              <Button size="lg" className="w-full" onClick={() => navigate(`/app/patients/${mutation.data.id}`)}>
+              <Button size="lg" className="w-full" onClick={() => navigate(`/app/patients/${mutation.data.id}?checkIn=true`)}>
+                Register today’s visit
+              </Button>
+              <Button variant="secondary" size="lg" className="w-full" onClick={() => navigate(`/app/patients/${mutation.data.id}`)}>
                 View patient record
               </Button>
               <Button
@@ -724,15 +738,38 @@ export function RegisterPatientScreen() {
 
             <Input
               label="SA ID number"
-              required
               icon={<CreditCard className="size-4" aria-hidden />}
               placeholder="9005155001084"
               inputMode="numeric"
               autoComplete="off"
-              hint={!errors.idNumber ? "Date of birth, gender and citizenship are derived from this." : undefined}
+              hint={!errors.idNumber ? "Optional. Date of birth and gender are derived from a valid SA ID." : undefined}
               error={errors.idNumber?.message}
               {...register("idNumber")}
             />
+
+            {!hasSaId && (
+              <div className="rounded-xl border border-brand-100 bg-brand-50/60 p-4">
+                <p className="mb-3 text-[13px] font-semibold text-brand-800">No SA ID available</p>
+                <p className="mb-4 text-[12.5px] text-text-secondary">Capture the patient’s details as provided. Citizenship can be confirmed later.</p>
+                <FormRow>
+                  <Input label="Date of birth" required type="date" error={errors.dateOfBirth?.message} {...register("dateOfBirth")} />
+                  <Select
+                    label="Gender"
+                    required
+                    options={[{ value: "FEMALE", label: "Female" }, { value: "MALE", label: "Male" }, { value: "OTHER", label: "Other" }]}
+                    error={errors.gender?.message}
+                    {...register("gender")}
+                  />
+                </FormRow>
+                <div className="mt-3">
+                  <Select
+                    label="Citizenship"
+                    options={[{ value: "UNKNOWN", label: "Not recorded" }, { value: "SA_CITIZEN", label: "South African citizen" }, { value: "PERMANENT_RESIDENT", label: "Permanent resident" }]}
+                    {...register("citizenshipStatus")}
+                  />
+                </div>
+              </div>
+            )}
 
             <FormRow>
               <Input
@@ -751,6 +788,18 @@ export function RegisterPatientScreen() {
                 {...register("passportExpiry")}
               />
             </FormRow>
+
+            {(hasSaId || hasPassport) ? (
+              <p role="status" className="-mt-3 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-sky-800">
+                <Search className="mt-0.5 size-4 shrink-0" aria-hidden />
+                Match existing patients by {hasSaId ? "SA ID" : "passport number"} before submitting to avoid duplicate registration.
+              </p>
+            ) : (
+              <p role="status" className="-mt-3 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-sky-800">
+                <Search className="mt-0.5 size-4 shrink-0" aria-hidden />
+                Search the patient roster by name and date of birth before registering, to avoid a duplicate record.
+              </p>
+            )}
 
             <Input
               label="Address"

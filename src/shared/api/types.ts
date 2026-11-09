@@ -28,4 +28,7 @@ export interface AuthenticatedUser {
   // — "ORG_ADMIN" is the one this frontend currently checks for; other role
   // names pass through unused until staff-facing screens exist.
   role: string;
+  // Keep all assigned roles for authorization checks while `role` remains
+  // the primary role used by existing role-specific screens.
+  roles?: string[];
 }

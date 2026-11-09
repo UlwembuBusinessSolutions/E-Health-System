@@ -3,10 +3,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Mail, Server, User, Info, Save } from "lucide-react";
+import { CheckCircle2, Mail, Server, User, Info, Save, Send } from "lucide-react";
 import {
   getOrganizationMailSettings,
   updateOrganizationMailSettings,
+  testOrganizationMailSettings,
 } from "@/shared/api/organization";
 import { ApiError } from "@/shared/api/client";
 import { Button } from "@/shared/components/Button";
@@ -104,6 +105,14 @@ export function EmailSettingsSection() {
     },
   });
 
+  const testMutation = useMutation({
+    mutationFn: testOrganizationMailSettings,
+    onSuccess: () => setFormError(null),
+    onError: (error) => {
+      setFormError(error instanceof ApiError ? error.message : "Test email could not be delivered. Check your SMTP settings." );
+    },
+  });
+
   const onSubmit = (values: MailSettingsValues) => {
     setFormError(null);
     setSaved(false);
@@ -148,6 +157,12 @@ export function EmailSettingsSection() {
               Email settings saved.
             </div>
           )}
+          {testMutation.isSuccess && (
+            <div role="status" className="flex items-center gap-2 rounded-lg border border-success-500/30 bg-success-50 px-3.5 py-2.5 text-[13.5px] text-success-600">
+              <CheckCircle2 className="size-4 shrink-0" aria-hidden />
+              Test email delivered. Check your organization email inbox.
+            </div>
+          )}
 
           <div className="overflow-hidden rounded-2xl border border-border-subtle bg-surface-raised shadow-card">
           <fieldset className="m-5 flex min-w-0 flex-col gap-4 sm:m-6" disabled={mutation.isPending}>
@@ -179,7 +194,7 @@ export function EmailSettingsSection() {
           <div className="border-t border-border-subtle" />
           <fieldset className="m-5 flex min-w-0 flex-col gap-4 sm:m-6" disabled={mutation.isPending}>
             <legend className="mb-2 text-[15px] font-semibold text-text-primary">Authentication</legend>
-            <p className="text-[13px] text-text-secondary">Use your mail provider's credentials or an app password.</p>
+            <p className="text-[13px] text-text-secondary">Microsoft 365 may block password-based SMTP. Enable Authenticated SMTP for this mailbox, or configure the backend with Microsoft Graph OAuth.</p>
             <FormRow>
               <Input
                 label="Username"
@@ -222,6 +237,9 @@ export function EmailSettingsSection() {
           <div className="z-10 flex flex-col gap-3 rounded-xl border border-border-subtle bg-surface-raised p-4 shadow-card sm:sticky sm:bottom-3 sm:flex-row sm:items-center sm:justify-between">
             <p role="status" className="text-[13px] text-text-secondary">{mutation.isPending ? "Saving changes…" : isDirty ? "You have unsaved changes" : saved ? "All changes saved" : "No unsaved changes"}</p>
             <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" icon={<Send className="size-4" aria-hidden />} disabled={isDirty || !configured || mutation.isPending || testMutation.isPending} loading={testMutation.isPending} onClick={() => { setFormError(null); testMutation.mutate(); }}>
+                Send test email
+              </Button>
               <Button type="button" variant="secondary" disabled={!isDirty || mutation.isPending} onClick={() => { reset(); setSaved(false); setFormError(null); }}>Discard changes</Button>
               <Button type="submit" icon={<Save className="size-4" aria-hidden />} disabled={!isDirty} loading={isSubmitting || mutation.isPending}>
                 Save changes

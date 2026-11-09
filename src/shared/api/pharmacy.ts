@@ -197,6 +197,56 @@ export interface DispenseItemPayload extends Partial<WitnessCredentials> {
   quantity?: number;
   // Defaults server-side to the first-expiring usable lot; never an expired one.
   batchId?: string;
+  managerOverrideReason?: string;
+  managerUserId?: string;
+  managerPassword?: string;
+}
+
+export interface PbpaClinicSchedule {
+  id: string;
+  userId: string;
+  staffName: string;
+  facilityId: string;
+  facilityName: string;
+  activeFrom: string;
+  activeTo: string | null;
+}
+
+export interface ManagedPbpaFacility { id: string; name: string }
+export interface SchedulablePbpa { userId: string; staffName: string; facilityIds: string[] }
+
+export async function getManagedPbpaFacilities(): Promise<ManagedPbpaFacility[]> {
+  return (await apiClient.get<{ items: ManagedPbpaFacility[] }>("/api/v1/pharmacy/pbpa-schedules/managed-facilities", {
+    headers: tenantAuthHeaders(),
+  })).items;
+}
+
+export async function getSchedulablePbpas(): Promise<SchedulablePbpa[]> {
+  return (await apiClient.get<{ items: SchedulablePbpa[] }>("/api/v1/pharmacy/pbpa-schedules/managed-staff", {
+    headers: tenantAuthHeaders(),
+  })).items;
+}
+
+export async function getManagedPbpaSchedules(): Promise<PbpaClinicSchedule[]> {
+  return (await apiClient.get<{ items: PbpaClinicSchedule[] }>("/api/v1/pharmacy/pbpa-schedules/managed", {
+    headers: tenantAuthHeaders(),
+  })).items;
+}
+
+export async function getPbpaClinicSchedules(userId: string): Promise<PbpaClinicSchedule[]> {
+  return (await apiClient.get<{ items: PbpaClinicSchedule[] }>(`/api/v1/pharmacy/pbpa-schedules?userId=${userId}`, {
+    headers: tenantAuthHeaders(),
+  })).items;
+}
+
+export async function assignPbpaClinicSchedule(payload: {
+  userId: string; facilityId: string; activeFrom: string; activeTo?: string;
+}): Promise<PbpaClinicSchedule> {
+  return apiClient.post<PbpaClinicSchedule>("/api/v1/pharmacy/pbpa-schedules", payload, { headers: tenantAuthHeaders() });
+}
+
+export async function endPbpaClinicSchedule(id: string): Promise<void> {
+  await apiClient.delete<void>(`/api/v1/pharmacy/pbpa-schedules/${id}`, { headers: tenantAuthHeaders() });
 }
 
 export interface DispenseItemResult {
@@ -366,6 +416,9 @@ export interface CollectPayload extends Partial<WitnessCredentials> {
   // From `uploadCollectionProof`.
   proofRef?: string;
   notes?: string;
+  managerOverrideReason?: string;
+  managerUserId?: string;
+  managerPassword?: string;
 }
 
 export interface HandedOverItem {

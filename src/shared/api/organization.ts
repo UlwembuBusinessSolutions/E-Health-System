@@ -143,6 +143,12 @@ export async function updateOrganizationMailSettings(
   });
 }
 
+export async function testOrganizationMailSettings(): Promise<void> {
+  return apiClient.post<void>("/api/v1/admin/organization/mail-settings/test", undefined, {
+    headers: tenantAuthHeaders(),
+  });
+}
+
 // Backs OrganizationSsoSettingsController — ORG_ADMIN-only, the "Single
 // sign-on" section of the tenant app's Settings tab. Same "bring your own
 // account, secret never round-trips" shape as the mail settings pair

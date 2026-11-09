@@ -48,7 +48,8 @@ const sections: OrganizationSettingsSection[] = [{
 export function OrganizationSettingsPage() {
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState("");
-  const selected = sections.find(section => section.id === params.get("section")) ?? sections[0];
+  const requestedSection = params.get("section")?.replace(/[.,;:!?]+$/, "");
+  const selected = sections.find(section => section.id === requestedSection) ?? sections[0];
   const [visited, setVisited] = useState<string[]>([selected.id]);
   const visible = sections.filter(section =>
     `${section.title} ${section.group} ${section.description} ${section.keywords}`.toLowerCase().includes(search.trim().toLowerCase()),

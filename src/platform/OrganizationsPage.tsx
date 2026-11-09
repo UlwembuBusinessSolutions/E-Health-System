@@ -9,6 +9,7 @@ import {
   type OrganizationStatus,
   type OrganizationSummary,
 } from "@/shared/api/platform";
+import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
 import { Input } from "@/shared/components/Input";
@@ -171,8 +172,16 @@ export function OrganizationsPage() {
           </div>
         </div>
         {!organizationsQuery.isLoading && (
-          <span className="inline-flex h-11 shrink-0 items-center rounded-lg bg-surface-sunken px-3.5 text-[13px] font-medium text-text-secondary">
-            {organizationsQuery.data?.length ?? 0} organization{organizationsQuery.data?.length === 1 ? "" : "s"}
+          <span
+            className={`inline-flex h-11 shrink-0 items-center rounded-lg px-3.5 text-[13px] font-medium ${
+              organizationsQuery.isError
+                ? "bg-danger-50 text-danger-600"
+                : "bg-surface-sunken text-text-secondary"
+            }`}
+          >
+            {organizationsQuery.isError
+              ? "Organizations unavailable"
+              : `${organizationsQuery.data?.length ?? 0} organization${organizationsQuery.data?.length === 1 ? "" : "s"}`}
           </span>
         )}
       </div>
@@ -180,6 +189,21 @@ export function OrganizationsPage() {
       <Card className="overflow-hidden p-0">
         {organizationsQuery.isLoading ? (
           <p className="px-5 py-10 text-center text-[14px] text-text-secondary">Loading organizations…</p>
+        ) : organizationsQuery.isError ? (
+          <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
+            <p role="alert" className="text-[14px] text-danger-600">
+              {organizationsQuery.error instanceof ApiError
+                ? organizationsQuery.error.message
+                : "Could not load organizations. Check your connection and try again."}
+            </p>
+            <Button
+              variant="secondary"
+              onClick={() => organizationsQuery.refetch()}
+              loading={organizationsQuery.isFetching}
+            >
+              Retry
+            </Button>
+          </div>
         ) : organizationsQuery.data?.length === 0 ? (
           <p className="px-5 py-10 text-center text-[14px] text-text-secondary">
             {hasActiveFilters ? "No organizations match your search or filter." : "No organizations yet — create the first one."}

@@ -1,6 +1,6 @@
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
-import type { QueueToken } from "./queue";
+import type { QueueToken, TokenPriority } from "./queue";
 
 // PREG-US-019 + RECQ-US-001. Matches VisitController field-for-field.
 export type VisitType = "NEW" | "FOLLOW_UP";
@@ -8,7 +8,7 @@ export type VisitType = "NEW" | "FOLLOW_UP";
 // PREG-US-019's "visit type to service stream mapping" — borrows the app's
 // own existing clinical-module names (ServiceStream.java's own why-note),
 // not an invented taxonomy.
-export type ServiceStream = "GENERAL" | "CHRONIC_CARE" | "MATERNAL_CHILD" | "OCCUPATIONAL_HEALTH";
+export type ServiceStream = "GENERAL" | "CHRONIC_CARE" | "MATERNAL_CHILD" | "OCCUPATIONAL_HEALTH" | "PHARMACY";
 
 export interface Visit {
   id: string;
@@ -16,6 +16,7 @@ export interface Visit {
   facilityId: string;
   visitType: VisitType;
   serviceStream: ServiceStream;
+  visitReason: string | null;
   visitDateTime: string;
 }
 
@@ -24,6 +25,8 @@ export interface CreateVisitPayload {
   facilityId: string;
   visitType: VisitType;
   serviceStream: ServiceStream;
+  priority: TokenPriority;
+  visitReason: string;
 }
 
 // Creates the visit and, in the same call, issues its queue token —
@@ -47,6 +50,7 @@ export interface PatientVisit {
   facilityName: string | null;
   visitType: VisitType;
   serviceStream: ServiceStream;
+  visitReason: string | null;
   visitDateTime: string;
   transferredFromVisitId: string | null;
 }
