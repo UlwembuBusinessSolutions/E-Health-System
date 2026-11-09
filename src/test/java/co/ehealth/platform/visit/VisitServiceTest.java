@@ -19,6 +19,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,5 +59,21 @@ class VisitServiceTest {
         verify(queue).issueAutomaticToken(any(Visit.class), eq(staffId));
         verify(audit).append(staffId, facilityId, "WALK_IN_QUEUE_TOKEN_ISSUED", "QueueToken",
                 token.getId().toString(), null, null);
+    }
+
+    @Test
+    void registeredVisitIsRejectedWhenPatientAlreadyHasAnUnfinishedQueueVisit() {
+        UUID patientId = UUID.randomUUID();
+        UUID facilityId = UUID.randomUUID();
+        UUID staffId = UUID.randomUUID();
+        doThrow(new IncompleteVisitQueueException()).when(queue).requireNoIncompleteQueueVisit(patientId);
+        VisitService.CreateVisitCommand command = new VisitService.CreateVisitCommand(
+                patientId, facilityId, VisitType.FOLLOW_UP, ServiceStream.GENERAL);
+
+        assertThrows(IncompleteVisitQueueException.class, () -> service.createVisit(command, staffId));
+
+        verify(patients).getForUpdate(patientId);
+        verify(visits, never()).save(any(Visit.class));
+        verify(queue, never()).issueAutomaticToken(any(Visit.class), eq(staffId));
     }
 }

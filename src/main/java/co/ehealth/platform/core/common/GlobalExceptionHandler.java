@@ -49,6 +49,7 @@ import co.ehealth.platform.pharmacy.PrescriptionItemNotFoundException;
 import co.ehealth.platform.pharmacy.PrescriptionNotFoundException;
 import co.ehealth.platform.visit.EmptyQueueException;
 import co.ehealth.platform.visit.InvalidTokenTransitionException;
+import co.ehealth.platform.visit.IncompleteVisitQueueException;
 import co.ehealth.platform.visit.InvalidQueueReasonException;
 import co.ehealth.platform.visit.InvalidTransferException;
 import co.ehealth.platform.visit.QueueTokenNotFoundException;
@@ -429,6 +430,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // "conflicts with current state" shape as EmptyQueueException above.
     @ExceptionHandler(InvalidTokenTransitionException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidTokenTransition(InvalidTokenTransitionException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(IncompleteVisitQueueException.class)
+    public ResponseEntity<ApiErrorResponse> handleIncompleteVisitQueue(IncompleteVisitQueueException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 

@@ -64,8 +64,25 @@ public class QueueService {
     @Transactional
     public QueueToken issueManualToken(UUID visitId, TokenPriority priority, UUID issuedByUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
-        Visit visit = visitRepository.findById(visitId).orElseThrow(VisitNotFoundException::new);
+        Visit visit = visitRepository.findByIdForUpdate(visitId).orElseThrow(VisitNotFoundException::new);
+        if (visit.getPatientId() != null) {
+            patientService.getForUpdate(visit.getPatientId());
+        }
+        requireNoIncompleteQueueVisit(visit.getPatientId());
+        if (queueTokenRepository.findByVisitId(visitId).stream()
+                .anyMatch(token -> token.getStatus() != TokenStatus.COMPLETED)) {
+            throw new IncompleteVisitQueueException();
+        }
         return issue(visit, priority, true, issuedByUserId);
+    }
+
+    void requireNoIncompleteQueueVisit(UUID patientId) {
+        if (patientId == null) return;
+        boolean hasIncompleteToken = visitRepository.findFirstByPatientIdOrderByVisitDateTimeDescIdDesc(patientId)
+                .map(visit -> queueTokenRepository.findByVisitId(visit.getId()).stream()
+                        .anyMatch(token -> token.getStatus() != TokenStatus.COMPLETED))
+                .orElse(false);
+        if (hasIncompleteToken) throw new IncompleteVisitQueueException();
     }
 
     private QueueToken issue(Visit visit, TokenPriority priority, boolean manual, UUID issuedByUserId) {
@@ -175,7 +192,6 @@ public class QueueService {
     @Transactional
     public void linkWalkInTokenToPatient(UUID tokenId, UUID patientId, UUID staffUserId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
-        patientService.get(patientId);
         QueueToken token = findToken(tokenId);
         Visit visit = visitRepository.findByIdForUpdate(token.getVisitId())
                 .orElseThrow(VisitNotFoundException::new);
@@ -183,6 +199,8 @@ public class QueueService {
             if (visit.getPatientId().equals(patientId)) return;
             throw new QueueTokenAlreadyLinkedException();
         }
+        patientService.getForUpdate(patientId);
+        requireNoIncompleteQueueVisit(patientId);
         visit.linkPatient(patientId);
         auditLogService.append(staffUserId, token.getFacilityId(), "WALK_IN_TOKEN_LINKED_TO_PATIENT",
                 "QueueToken", token.getId().toString(), null, null);

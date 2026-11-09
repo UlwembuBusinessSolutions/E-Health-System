@@ -60,8 +60,9 @@ public class VisitService {
     public VisitWithToken createVisit(CreateVisitCommand cmd, UUID staffUserId) {
         permissionService.requireAccessOrAnyRole(
                 ModuleCode.RECQ, PermissionLevel.MANAGE, PHARMACIST_ROLE, VISIT_START_ACCESS_MESSAGE);
-        patientService.get(cmd.patientId());
+        patientService.getForUpdate(cmd.patientId());
         facilityService.get(cmd.facilityId());
+        queueService.requireNoIncompleteQueueVisit(cmd.patientId());
 
         Visit visit = new Visit(cmd.patientId(), cmd.facilityId(), cmd.visitType(), cmd.serviceStream(),
                 clock.instant(), staffUserId);

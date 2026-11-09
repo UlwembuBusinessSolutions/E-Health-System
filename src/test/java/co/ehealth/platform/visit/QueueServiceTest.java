@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -74,5 +75,47 @@ class QueueServiceTest {
         when(tokens.findById(missingTokenId)).thenReturn(Optional.empty());
         assertThrows(QueueTokenNotFoundException.class,
                 () -> service.linkWalkInTokenToPatient(missingTokenId, UUID.randomUUID(), staffId));
+    }
+
+    @Test
+    void unfinishedLatestQueueTokenPreventsStartingAnotherVisit() {
+        UUID patientId = UUID.randomUUID();
+        Visit latestVisit = new Visit(patientId, UUID.randomUUID(), VisitType.NEW, ServiceStream.GENERAL,
+                Instant.parse("2026-11-03T08:00:00Z"), null);
+        QueueToken token = mock(QueueToken.class);
+        when(visits.findFirstByPatientIdOrderByVisitDateTimeDescIdDesc(patientId))
+                .thenReturn(Optional.of(latestVisit));
+        when(tokens.findByVisitId(latestVisit.getId())).thenReturn(List.of(token));
+        when(token.getStatus()).thenReturn(TokenStatus.MISSED);
+
+        assertThrows(IncompleteVisitQueueException.class, () -> service.requireNoIncompleteQueueVisit(patientId));
+    }
+
+    @Test
+    void completedLatestQueueTokenAllowsStartingAnotherVisit() {
+        UUID patientId = UUID.randomUUID();
+        Visit latestVisit = new Visit(patientId, UUID.randomUUID(), VisitType.NEW, ServiceStream.GENERAL,
+                Instant.parse("2026-11-03T08:00:00Z"), null);
+        QueueToken token = mock(QueueToken.class);
+        when(visits.findFirstByPatientIdOrderByVisitDateTimeDescIdDesc(patientId))
+                .thenReturn(Optional.of(latestVisit));
+        when(tokens.findByVisitId(latestVisit.getId())).thenReturn(List.of(token));
+        when(token.getStatus()).thenReturn(TokenStatus.COMPLETED);
+
+        service.requireNoIncompleteQueueVisit(patientId);
+    }
+
+    @Test
+    void manualTokenCannotDuplicateAnUnfinishedWalkInToken() {
+        UUID visitId = UUID.randomUUID();
+        Visit visit = new Visit(null, UUID.randomUUID(), VisitType.NEW, ServiceStream.GENERAL,
+                Instant.parse("2026-11-03T08:00:00Z"), null);
+        QueueToken token = mock(QueueToken.class);
+        when(visits.findByIdForUpdate(visitId)).thenReturn(Optional.of(visit));
+        when(tokens.findByVisitId(visitId)).thenReturn(List.of(token));
+        when(token.getStatus()).thenReturn(TokenStatus.ISSUED);
+
+        assertThrows(IncompleteVisitQueueException.class,
+                () -> service.issueManualToken(visitId, TokenPriority.NORMAL, UUID.randomUUID()));
     }
 }

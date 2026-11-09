@@ -1,8 +1,10 @@
 package co.ehealth.platform.patient;
 
 import co.ehealth.platform.identity.Gender;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +18,10 @@ import java.util.UUID;
 // custom delete query here either — PREG-US-017's own why-note (Patient's
 // class-level comment) on why that's enforced by omission.
 public interface PatientRepository extends JpaRepository<Patient, UUID> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Patient p WHERE p.id = :id")
+    Optional<Patient> findByIdForUpdate(@Param("id") UUID id);
 
     boolean existsByIdNumber(String idNumber);
 

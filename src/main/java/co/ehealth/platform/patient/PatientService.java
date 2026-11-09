@@ -145,6 +145,14 @@ public class PatientService {
         return patientRepository.findById(id).orElseThrow(PatientNotFoundException::new);
     }
 
+    // VisitService locks the patient row while checking for an unfinished
+    // queue visit, so simultaneous reception check-ins cannot both pass.
+    @Transactional
+    public Patient getForUpdate(UUID id) {
+        permissionService.requireAccess(ModuleCode.PREG, PermissionLevel.VIEW);
+        return patientRepository.findByIdForUpdate(id).orElseThrow(PatientNotFoundException::new);
+    }
+
     // PREG-US-016 — edit access is gated twice: SecurityConfig's own
     // /api/v1/admin/** -> hasRole("ORG_ADMIN") matcher on the controller
     // side (PatientController.update()'s own why-note), and this
