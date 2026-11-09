@@ -2,6 +2,7 @@ target/
 target-codex/
 .env
 *.local
+.local-secrets/
 data/
 .idea/
 *.iml

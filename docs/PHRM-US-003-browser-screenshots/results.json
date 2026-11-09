@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "checks": [
+    "Nurse signs in through the real frontend against the live backend",
+    "Prescribing displays ranked clinical alerts before submitting a high-risk combination",
+    "Prescribing succeeds after an explicit clinical override reason",
+    "Dispensing displays the same clinical alerts before release",
+    "Dispensing succeeds after a pharmacist override reason",
+    "Backend confirms the browser-created prescription is DISPENSED",
+    "No JavaScript page errors or failed API responses occurred during the browser flow"
+  ],
+  "screenshots": [
+    {
+      "label": "Prescribing blocks until override reason is recorded",
+      "file": "PHRM-US-003-browser-screenshots/01-prescribe-alerts.png"
+    },
+    {
+      "label": "Prescription created after clinical override",
+      "file": "PHRM-US-003-browser-screenshots/02-prescription-pending.png"
+    },
+    {
+      "label": "Dispensing blocks until pharmacist override reason is recorded",
+      "file": "PHRM-US-003-browser-screenshots/03-dispense-alerts.png"
+    },
+    {
+      "label": "Prescription dispensed after pharmacist override",
+      "file": "PHRM-US-003-browser-screenshots/04-dispensed.png"
+    }
+  ]
+}

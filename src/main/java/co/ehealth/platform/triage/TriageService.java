@@ -38,16 +38,13 @@ public class TriageService {
     // requireAnyRole()'s own why-note): RECQ:MANAGE also covers Queue
     // Marshall, Admin Staff, and Facility Manager, none of whom should be
     // able to submit a patient's vital signs just because they can call
-    // the next token. Pharmacists can capture vitals through the explicit
-    // role exception below without receiving broad RECQ management access.
+    // the next token. Matches the roles V13__rbac_matrix_fix_visit_creation.sql
+    // deliberately granted RECQ:MANAGE to for clinical front-line work.
     private static final Set<String> CLINICAL_ROLES =
-            Set.of("Professional Nurse", "Doctor", "Clinician", "Occupational Health Practitioner", "Pharmacist");
-    private static final Set<String> VITALS_ACCESS_ROLES = Set.of("Pharmacist");
+            Set.of("Professional Nurse", "Doctor", "Clinician", "Occupational Health Practitioner");
 
     private static final String NOT_CLINICAL_ROLE_MESSAGE =
-            "Only clinical staff (nurse, doctor, clinician, occupational health practitioner, or pharmacist) may do this.";
-    private static final String VITALS_ACCESS_MESSAGE =
-            "Capturing vitals requires Reception access or the Pharmacist role.";
+            "Only clinical staff (nurse, doctor, clinician, or occupational health practitioner) may do this.";
 
     private final TriageAssessmentRepository triageAssessmentRepository;
     private final VisitRepository visitRepository;
@@ -76,8 +73,7 @@ public class TriageService {
     // create two assessments for one real observation).
     @Transactional
     public TriageAssessment capture(TriageCaptureCommand cmd, UUID staffUserId) {
-        permissionService.requireAccessOrAnyRole(
-                ModuleCode.RECQ, PermissionLevel.MANAGE, VITALS_ACCESS_ROLES, VITALS_ACCESS_MESSAGE);
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
         permissionService.requireAnyRole(CLINICAL_ROLES, NOT_CLINICAL_ROLE_MESSAGE);
 
         if (!StringUtils.hasText(cmd.idempotencyKey())) {
@@ -94,17 +90,9 @@ public class TriageService {
         }
 
         Visit visit = visitRepository.findById(cmd.visitId()).orElseThrow(VisitNotFoundException::new);
-        Patient patient = visit.getPatientId() == null ? null : patientService.get(visit.getPatientId());
-        if (patient != null && patient.isArchived()) {
+        Patient patient = patientService.get(visit.getPatientId());
+        if (patient.isArchived()) {
             throw new PatientArchivedException();
-        }
-        LocalDate dateOfBirth = patient == null ? cmd.dateOfBirth() : patient.getDateOfBirth();
-        if (patient == null && dateOfBirth == null) {
-            throw new InvalidTriageCaptureException(
-                    "Date of birth is required to capture vitals for an unregistered walk-in.");
-        }
-        if (patient == null && dateOfBirth.isAfter(clock.instant().atZone(ZoneOffset.UTC).toLocalDate())) {
-            throw new InvalidTriageCaptureException("Date of birth cannot be in the future.");
         }
 
         if (cmd.emergencySign() && !StringUtils.hasText(cmd.emergencySignNote())) {
@@ -128,7 +116,7 @@ public class TriageService {
         }
 
         ScoringProfile profile = cmd.scoringProfileOverride() != null ? cmd.scoringProfileOverride()
-                : deriveScoringProfile(dateOfBirth);
+                : deriveScoringProfile(patient.getDateOfBirth());
         boolean manuallyConfirmed = cmd.scoringProfileOverride() != null;
 
         Set<TriageDiscriminator> discriminators = cmd.discriminators() == null ? Set.of() : cmd.discriminators();
@@ -306,11 +294,10 @@ public class TriageService {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
         TriageAssessment assessment = findAssessment(assessmentId);
         Visit visit = visitRepository.findById(assessment.getVisitId()).orElseThrow(VisitNotFoundException::new);
-        Patient patient = visit.getPatientId() == null ? null : patientService.get(visit.getPatientId());
+        Patient patient = patientService.get(visit.getPatientId());
         String capturedByName = resolveCapturedByNames(List.of(assessment)).get(assessment.getCapturedByUserId());
         return new VitalsAssessmentDetail(assessment, capturedByName,
-                patient == null ? "Unregistered walk-in" : patient.getFirstName() + " " + patient.getLastName(),
-                patient == null ? null : patient.getMpiNumber());
+                patient.getFirstName() + " " + patient.getLastName(), patient.getMpiNumber());
     }
 
     // observedAt is a point in time; from/to are calendar dates a clinician
@@ -458,7 +445,6 @@ public class TriageService {
                                         Integer painScore, String painScale, String presentingComplaint,
                                         Set<TriageDiscriminator> discriminators, UUID supersedesAssessmentId,
                                         Instant observedAt, String idempotencyKey, boolean confirmOutOfRange,
-                                        TriageColour clinicianConfirmedColour, String colourConfirmationReason,
-                                        AdditionalObservations additionalObservations, LocalDate dateOfBirth) {
+                                        TriageColour clinicianConfirmedColour, String colourConfirmationReason, AdditionalObservations additionalObservations) {
     }
 }

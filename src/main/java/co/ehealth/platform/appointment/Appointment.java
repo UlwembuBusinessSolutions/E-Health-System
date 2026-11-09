@@ -34,7 +34,7 @@ public class Appointment {
                 Instant startsAt, UUID patientAccountId, String serviceCode, Instant now) {
         this.id = id; this.facilityId = facilityId; this.patientId = patientId;
         this.appointmentDate = date; this.appointmentTime = time;
-        this.startsAt = startsAt; this.createdBy = null;
-        this.createdByPatientAccountId = patientAccountId; this.serviceCode = serviceCode; this.createdAt = now;
+        this.startsAt = startsAt; this.createdByPatientAccountId = patientAccountId;
+        this.serviceCode = serviceCode; this.createdAt = now;
     }
 }

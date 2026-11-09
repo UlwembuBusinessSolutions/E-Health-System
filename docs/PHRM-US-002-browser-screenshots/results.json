@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "checks": [
+    "Prescriber signs in through the real frontend against the live backend",
+    "Guideline deviation flagging appears before the pharmacist opens the query",
+    "Raising a query places the prescription in HELD state",
+    "Prescriber receives the collaboration item and responds in the browser",
+    "Pharmacist sees the returned prescription with the prescriber response visible",
+    "Backend confirms the browser query returned the prescription to PENDING",
+    "No JavaScript page errors or unexpected failed API responses occurred during the browser flow"
+  ],
+  "screenshots": [
+    {
+      "label": "Guideline deviation shown before raising query",
+      "file": "PHRM-US-002-browser-screenshots/01-guideline-warning-before-query.png"
+    },
+    {
+      "label": "Prescription held after pharmacist query",
+      "file": "PHRM-US-002-browser-screenshots/02-prescription-held.png"
+    },
+    {
+      "label": "Prescriber responds from query inbox",
+      "file": "PHRM-US-002-browser-screenshots/03-prescriber-response.png"
+    },
+    {
+      "label": "Prescription returns to queue with response visible",
+      "file": "PHRM-US-002-browser-screenshots/04-returned-to-queue-response-visible.png"
+    }
+  ]
+}

@@ -136,7 +136,7 @@ public class AppointmentService {
         var existing = appointments.findById(requestId);
         if (existing.isPresent()) {
             Appointment a = existing.get();
-            if (!a.facilityId.equals(facilityId) || !a.patientId.equals(patientId) || !Objects.equals(a.createdBy, actor)
+            if (!a.facilityId.equals(facilityId) || !a.patientId.equals(patientId) || !a.createdBy.equals(actor)
                     || !a.appointmentDate.equals(date) || !a.appointmentTime.equals(time) || !Objects.equals(a.assignedStaffId, assignedStaffId)
                     || !Objects.equals(a.notes, normalizedNotes))
                 throw new AppointmentException(409, "This booking request has already been used. Refresh and try again.");
@@ -166,7 +166,6 @@ public class AppointmentService {
             throw new AppointmentException(400, "Choose a valid appointment service.");
         }
         Facility facility = lock(facilityId);
-        requirePatientBookableFacility(facility);
         var existing = appointments.findById(requestId);
         if (existing.isPresent()) {
             Appointment a = existing.get();
@@ -199,7 +198,6 @@ public class AppointmentService {
     public List<LocalTime> patientBookingSlots(UUID facilityId, UUID assignedStaffId, LocalDate date) {
         Facility facility = facilities.findById(facilityId).filter(Facility::isActive)
                 .orElseThrow(FacilityNotFoundException::new);
-        requirePatientBookableFacility(facility);
         if (date == null || !date.isAfter(LocalDate.now(clock.withZone(ZoneId.of(facility.getTimezone()))))) {
             throw new AppointmentException(400, "Choose a future appointment date.");
         }
@@ -225,16 +223,8 @@ public class AppointmentService {
 
     @Transactional(readOnly = true)
     public List<AppointmentStaffRepository.StaffOption> patientBookingProviders(UUID facilityId) {
-        Facility facility = facilities.findById(facilityId).filter(Facility::isActive)
-                .orElseThrow(FacilityNotFoundException::new);
-        requirePatientBookableFacility(facility);
+        facilities.findById(facilityId).filter(Facility::isActive).orElseThrow(FacilityNotFoundException::new);
         return staff.findPatientBookingOptions(facilityId);
-    }
-
-    private void requirePatientBookableFacility(Facility facility) {
-        if (facility.getType() != FacilityType.CLINIC && facility.getType() != FacilityType.HOSPITAL) {
-            throw new AppointmentException(400, "Patient appointments are only available at clinics and hospitals.");
-        }
     }
 
     @Transactional(readOnly = true)

@@ -45,8 +45,7 @@ public class TriageController {
                 request.avpu(), request.mobility(), request.painScore(), request.painScale(),
                 request.presentingComplaint(), request.discriminators(), request.supersedesAssessmentId(),
                 request.observedAt(), request.idempotencyKey(), request.confirmOutOfRange(),
-                request.clinicianConfirmedColour(), request.colourConfirmationReason(), request.additionalObservations(),
-                request.dateOfBirth());
+                request.clinicianConfirmedColour(), request.colourConfirmationReason(), request.additionalObservations());
         TriageAssessment assessment = triageService.capture(cmd, staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(TriageAssessmentResponse.from(assessment));
     }
@@ -132,8 +131,7 @@ public class TriageController {
                                         Integer painScore, String painScale, String presentingComplaint,
                                         Set<TriageDiscriminator> discriminators, UUID supersedesAssessmentId,
                                         Instant observedAt, @NotBlank String idempotencyKey, boolean confirmOutOfRange,
-                                        TriageColour clinicianConfirmedColour, String colourConfirmationReason,
-                                        AdditionalObservations additionalObservations, LocalDate dateOfBirth) {
+                                        TriageColour clinicianConfirmedColour, String colourConfirmationReason, AdditionalObservations additionalObservations) {
     }
 
     public record ReasonRequest(@NotBlank String reason) {
