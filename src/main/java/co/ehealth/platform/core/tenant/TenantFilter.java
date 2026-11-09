@@ -127,6 +127,7 @@ public class TenantFilter extends OncePerRequestFilter {
         // SsoAuthController/MicrosoftSsoService resolve themselves instead.
         String uri = request.getRequestURI();
         return uri.startsWith("/actuator/health") || uri.startsWith("/platform/")
-                || uri.startsWith("/api/v1/auth/sso/") || "OPTIONS".equalsIgnoreCase(request.getMethod());
+            || uri.startsWith("/api/v1/auth/sso/")
+            || "OPTIONS".equalsIgnoreCase(request.getMethod());
     }
 }

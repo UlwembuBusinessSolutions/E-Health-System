@@ -1,15 +1,24 @@
 package co.ehealth.platform.visit;
 
 import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.core.notification.WhatsAppMessageTemplate;
+import co.ehealth.platform.core.notification.WhatsAppNotificationDispatcher;
 import co.ehealth.platform.core.tenant.ModuleCode;
+import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.facility.FacilityNotFoundException;
 import co.ehealth.platform.facility.FacilityRepository;
 import co.ehealth.platform.patient.Patient;
 import co.ehealth.platform.patient.PatientService;
+import co.ehealth.platform.patient.PatientRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.time.Clock;
@@ -23,6 +32,8 @@ import java.util.UUID;
 @Service
 public class QueueService {
 
+        private static final Logger log = LoggerFactory.getLogger(QueueService.class);
+
     private final QueueTokenRepository queueTokenRepository;
     private final QueueTokenEventRepository queueTokenEventRepository;
     private final VisitRepository visitRepository;
@@ -30,12 +41,18 @@ public class QueueService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
-    private final FacilityRepository facilityRepository;
+        private final FacilityRepository facilityRepository;
+        private final QueueApproachNotificationService approachNotificationService;
+    @Autowired
+    private PatientRepository notificationPatients;
+    @Autowired
+    private WhatsAppNotificationDispatcher whatsAppNotifications;
 
     public QueueService(QueueTokenRepository queueTokenRepository,
                          QueueTokenEventRepository queueTokenEventRepository, VisitRepository visitRepository,
                          PatientService patientService, AuditLogService auditLogService, Clock clock,
-                         PermissionService permissionService, FacilityRepository facilityRepository) {
+                         PermissionService permissionService, FacilityRepository facilityRepository,
+                         QueueApproachNotificationService approachNotificationService) {
         this.queueTokenRepository = queueTokenRepository;
         this.queueTokenEventRepository = queueTokenEventRepository;
         this.visitRepository = visitRepository;
@@ -44,6 +61,7 @@ public class QueueService {
         this.clock = clock;
         this.permissionService = permissionService;
         this.facilityRepository = facilityRepository;
+        this.approachNotificationService = approachNotificationService;
     }
 
     // RECQ-US-001's automatic path — VisitService.createVisit() calls this
@@ -89,6 +107,7 @@ public class QueueService {
                 null, null);
         recordEvent(token.getId(), eventType, null, TokenStatus.ISSUED, null, null, null, reasonNote,
                 issuedByUserId, now);
+        evaluateApproachingPatientsAfterCommit(visit.getFacilityId());
         return token;
     }
 
@@ -217,6 +236,8 @@ public class QueueService {
                 next.getId().toString(), null, null);
         recordEvent(next.getId(), QueueTokenEventType.CALLED, TokenStatus.ISSUED, TokenStatus.CALLED, null, null,
                 null, null, calledByUserId, now);
+        sendQueueCalledWhatsApp(next);
+        evaluateApproachingPatientsAfterCommit(facilityId);
         return toView(next);
     }
 
@@ -242,6 +263,7 @@ public class QueueService {
                 token.getId().toString(), null, null);
         recordEvent(token.getId(), QueueTokenEventType.PRIORITY_CHANGED, token.getStatus(), token.getStatus(),
                 previous, priority, reasonCode, reasonNote, staffUserId, now);
+        evaluateApproachingPatientsAfterCommit(token.getFacilityId());
         return toView(token);
     }
 
@@ -269,6 +291,8 @@ public class QueueService {
                 bypassedOrder ? QueueTokenEventType.CALLED_OUT_OF_ORDER : QueueTokenEventType.CALLED,
                 TokenStatus.ISSUED, TokenStatus.CALLED, null, null, bypassedOrder ? reasonCode : null,
                 bypassedOrder ? reasonNote : null, staffUserId, now);
+        sendQueueCalledWhatsApp(token);
+        evaluateApproachingPatientsAfterCommit(token.getFacilityId());
         return toView(token);
     }
 
@@ -290,6 +314,7 @@ public class QueueService {
                 token.getId().toString(), null, null);
         recordEvent(token.getId(), QueueTokenEventType.REACTIVATED, previousStatus, TokenStatus.ISSUED, null, null,
                 reasonCode, reasonNote, staffUserId, now);
+        evaluateApproachingPatientsAfterCommit(token.getFacilityId());
         return toView(token);
     }
 
@@ -309,6 +334,7 @@ public class QueueService {
                 token.getId().toString(), null, null);
         recordEvent(token.getId(), QueueTokenEventType.MISSED, TokenStatus.CALLED, TokenStatus.MISSED, null, null,
                 null, null, staffUserId, now);
+        evaluateApproachingPatientsAfterCommit(token.getFacilityId());
         return toView(token);
     }
 
@@ -325,6 +351,7 @@ public class QueueService {
                 token.getId().toString(), null, null);
         recordEvent(token.getId(), QueueTokenEventType.COMPLETED, TokenStatus.CALLED, TokenStatus.COMPLETED, null,
                 null, null, null, staffUserId, now);
+        evaluateApproachingPatientsAfterCommit(token.getFacilityId());
         return toView(token);
     }
 
@@ -348,6 +375,7 @@ public class QueueService {
                 token.getId().toString(), null, null);
         recordEvent(token.getId(), QueueTokenEventType.CANCELLED, previousStatus, TokenStatus.CANCELLED, null, null,
                 null, reason, staffUserId, now);
+        evaluateApproachingPatientsAfterCommit(token.getFacilityId());
         return toView(token);
     }
 
@@ -388,6 +416,7 @@ public class QueueService {
         visitRepository.save(destinationVisit);
         QueueToken newToken = issue(destinationVisit, token.getPriority(), true, staffUserId,
                 QueueTokenEventType.TRANSFERRED_IN, "Transferred from token #" + token.getTokenNumber());
+        evaluateApproachingPatientsAfterCommit(token.getFacilityId());
         auditLogService.append(staffUserId, destinationFacilityId, "QUEUE_TOKEN_TRANSFERRED_IN", "QueueToken",
                 newToken.getId().toString(), null, null);
 
@@ -414,6 +443,40 @@ public class QueueService {
     private QueueToken findToken(UUID tokenId) {
         return queueTokenRepository.findById(tokenId).orElseThrow(QueueTokenNotFoundException::new);
     }
+
+    private void sendQueueCalledWhatsApp(QueueToken token) {
+        if (whatsAppNotifications == null || notificationPatients == null) return;
+        Visit visit = visitRepository.findById(token.getVisitId()).orElse(null);
+        if (visit == null) return;
+        Patient patient = notificationPatients.findById(visit.getPatientId()).orElse(null);
+        var facility = facilityRepository.findById(token.getFacilityId()).orElse(null);
+        if (patient == null || facility == null) return;
+        String servicePoint = visit.getServiceStream().name().replace('_', ' ').toLowerCase();
+        whatsAppNotifications.sendPatientAfterCommit(patient, WhatsAppMessageTemplate.QUEUE_CALLED,
+                java.util.Map.of("patient_first_name", patient.getFirstName(),
+                        "queue_token", Integer.toString(token.getTokenNumber()),
+                        "facility_name", facility.getName(),
+                        "service_point", servicePoint), token.getId().toString());
+    }
+
+        private void evaluateApproachingPatientsAfterCommit(UUID facilityId) {
+                if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+                        approachNotificationService.evaluateFacility(facilityId);
+                        return;
+                }
+                String tenant = TenantContext.getCurrentTenant();
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                                try {
+                                        TenantContext.setCurrentTenant(tenant);
+                                        approachNotificationService.evaluateFacility(facilityId);
+                                } catch (RuntimeException ex) {
+                                        log.warn("Could not evaluate queue approach notifications for facility {}", facilityId, ex);
+                                }
+                        }
+                });
+        }
 
     // RECQ-US-003's ticket print/reprint — the queue page's "Print" button
     // and the "Visit started" success screen both need to fetch one

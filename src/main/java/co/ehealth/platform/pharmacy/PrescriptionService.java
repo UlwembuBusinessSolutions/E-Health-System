@@ -2,9 +2,13 @@ package co.ehealth.platform.pharmacy;
 
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.notification.EmailService;
+import co.ehealth.platform.core.notification.WhatsAppMessageTemplate;
+import co.ehealth.platform.core.notification.WhatsAppNotificationDispatcher;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
 import co.ehealth.platform.core.tenant.TenantContext;
+import co.ehealth.platform.facility.FacilityRepository;
+import co.ehealth.platform.patient.PatientRepository;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.identity.StaffService;
@@ -23,6 +27,7 @@ import co.ehealth.platform.pharmacy.dispensing.PrescriptionRollup;
 import co.ehealth.platform.visit.Visit;
 import co.ehealth.platform.visit.VisitService;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -55,6 +60,12 @@ public class PrescriptionService {
     private final ItemLock itemLock;
     private final PrescriptionPurchaseItemRepository purchaseItemRepository;
     private final PrescribingStockService prescribingStock;
+    @Autowired
+    private PatientRepository notificationPatients;
+    @Autowired
+    private FacilityRepository notificationFacilities;
+    @Autowired
+    private WhatsAppNotificationDispatcher whatsAppNotifications;
 
     public PrescriptionService(PrescriptionRepository prescriptionRepository,
                                 PrescriptionItemRepository prescriptionItemRepository,
@@ -247,6 +258,7 @@ public class PrescriptionService {
         item.markOutOfStock();
         prescriptionItemRepository.save(item);
         Optional<PrescriptionOutOfStockRecord> existing = outOfStockRecordRepository.findByPrescriptionItemId(itemId);
+        boolean firstOutOfStockNotice = existing.isEmpty();
         if (existing.isPresent()) {
             existing.get().update(staffId, clock.instant(), note);
             outOfStockRecordRepository.save(existing.get());
@@ -254,6 +266,18 @@ public class PrescriptionService {
             outOfStockRecordRepository.save(new PrescriptionOutOfStockRecord(itemId, staffId, clock.instant(), note));
         }
         prescriptionRollup.refresh(prescription);
+
+        if (firstOutOfStockNotice && notificationPatients != null && notificationFacilities != null
+                && whatsAppNotifications != null) {
+            notificationPatients.findById(prescription.getPatientId()).ifPresent(patient ->
+                    notificationFacilities.findById(prescription.getFacilityId()).ifPresent(facility ->
+                            whatsAppNotifications.sendPatientAfterCommit(patient,
+                                    WhatsAppMessageTemplate.MEDICATION_DELAYED,
+                                    Map.of("patient_first_name", patient.getFirstName(),
+                                            "collection_location", facility.getName(),
+                                            "collection_reference", prescription.getSerialNumber()),
+                                    prescription.getSerialNumber())));
+        }
 
         auditLogService.append(staffId, prescription.getFacilityId(), "PRESCRIPTION_ITEM_MARKED_OUT_OF_STOCK",
                 "PrescriptionItem", itemId.toString(), null, null);

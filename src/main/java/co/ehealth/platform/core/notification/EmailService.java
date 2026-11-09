@@ -194,7 +194,7 @@ public class EmailService {
     }
 
     // Fired once per PasswordResetService.requestReset() call — the piece
-    // that TODO used to flag as missing (this class only knew how to send
+    // that was previously missing (this class only knew how to send
     // account-created emails before): the code was being generated and
     // hashed into password_reset_tokens with nowhere for the real value to
     // go, making the whole flow undeliverable even once the frontend called

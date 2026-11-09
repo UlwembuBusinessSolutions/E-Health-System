@@ -4,6 +4,8 @@ import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
+import co.ehealth.platform.core.notification.WhatsAppMessageTemplate;
+import co.ehealth.platform.core.notification.WhatsAppNotificationDispatcher;
 import co.ehealth.platform.core.tenant.TenantContext;
 import co.ehealth.platform.identity.DuplicateFieldException;
 import co.ehealth.platform.identity.Gender;
@@ -14,6 +16,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -24,6 +27,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -33,6 +37,8 @@ public class PatientService {
     private final PatientFieldHistoryRepository fieldHistoryRepository;
     private final AuditLogService auditLogService;
     private final Clock clock;
+    @Autowired
+    private WhatsAppNotificationDispatcher whatsAppNotifications;
     private final PermissionService permissionService;
     // Cross-tenant patient migration's MPI-collision fix — register() reads
     // the current tenant's own tenantCode to prefix a brand-new MPI with.
@@ -126,7 +132,17 @@ public class PatientService {
                 parsed.gender(), parsed.citizenshipStatus(), cmd.idNumber(), cmd.address(), cmd.contactNumber(),
                 cmd.email(), cmd.medicalAidProvider(), cmd.medicalAidNumber(), cmd.passportNumber(),
                 cmd.passportExpiry(), registeredByUserId, clock.instant());
+        if (cmd.whatsappOptIn()) {
+            patient.setWhatsAppOptIn(true, clock.instant());
+        }
         patientRepository.save(patient);
+
+        if (whatsAppNotifications != null && patient.isWhatsAppOptedIn()) {
+            whatsAppNotifications.sendPatientAfterCommit(patient, WhatsAppMessageTemplate.PATIENT_WELCOME,
+                    Map.of("patient_first_name", patient.getFirstName(),
+                            "clinic_name", organization.getDisplayName(),
+                            "patient_reference", patient.getMpiNumber()), patient.getId().toString());
+        }
 
         auditLogService.append(registeredByUserId, null, "PATIENT_REGISTERED", "Patient",
                 patient.getId().toString(), null, null);
@@ -198,6 +214,29 @@ public class PatientService {
         auditLogService.append(updatedByUserId, null, "PATIENT_UPDATED", "Patient", patient.getId().toString(),
                 null, null);
 
+        return patient;
+    }
+
+    @Transactional
+    public Patient updateWhatsAppConsent(UUID patientId, boolean optedIn, String reason, UUID updatedByUserId) {
+        permissionService.requireAccess(ModuleCode.PREG, PermissionLevel.MANAGE);
+        Patient patient = patientRepository.findById(patientId).orElseThrow(PatientNotFoundException::new);
+        if (patient.isArchived()) {
+            throw new PatientArchivedException();
+        }
+        if (patient.isWhatsAppOptedIn() == optedIn) {
+            return patient;
+        }
+
+        Instant changedAt = clock.instant();
+        List<PatientFieldHistory> changes = new ArrayList<>();
+        diff(changes, patientId, "whatsappOptIn", Boolean.toString(patient.isWhatsAppOptedIn()),
+                Boolean.toString(optedIn), reason, updatedByUserId);
+        patient.setWhatsAppOptIn(optedIn, changedAt);
+        patientRepository.save(patient);
+        fieldHistoryRepository.saveAll(changes);
+        auditLogService.append(updatedByUserId, null, "PATIENT_WHATSAPP_CONSENT_UPDATED", "Patient",
+                patient.getId().toString(), null, null);
         return patient;
     }
 
@@ -379,7 +418,13 @@ public class PatientService {
 
     public record RegisterPatientCommand(String firstName, String lastName, String idNumber, String address,
             String contactNumber, String email, String medicalAidProvider,
-            String medicalAidNumber, String passportNumber, LocalDate passportExpiry) {
+            String medicalAidNumber, String passportNumber, LocalDate passportExpiry, boolean whatsappOptIn) {
+        public RegisterPatientCommand(String firstName, String lastName, String idNumber, String address,
+                String contactNumber, String email, String medicalAidProvider, String medicalAidNumber,
+                String passportNumber, LocalDate passportExpiry) {
+            this(firstName, lastName, idNumber, address, contactNumber, email, medicalAidProvider,
+                    medicalAidNumber, passportNumber, passportExpiry, false);
+        }
     }
 
     // No idNumber/dateOfBirth/gender/citizenshipStatus/mpiNumber here at

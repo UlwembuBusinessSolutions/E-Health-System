@@ -2,6 +2,12 @@ package co.ehealth.platform.pharmacy.dispensing;
 
 import co.ehealth.platform.core.audit.AuditDetails;
 import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.core.notification.WhatsAppMessageTemplate;
+import co.ehealth.platform.core.notification.WhatsAppNotificationDispatcher;
+import co.ehealth.platform.facility.Facility;
+import co.ehealth.platform.facility.FacilityRepository;
+import co.ehealth.platform.patient.Patient;
+import co.ehealth.platform.patient.PatientRepository;
 import co.ehealth.platform.pharmacy.Prescription;
 import co.ehealth.platform.pharmacy.PrescriptionItem;
 import co.ehealth.platform.pharmacy.PrescriptionItemNotFoundException;
@@ -10,9 +16,12 @@ import co.ehealth.platform.pharmacy.PrescriptionStatus;
 import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService.DispenseOutcome;
 import co.ehealth.platform.pharmacy.dispensing.DispenseAllocationService.DispenseRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -42,6 +51,12 @@ public class PrescriptionCollectionService {
     private final PrescriptionRollup rollup;
     private final AuditLogService auditLogService;
     private final Clock clock;
+    @Autowired
+    private PatientRepository patients;
+    @Autowired
+    private FacilityRepository facilities;
+    @Autowired
+    private WhatsAppNotificationDispatcher whatsAppNotifications;
 
     public PrescriptionCollectionService(DispensingGuard guard, PrescriptionItemRepository itemRepository,
                                           DispenseAllocationService allocationService,
@@ -93,14 +108,40 @@ public class PrescriptionCollectionService {
 
         List<HandedOverItem> handedOver = handOver.stream()
                 .map(item -> dispenseInFull(prescription, item, actor, command.witness())).toList();
+        var collectedAt = clock.instant();
         UUID collectionId = collectionRepository.save(
-                new PrescriptionCollection(prescriptionId, command, actor.userId(), clock.instant())).getId();
+                new PrescriptionCollection(prescriptionId, command, actor.userId(), collectedAt)).getId();
         rollup.refresh(prescription);
+        sendCollectedNotice(prescription, collectedAt);
         auditLogService.append(actor.userId(), prescription.getFacilityId(), "PRESCRIPTION_COLLECTED",
                 "Prescription", prescriptionId.toString(), null,
                 AuditDetails.of("handedOver", handedOver.size(), "skipped", skipped.size(),
                         "byPatient", command.collectedByPatient()));
         return new CollectOutcome(collectionId, handedOver, skipped);
+    }
+
+    private void sendCollectedNotice(Prescription prescription, java.time.Instant collectedAt) {
+        if (patients == null || facilities == null || whatsAppNotifications == null) return;
+        Patient patient = patients.findById(prescription.getPatientId()).orElse(null);
+        Facility facility = facilities.findById(prescription.getFacilityId()).orElse(null);
+        if (patient == null || facility == null) return;
+        ZoneId zone = ZoneId.of(facility.getTimezone());
+        var local = collectedAt.atZone(zone);
+        String location = facility.getName();
+        if (facility.getAddress() != null && !facility.getAddress().isBlank()) {
+            location += ", " + facility.getAddress();
+        }
+        whatsAppNotifications.sendPatientAfterCommit(patient, WhatsAppMessageTemplate.MEDICATION_COLLECTED,
+                java.util.Map.of("patient_first_name", patient.getFirstName(),
+                        "collection_location", location,
+                        "collection_reference", prescription.getSerialNumber(),
+                        "collection_date", local.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy")),
+                        "collection_time", local.format(DateTimeFormatter.ofPattern("HH:mm")) + " " + facility.getTimezone()),
+                collectionIdReference(prescription));
+    }
+
+    private String collectionIdReference(Prescription prescription) {
+        return prescription.getSerialNumber();
     }
 
     // Naming items hands over exactly those (including an out-of-stock item

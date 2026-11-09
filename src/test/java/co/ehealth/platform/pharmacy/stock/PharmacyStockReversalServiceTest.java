@@ -44,14 +44,13 @@ class PharmacyStockReversalServiceTest {
     private final AuditLogService auditLogService = mock(AuditLogService.class);
 
     private StockReversalService service;
-    private PharmacyStockTransaction original;
 
     @BeforeEach
     void setUp() {
         service = new StockReversalService(transactionRepository, entryRepository, accountRepository,
                 productRepository, batchRepository, ledgerService, serialGateway, auditLogService,
                 new StockJson(new ObjectMapper().findAndRegisterModules()));
-        original = originalTransaction(StockTransactionType.RECEIPT);
+        originalTransaction(StockTransactionType.RECEIPT);
         when(transactionRepository.existsByReversalOfTransactionId(originalId)).thenReturn(false);
     }
 
@@ -133,7 +132,7 @@ class PharmacyStockReversalServiceTest {
 
     @Test
     void reversingAWriteOffPutsStockBackWithoutAnyUsedCheck() {
-        original = originalTransaction(StockTransactionType.WRITE_OFF);
+        originalTransaction(StockTransactionType.WRITE_OFF);
         lotReceived(-4, 0, true);
         PharmacyStockTransaction reversal = mock(PharmacyStockTransaction.class);
         when(reversal.getId()).thenReturn(UUID.randomUUID());
@@ -159,7 +158,7 @@ class PharmacyStockReversalServiceTest {
 
     @Test
     void dispensesAndReversalsCannotBeReversedHere() {
-        original = originalTransaction(StockTransactionType.DISPENSE);
+        originalTransaction(StockTransactionType.DISPENSE);
 
         assertThrows(InvalidStockRequestException.class,
                 () -> service.reverse(originalId, ReversalReason.WRONG_ENTRY, null, actor));

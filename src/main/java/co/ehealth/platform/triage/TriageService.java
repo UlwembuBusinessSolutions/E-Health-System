@@ -33,18 +33,13 @@ import java.util.stream.Collectors;
 @Service
 public class TriageService {
 
-    // Who may capture/correct/override clinical observations — a
-    // deliberately narrower gate than RECQ:MANAGE alone (PermissionService.
-    // requireAnyRole()'s own why-note): RECQ:MANAGE also covers Queue
-    // Marshall, Admin Staff, and Facility Manager, none of whom should be
-    // able to submit a patient's vital signs just because they can call
-    // the next token. Matches the roles V13__rbac_matrix_fix_visit_creation.sql
-    // deliberately granted RECQ:MANAGE to for clinical front-line work.
-    private static final Set<String> CLINICAL_ROLES =
-            Set.of("Professional Nurse", "Doctor", "Clinician", "Occupational Health Practitioner");
+        // Who may capture/correct/override vital signs — RECQ:MANAGE also
+        // covers operational staff, so require the specific doctor/nurse roles.
+        private static final Set<String> VITALS_ACCESS_ROLES =
+            Set.of("Professional Nurse", "Doctor");
 
     private static final String NOT_CLINICAL_ROLE_MESSAGE =
-            "Only clinical staff (nurse, doctor, clinician, or occupational health practitioner) may do this.";
+            "Only doctors and professional nurses may access or manage vital signs.";
 
     private final TriageAssessmentRepository triageAssessmentRepository;
     private final VisitRepository visitRepository;
@@ -66,6 +61,11 @@ public class TriageService {
         this.clock = clock;
     }
 
+    private void requireVitalsAccess(PermissionLevel permissionLevel) {
+        permissionService.requireAccess(ModuleCode.RECQ, permissionLevel);
+        permissionService.requireAnyRole(VITALS_ACCESS_ROLES, NOT_CLINICAL_ROLE_MESSAGE);
+    }
+
     // RECQ-US-008/009/010 — capture one triage/vitals assessment.
     // Idempotent: a request carrying a key already used for this visit
     // returns the existing row instead of inserting a duplicate (a
@@ -73,8 +73,7 @@ public class TriageService {
     // create two assessments for one real observation).
     @Transactional
     public TriageAssessment capture(TriageCaptureCommand cmd, UUID staffUserId) {
-        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
-        permissionService.requireAnyRole(CLINICAL_ROLES, NOT_CLINICAL_ROLE_MESSAGE);
+        requireVitalsAccess(PermissionLevel.MANAGE);
 
         if (!StringUtils.hasText(cmd.idempotencyKey())) {
             throw new InvalidTriageCaptureException("An idempotency key is required for vitals capture.");
@@ -182,8 +181,7 @@ public class TriageService {
     // gap, not an oversight — see Docs/vitals-triage-plan.md §6).
     @Transactional
     public TriageAssessment override(UUID assessmentId, TriageColour finalColour, String reason, UUID staffUserId) {
-        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
-        permissionService.requireAnyRole(CLINICAL_ROLES, NOT_CLINICAL_ROLE_MESSAGE);
+        requireVitalsAccess(PermissionLevel.MANAGE);
         if (!StringUtils.hasText(reason)) {
             throw new InvalidTriageCaptureException("A reason is required to override the calculated colour.");
         }
@@ -204,8 +202,7 @@ public class TriageService {
     // corrects by replacing. Still never deletes the row.
     @Transactional
     public TriageAssessment markEnteredInError(UUID assessmentId, String reason, UUID staffUserId) {
-        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
-        permissionService.requireAnyRole(CLINICAL_ROLES, NOT_CLINICAL_ROLE_MESSAGE);
+        requireVitalsAccess(PermissionLevel.MANAGE);
         if (!StringUtils.hasText(reason)) {
             throw new InvalidTriageCaptureException("A reason is required.");
         }
@@ -221,16 +218,14 @@ public class TriageService {
         return assessment;
     }
 
-    // Full history, oldest first — read access only needs RECQ:VIEW
-    // (Pharmacist, Social Worker, Compliance Officer, and other read-only
-    // roles can see triage results without being able to capture them).
+    // Full history, oldest first.
     public List<TriageAssessment> getHistory(UUID visitId) {
-        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        requireVitalsAccess(PermissionLevel.VIEW);
         return triageAssessmentRepository.findByVisitIdOrderByObservedAtAsc(visitId);
     }
 
     public Optional<TriageAssessment> getLatestActive(UUID visitId) {
-        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        requireVitalsAccess(PermissionLevel.VIEW);
         List<TriageAssessment> active = triageAssessmentRepository.findActiveOrderByObservedAtDesc(visitId);
         return active.isEmpty() ? Optional.empty() : Optional.of(active.get(0));
     }
@@ -254,7 +249,7 @@ public class TriageService {
     // near-duplicate repository query for the reverse order.
     public PatientVitalsHistoryPage getPatientVitalsHistory(UUID patientId, LocalDate from, LocalDate to,
                                                              boolean ascending, int page, int pageSize) {
-        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        requireVitalsAccess(PermissionLevel.VIEW);
         List<UUID> visitIds = visitRepository.findByPatientId(patientId).stream().map(Visit::getId).toList();
         List<TriageAssessment> assessments = visitIds.isEmpty() ? List.of()
                 : triageAssessmentRepository.findByVisitIdInOrderByObservedAtDesc(visitIds);
@@ -291,7 +286,7 @@ public class TriageService {
     // caller already knows, so resolving it again per row would just be a
     // repeated lookup of the same patient for no reason.
     public VitalsAssessmentDetail getAssessment(UUID assessmentId) {
-        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        requireVitalsAccess(PermissionLevel.VIEW);
         TriageAssessment assessment = findAssessment(assessmentId);
         Visit visit = visitRepository.findById(assessment.getVisitId()).orElseThrow(VisitNotFoundException::new);
         Patient patient = patientService.get(visit.getPatientId());

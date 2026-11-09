@@ -21,6 +21,7 @@ public class Appointment {
     @Column(name = "created_at", nullable = false) Instant createdAt;
     @Column(name = "cancel_reason") String cancelReason;
     @Column(name = "notes") String notes;
+    @Column(name = "whatsapp_reminder_attempted_at") Instant whatsappReminderAttemptedAt;
     @Version long version;
     protected Appointment() {}
     Appointment(UUID id, UUID facilityId, UUID patientId, LocalDate date, LocalTime time,
@@ -37,4 +38,5 @@ public class Appointment {
         this.startsAt = startsAt; this.createdByPatientAccountId = patientAccountId;
         this.serviceCode = serviceCode; this.createdAt = now;
     }
+    void clearWhatsAppReminderAttempt() { this.whatsappReminderAttemptedAt = null; }
 }

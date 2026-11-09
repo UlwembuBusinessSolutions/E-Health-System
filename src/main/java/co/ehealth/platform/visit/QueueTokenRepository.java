@@ -1,8 +1,10 @@
 package co.ehealth.platform.visit;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
 
 import java.time.Instant;
 import java.util.List;
@@ -83,4 +85,17 @@ public interface QueueTokenRepository extends JpaRepository<QueueToken, UUID> {
     // same row rather than issuing a new one); ordering by issuedAt desc is
     // just a safety margin for the rare case of more than one.
     Optional<QueueToken> findFirstByVisitIdOrderByIssuedAtDesc(UUID visitId);
+
+        @Query(value = "SELECT AVG(EXTRACT(EPOCH FROM (completed_at - called_at)) / 60.0) "
+                        + "FROM queue_tokens WHERE facility_id = :facilityId AND completed_at IS NOT NULL "
+                        + "AND called_at IS NOT NULL AND completed_at > called_at", nativeQuery = true)
+        Double findAverageCompletedServiceMinutes(@Param("facilityId") UUID facilityId);
+
+            @Lock(LockModeType.PESSIMISTIC_WRITE)
+            @Query("SELECT qt FROM QueueToken qt WHERE qt.facilityId = :facilityId AND qt.status IN ('ISSUED', 'CALLED') "
+                    + "AND qt.issuedAt >= :startOfDay AND qt.issuedAt < :endOfDay "
+                    + "ORDER BY CASE qt.status WHEN 'CALLED' THEN 0 ELSE 1 END, "
+                    + "CASE WHEN qt.priority = 'PRIORITY' THEN 0 ELSE 1 END, qt.issuedAt ASC")
+            List<QueueToken> lockQueueForApproachEvaluation(@Param("facilityId") UUID facilityId,
+                    @Param("startOfDay") Instant startOfDay, @Param("endOfDay") Instant endOfDay);
 }

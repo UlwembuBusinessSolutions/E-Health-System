@@ -135,6 +135,12 @@ public class Patient {
     @Column(name = "captured_offline_at")
     private Instant capturedOfflineAt;
 
+    @Column(name = "whatsapp_opt_in", nullable = false)
+    private boolean whatsappOptIn;
+
+    @Column(name = "whatsapp_opted_in_at")
+    private Instant whatsappOptedInAt;
+
     protected Patient() {
     }
 
@@ -198,6 +204,21 @@ public class Patient {
 
     public String getContactNumber() {
         return contactNumber;
+    }
+
+    public boolean isWhatsAppOptedIn() {
+        return whatsappOptIn;
+    }
+
+    public Instant getWhatsAppOptedInAt() {
+        return whatsappOptedInAt;
+    }
+
+    void setWhatsAppOptIn(boolean optedIn, Instant changedAt) {
+        this.whatsappOptIn = optedIn;
+        if (optedIn) {
+            this.whatsappOptedInAt = changedAt;
+        }
     }
 
     public String getEmail() {

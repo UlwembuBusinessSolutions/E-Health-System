@@ -71,6 +71,12 @@ public class QueueToken {
     @Column(name = "cancelled_by_user_id")
     private UUID cancelledByUserId;
 
+    @Column(name = "approach_sms_sent_at")
+    private Instant approachSmsSentAt;
+
+    @Column(name = "approach_whatsapp_sent_at")
+    private Instant approachWhatsAppSentAt;
+
     @Column(name = "issued_by_user_id")
     private UUID issuedByUserId;
 
@@ -224,5 +230,25 @@ public class QueueToken {
 
     public UUID getIssuedByUserId() {
         return issuedByUserId;
+    }
+
+    public Instant getApproachSmsSentAt() {
+        return approachSmsSentAt;
+    }
+
+    public void markApproachSmsSent(Instant at) {
+        this.approachSmsSentAt = at;
+    }
+
+    public Instant getApproachWhatsAppSentAt() {
+        return approachWhatsAppSentAt;
+    }
+
+    public void markApproachWhatsAppSent(Instant at) {
+        this.approachWhatsAppSentAt = at;
+    }
+
+    public void clearApproachWhatsAppSent() {
+        this.approachWhatsAppSentAt = null;
     }
 }

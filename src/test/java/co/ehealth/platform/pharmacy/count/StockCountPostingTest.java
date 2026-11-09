@@ -66,7 +66,7 @@ class StockCountPostingTest {
 
     private ArgumentCaptor<List<PharmacyStockLedgerService.EntryRequest>> postedEntries(StockTransactionType type,
                                                                                          int times) {
-        ArgumentCaptor<List<PharmacyStockLedgerService.EntryRequest>> entries = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<PharmacyStockLedgerService.EntryRequest>> entries = ArgumentCaptor.captor();
         verify(ledger, times(times)).postEntries(eq(type), eq(count.getFacilityId()), eq(actorId), anyString(),
                 anyString(), eq("CNT-000012"), anyString(), anyString(), entries.capture());
         return entries;

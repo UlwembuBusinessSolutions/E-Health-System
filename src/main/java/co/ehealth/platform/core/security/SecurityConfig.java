@@ -58,7 +58,8 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/password-reset/**",
-                        "/api/v1/auth/sso/**", "/api/v1/public/**", "/actuator/health").permitAll()
+                    "/api/v1/auth/sso/**", "/api/v1/public/**",
+                    "/actuator/health").permitAll()
                 // Getting a token in the first place can't require one.
                 .requestMatchers("/platform/auth/login").permitAll()
                 // Same reasoning, patient portal's own two pre-auth
@@ -106,7 +107,7 @@ public class SecurityConfig {
         // genuinely RESTful "edit this resource" endpoint in the app;
         // without it here, a real browser's preflight for that call would
         // reject PATCH before the request ever reached the filter chain.
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         // X-Platform-Key listed alongside the tenant headers — a header not
         // listed here gets stripped by the browser's CORS preflight before
         // it ever reaches PlatformJwtAuthenticationFilter, which would look

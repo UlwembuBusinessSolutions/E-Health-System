@@ -2,6 +2,8 @@ package co.ehealth.platform.patient;
 
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.notification.EmailService;
+import co.ehealth.platform.core.notification.WhatsAppMessageTemplate;
+import co.ehealth.platform.core.notification.WhatsAppNotificationDispatcher;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
@@ -12,6 +14,7 @@ import co.ehealth.platform.facility.FacilityService;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -48,6 +51,8 @@ public class PatientMigrationService {
     private final EmailService emailService;
     private final PermissionService permissionService;
     private final Clock clock;
+    @Autowired
+    private WhatsAppNotificationDispatcher whatsAppNotifications;
 
     public PatientMigrationService(PatientRepository patientRepository,
                                     PatientDocumentRepository patientDocumentRepository,
@@ -187,6 +192,16 @@ public class PatientMigrationService {
             emailService.sendPatientMigratedEmail(fresh.getEmail(), fresh.getFirstName(),
                     destinationOrganization.getDisplayName(), result.destinationFacilityName(),
                     result.destinationMpiNumber());
+        }
+
+        if (whatsAppNotifications != null) {
+            String address = result.destinationFacilityAddress() == null || result.destinationFacilityAddress().isBlank()
+                    ? result.destinationFacilityName() : result.destinationFacilityAddress();
+            whatsAppNotifications.sendPatientAfterCommit(fresh, WhatsAppMessageTemplate.PATIENT_TRANSFER,
+                    java.util.Map.of("patient_first_name", fresh.getFirstName(),
+                            "destination_clinic", result.destinationFacilityName(),
+                            "destination_address", address,
+                            "patient_reference", result.destinationMpiNumber()), fresh.getId().toString());
         }
 
         return new MigrationResult(result.destinationPatientId(), result.destinationMpiNumber());

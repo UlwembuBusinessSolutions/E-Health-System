@@ -1,5 +1,7 @@
 package co.ehealth.platform.patient;
 
+import co.ehealth.platform.core.notification.WhatsAppMessageTemplate;
+import co.ehealth.platform.core.notification.WhatsAppNotificationDispatcher;
 import co.ehealth.platform.core.security.PatientJwtService;
 import co.ehealth.platform.core.security.PatientPrincipal;
 import jakarta.validation.Valid;
@@ -7,6 +9,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Email;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +20,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
 
 // The patient portal has its own authentication surface, including the public registration and email confirmation steps.
 @RestController
@@ -24,6 +32,10 @@ public class PatientAuthController {
 
     private final PatientAuthService patientAuthService;
     private final PatientAccountRepository patientAccountRepository;
+    @Autowired
+    private PatientRepository patientRepository;
+    @Autowired
+    private WhatsAppNotificationDispatcher whatsAppNotifications;
 
     public PatientAuthController(PatientAuthService patientAuthService,
                                   PatientAccountRepository patientAccountRepository) {
@@ -49,9 +61,21 @@ public class PatientAuthController {
     }
 
     @PostMapping("/auth/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         PatientJwtService.IssuedToken issued = patientAuthService.login(request.identifier(), request.password());
         PatientAccount account = patientAuthService.accountForLogin(request.identifier());
+        if (patientRepository != null && whatsAppNotifications != null && account.getPatientId() != null) {
+            patientRepository.findById(account.getPatientId()).ifPresent(patient -> {
+                String userAgent = httpRequest.getHeader("User-Agent");
+                String rawDevice = userAgent == null || userAgent.isBlank() ? "Patient portal" : userAgent;
+                String device = rawDevice.length() > 180 ? rawDevice.substring(0, 180) : rawDevice;
+                String signInTime = ZonedDateTime.now(ZoneId.of("Africa/Johannesburg"))
+                        .format(DateTimeFormatter.ofPattern("d MMMM yyyy 'at' HH:mm 'SAST'"));
+                whatsAppNotifications.sendPatientAfterCommit(patient, WhatsAppMessageTemplate.NEW_SIGN_IN,
+                        Map.of("clinic_name", "Ulwembu patient portal", "sign_in_time", signInTime,
+                                "device_description", device), account.getId().toString());
+            });
+        }
         return ResponseEntity.ok(new AuthResponse(issued.token(), issued.expiresAt().toString(), toSummary(account)));
     }
 

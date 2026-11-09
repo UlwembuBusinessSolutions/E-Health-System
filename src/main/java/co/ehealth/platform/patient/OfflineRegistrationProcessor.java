@@ -83,7 +83,7 @@ public class OfflineRegistrationProcessor {
         Patient patient = patientService.registerOffline(
                 new PatientService.RegisterPatientCommand(d.firstName(), d.lastName(), d.idNumber(), d.address(),
                         d.contactNumber(), d.email(), d.medicalAidProvider(), d.medicalAidNumber(),
-                        d.passportNumber(), d.passportExpiry()),
+                    d.passportNumber(), d.passportExpiry(), d.whatsappOptIn()),
                 userId, capturedAt);
         record.markSynced(patient.getId());
         syncRepo.save(record);

@@ -30,4 +30,5 @@ public class StorageConfig {
     public S3Presigner s3Presigner(@Value("${app.storage.region}") String region) {
         return S3Presigner.builder().region(Region.of(region)).build();
     }
+
 }
