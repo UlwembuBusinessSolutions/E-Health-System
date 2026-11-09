@@ -4,6 +4,7 @@ import co.ehealth.platform.consultation.ConsultationNotFoundException;
 import co.ehealth.platform.consultation.InvalidConsultationException;
 import co.ehealth.platform.consultation.InvalidConsultationStateException;
 import co.ehealth.platform.core.security.InvalidTokenException;
+import co.ehealth.platform.core.notification.EmailDeliveryFailedException;
 import co.ehealth.platform.identity.InvalidRolePermissionChangeException;
 import co.ehealth.platform.identity.RoleNotFoundException;
 import co.ehealth.platform.identity.mfa.InvalidMfaCodeException;
@@ -194,6 +195,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleInvalidPatientVerificationCode(
             InvalidPatientVerificationCodeException ex) {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(EmailDeliveryFailedException.class)
+    public ResponseEntity<ApiErrorResponse> handleEmailDeliveryFailed(EmailDeliveryFailedException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(PatientIdentityMismatchException.class)
