@@ -38,6 +38,7 @@ import { PatientConsultationList } from "./PatientConsultationList";
 import { ContinuedFromNote, ContinueConsultation } from "./ContinueConsultation";
 import { DiagnosisSearchInput, type DiagnosisChoice } from "./DiagnosisSearchInput";
 import { PrescriptionWorkspace } from "@/prescribing/PrescriptionWorkspace";
+import { RegisteredAllergiesProvider, usePrescribingAllergies } from "@/allergies/RegisteredAllergies";
 import {
   EMPTY_PRESCRIPTION,
   parse as parsePrescription,
@@ -105,8 +106,8 @@ export function PatientConsultationTab({
   const [openedVisit, setOpenedVisit] = useState<{ visitId: string; label: string } | null>(null);
   const shownVisitId = openedVisit?.visitId ?? visitId;
 
-  return (
-    <>
+    return (
+    <RegisteredAllergiesProvider patientId={patientId}>
       {openedVisit && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-500/30 bg-brand-50 px-3.5 py-2.5">
           <p className="text-[13.5px] text-text-primary">
@@ -138,7 +139,7 @@ export function PatientConsultationTab({
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
       />
-    </>
+    </RegisteredAllergiesProvider>
   );
 }
 
@@ -692,8 +693,10 @@ function DraftView({
   onChanged: () => void;
 }) {
   const navigate = useNavigate();
-  const [fields, setFields] = useState<ConsultationFieldsState>(() => toFieldsState(consultation));
+    const [fields, setFields] = useState<ConsultationFieldsState>(() => toFieldsState(consultation));
   const [prescription, setPrescription] = useState<PrescriptionState>(() => parsePrescription(consultation.prescriptionDraft));
+  // The consultation's own allergy fields plus the patient's allergy record, merged for the prescribing warnings.
+  const { allergyNote, allergyAtcCodes } = usePrescribingAllergies(fields.allergyStatus, allergyNoteOf(fields), allergyCodesOf(fields.allergyDetail));
   const [showOutcomePicker, setShowOutcomePicker] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -924,8 +927,8 @@ function DraftView({
       <PrescriptionWorkspace
         state={prescription}
         onChange={changePrescription}
-        allergyNote={allergyNoteOf(fields)}
-        allergyAtcCodes={allergyCodesOf(fields.allergyDetail)}
+        allergyNote={allergyNote}
+        allergyAtcCodes={allergyAtcCodes}
         patientWeightKg={patientWeightKg}
         patientLabel="Prescription for this visit"
       />
@@ -933,7 +936,7 @@ function DraftView({
       {showOutcomePicker ? (
         <OutcomePicker
           prescription={prescription}
-          allergyAtcCodes={allergyCodesOf(fields.allergyDetail)}
+          allergyAtcCodes={allergyAtcCodes}
           outcomeNotes={outcomeNotes}
           onChangeNotes={setOutcomeNotes}
           loading={sign.isPending}
@@ -1089,6 +1092,7 @@ function AmendForm({
   onChanged: () => void;
 }) {
   const [fields, setFields] = useState<ConsultationFieldsState>(() => toFieldsState(consultation));
+  const { allergyNote, allergyAtcCodes } = usePrescribingAllergies(fields.allergyStatus, allergyNoteOf(fields), allergyCodesOf(fields.allergyDetail));
   const [diagnoses, setDiagnoses] = useState(
     () => consultation.diagnoses.map((d) => ({
       diagnosisText: d.diagnosisText,
@@ -1244,8 +1248,8 @@ function AmendForm({
       <PrescriptionWorkspace
         state={prescription}
         onChange={setPrescription}
-        allergyNote={allergyNoteOf(fields)}
-        allergyAtcCodes={allergyCodesOf(fields.allergyDetail)}
+        allergyNote={allergyNote}
+        allergyAtcCodes={allergyAtcCodes}
         patientWeightKg={patientWeightKg}
         patientLabel="Prescription for this amendment"
       />
@@ -1253,7 +1257,7 @@ function AmendForm({
       {showOutcomePicker ? (
         <OutcomePicker
           prescription={prescription}
-          allergyAtcCodes={allergyCodesOf(fields.allergyDetail)}
+          allergyAtcCodes={allergyAtcCodes}
           outcomeNotes={outcomeNotes}
           onChangeNotes={setOutcomeNotes}
           loading={amend.isPending}

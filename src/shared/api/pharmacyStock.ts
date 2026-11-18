@@ -52,6 +52,17 @@ export interface AtcCatalogEntry {
   groupName: string;
 }
 
+export async function getAllActiveProducts(): Promise<PharmacyProduct[]> {
+  const first = await listProducts({ activeOnly: true, page: 0, size: 100 });
+  const products = [...first.items];
+  for (let page = 1; ; page += 1) {
+    const next = await listProducts({ activeOnly: true, page, size: 100 });
+    products.push(...next.items);
+    if (!next.hasMore) break;
+  }
+  return products;
+}
+
 export async function getAtcCatalog(): Promise<AtcCatalogEntry[]> {
   return apiClient.get<AtcCatalogEntry[]>(`${BASE}/products/atc-catalog`, { headers: tenantAuthHeaders() });
 }

@@ -4,6 +4,7 @@ import { PatientVisitsTab } from "./PatientVisitsTab";
 import { createPortal } from "react-dom";
 import { VitalsOverview } from "./VitalsOverview";
 import { PatientConsultationTab } from "./PatientConsultationTab";
+import { PatientAllergyBanner } from "@/allergies/PatientAllergyBanner";
 import { AdditionalVitalsForm, AdditionalVitalsSummary, EMPTY_ADDITIONAL_VITALS, additionalIcd10Codes, additionalPayload, type AdditionalVitalsState } from "./AdditionalVitals";
 import {
   CLASSIFICATION_PILL,
@@ -1803,6 +1804,8 @@ export function PatientDetailPage() {
           )}
 
           {activeVisitId && <VisitTimingPanel key={activeVisitId} visitId={activeVisitId} />}
+          {/* Allergy status stays in front of the clinician on every tab: overview, vitals, consultation, medication. */}
+          <PatientAllergyBanner patientId={patient.id} />
 
           <div role="tablist" aria-label="Patient record sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-border-subtle">
             {(["overview", "visits", "vitals", "consultation", "medication"] as const).map((tab) => (

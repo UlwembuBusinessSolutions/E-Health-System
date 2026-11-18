@@ -12,6 +12,7 @@ import { StaffListPage } from "@/staff/StaffListPage";
 import { PatientSearchPage } from "@/patient/PatientSearchPage";
 import { RegisterPatientScreen } from "@/patient/RegisterPatientScreen";
 import { PatientDetailPage } from "@/patient/PatientDetailPage";
+import { PatientAllergyPage } from "@/allergies/PatientAllergyPage";
 import { QueuePage } from "@/queue/QueuePage";
 import { VitalsIntakePage } from "@/queue/VitalsIntakePage";
 import { TicketPrintPage } from "@/queue/TicketPrintPage";
@@ -158,6 +159,7 @@ export function AppRouter() {
         <Route path="patients" element={<PatientSearchPage />} />
         <Route path="patients/new" element={<RegisterPatientScreen />} />
         <Route path="patients/:id" element={<PatientDetailPage />} />
+        <Route path="patients/:id/allergies" element={<PatientAllergyPage />} />
         <Route path="queue" element={<QueuePage />} />
         {/* OFFLINE: pending records on this device + conflicts needing a decision.
             No RequireRole — resolving a conflict is admin-only on the server. */}
