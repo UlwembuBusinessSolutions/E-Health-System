@@ -3,11 +3,15 @@ package co.ehealth.platform.pharmacy;
 import co.ehealth.platform.consultation.AllergyStatus;
 import co.ehealth.platform.consultation.Consultation;
 import co.ehealth.platform.consultation.ConsultationRepository;
+import co.ehealth.platform.patient.AllergenType;
+import co.ehealth.platform.patient.AllergyRecordStatus;
+import co.ehealth.platform.patient.PatientAllergyRepository;
 import co.ehealth.platform.pharmacy.stock.PharmacyProduct;
 import co.ehealth.platform.pharmacy.stock.PharmacyProductRepository;
 import co.ehealth.platform.pharmacy.stock.PharmacyValidationException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -22,11 +26,13 @@ import java.util.regex.Pattern;
  * The allergy rule from the story: "If the ATC code of the medicine prescribed contains the same 5
  * characters as a recorded allergy, it cannot be prescribed and a warning is shown."
  *
- * Replaces the regex-over-JSON check that used to live in PrescriptionService. The allergy detail is
- * parsed as real JSON, so a name that contains a quote or a brace can no longer defeat the check.
+ * Two sources of "recorded allergy" are checked together, so neither can be bypassed by the other:
+ *   1. the allergies written on the consultation being signed (the original source), and
+ *   2. the patient's allergy record (Patient Allergy Management story) — every active MEDICATION allergy.
  *
- * The same rule runs in the browser (frontend prescribing/allergy.ts) so the doctor sees the warning
- * while writing; this class is the server-side guarantee that signing can never bypass it.
+ * The allergy detail is parsed as real JSON, so a name that contains a quote or a brace can no longer
+ * defeat the check. The same rule runs in the browser (frontend prescribing/entries.ts) so the doctor sees
+ * the warning while writing; this class is the server-side guarantee that signing can never bypass it.
  */
 @Component
 public class AllergyAtcGuard {
@@ -44,30 +50,63 @@ public class AllergyAtcGuard {
     private final ConsultationRepository consultationRepository;
     private final PharmacyProductRepository productRepository;
     private final ObjectMapper objectMapper;
+    private final PatientAllergyRepository patientAllergyRepository;
 
+    @Autowired
     public AllergyAtcGuard(ConsultationRepository consultationRepository, PharmacyProductRepository productRepository,
-                           ObjectMapper objectMapper) {
+                           ObjectMapper objectMapper, PatientAllergyRepository patientAllergyRepository) {
         this.consultationRepository = consultationRepository;
         this.productRepository = productRepository;
         this.objectMapper = objectMapper;
+        this.patientAllergyRepository = patientAllergyRepository;
+    }
+
+    // The constructor from before the patient allergy record existed — only the consultation is checked.
+    public AllergyAtcGuard(ConsultationRepository consultationRepository, PharmacyProductRepository productRepository,
+                           ObjectMapper objectMapper) {
+        this(consultationRepository, productRepository, objectMapper, null);
+    }
+
+    /** Consultation-only check, kept for callers that have no patient id. */
+    public void requireSafe(UUID consultationId, Collection<UUID> productIds) {
+        requireSafe(consultationId, null, productIds);
     }
 
     /**
      * Throws a PharmacyValidationException (shown to the doctor) when the prescription must not be signed.
      *
-     * @param productIds the product behind every line, in any order. A null entry is a line typed by hand
-     *                   with no catalogue product, which cannot be checked.
+     * @param consultationId the consultation being signed, or null
+     * @param patientId      the patient being prescribed for; their allergy record is checked too
+     * @param productIds     the product behind every line, in any order. A null entry is a line typed by hand
+     *                       with no catalogue product, which cannot be checked.
      */
-    public void requireSafe(UUID consultationId, Collection<UUID> productIds) {
-        if (consultationId == null) return;
-        Consultation consultation = consultationRepository.findById(consultationId).orElse(null);
-        if (consultation == null || consultation.getAllergyStatus() != AllergyStatus.KNOWN) return;
+    public void requireSafe(UUID consultationId, UUID patientId, Collection<UUID> productIds) {
+        List<RecordedAllergy> allergies = new ArrayList<>();
 
-        List<RecordedAllergy> allergies = parseAllergies(consultation.getAllergyDetail());
-        if (allergies.isEmpty()) {
-            throw new PharmacyValidationException(
-                    "Known allergies must include a valid ATC code before a prescription can be signed.");
+        Consultation consultation = consultationId == null ? null
+                : consultationRepository.findById(consultationId).orElse(null);
+        if (consultation != null && consultation.getAllergyStatus() == AllergyStatus.KNOWN) {
+            List<RecordedAllergy> fromConsultation = parseAllergies(consultation.getAllergyDetail());
+            if (fromConsultation.isEmpty()) {
+                throw new PharmacyValidationException(
+                        "Known allergies must include a valid ATC code before a prescription can be signed.");
+            }
+            allergies.addAll(fromConsultation);
         }
+        allergies.addAll(registeredAllergies(patientId));
+
+        if (patientId != null && patientAllergyRepository != null && !productIds.isEmpty()) {
+            var blockedProductIds = patientAllergyRepository
+                    .findByPatientIdAndStatusAndAllergenType(patientId, AllergyRecordStatus.ACTIVE, AllergenType.MEDICATION)
+                    .stream().map(a -> a.getCatalogProductId()).filter(java.util.Objects::nonNull)
+                    .collect(java.util.stream.Collectors.toSet());
+            if (productIds.stream().filter(java.util.Objects::nonNull).anyMatch(blockedProductIds::contains)) {
+                throw new PharmacyValidationException("Cannot prescribe a medicine recorded as an allergy for this patient.");
+            }
+        }
+
+        if (allergies.isEmpty()) return;
+
         if (productIds.stream().anyMatch(java.util.Objects::isNull)) {
             throw new PharmacyValidationException(
                     "Choose a catalogued medicine with an ATC code so allergy safety can be checked.");
@@ -87,6 +126,19 @@ public class AllergyAtcGuard {
                 }
             }
         }
+    }
+
+    // Active medication allergies on the patient's own allergy record. The table's CHECK constraint
+    // guarantees every one carries a valid ATC code; the pattern test is a second line of defence.
+    private List<RecordedAllergy> registeredAllergies(UUID patientId) {
+        if (patientId == null || patientAllergyRepository == null) return List.of();
+        return patientAllergyRepository
+                .findByPatientIdAndStatusAndAllergenType(patientId, AllergyRecordStatus.ACTIVE, AllergenType.MEDICATION)
+                .stream()
+                .filter(a -> a.getAllergyCode() != null
+                        && ATC.matcher(a.getAllergyCode().toUpperCase(Locale.ROOT)).matches())
+                .map(a -> new RecordedAllergy(a.getAllergyName(), a.getAllergyCode().toUpperCase(Locale.ROOT)))
+                .toList();
     }
 
     List<RecordedAllergy> parseAllergies(String detail) {

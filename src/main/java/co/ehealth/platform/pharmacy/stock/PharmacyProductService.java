@@ -47,7 +47,8 @@ public class PharmacyProductService {
     }
 
     public List<PharmacyProduct> atcCatalog() {
-        return productRepository.findByActiveTrueAndAtcCodeIsNotNullOrderByDisplayNameAsc();
+        return productRepository.findByActiveTrueAndCategoryAndAtcCodeIsNotNullOrderByDisplayNameAsc(
+                StockCategory.MEDICINE);
     }
 
     @Transactional
