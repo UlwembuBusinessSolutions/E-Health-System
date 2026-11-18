@@ -113,7 +113,7 @@ public class PrescriptionService {
             List<UUID> productIds = new java.util.ArrayList<>();
             cmd.items().forEach(item -> productIds.add(item.productId()));
             purchaseInputs.forEach(item -> productIds.add(item.productId()));
-            allergyGuard.requireSafe(cmd.consultationId(), productIds);
+            allergyGuard.requireSafe(cmd.consultationId(), visit.getPatientId(), productIds);
         }
         // The pharmacy may only be asked for what it holds: checked here, inside the
         // sign transaction, so a prescription can never leave the consulting room
