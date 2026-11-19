@@ -41,13 +41,14 @@ public class TriageController {
         var cmd = new TriageService.TriageCaptureCommand(visitId, request.emergencySign(),
                 request.emergencySignNote(), request.scoringProfileOverride(), request.respiratoryRate(),
                 request.heartRate(), request.systolicBp(), request.diastolicBp(), request.temperatureCelsius(),
-                request.spo2Percent(), request.oxygenSupport(), request.oxygenDevice(), request.oxygenFlowLpm(),
-                request.avpu(), request.mobility(), request.painScore(), request.painScale(),
-                request.presentingComplaint(), request.discriminators(), request.supersedesAssessmentId(),
+                request.spo2Percent(),
+                request.avpu(), request.discriminators(), request.supersedesAssessmentId(),
                 request.observedAt(), request.idempotencyKey(), request.confirmOutOfRange(),
-                request.clinicianConfirmedColour(), request.colourConfirmationReason(), request.additionalObservations());
+                request.clinicianConfirmedColour(), request.colourConfirmationReason(), request.additionalObservations(),
+                request.dateOfBirth());
         TriageAssessment assessment = triageService.capture(cmd, staff.userId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(TriageAssessmentResponse.from(assessment));
+        return ResponseEntity.status(HttpStatus.CREATED).body(TriageAssessmentResponse.from(
+                assessment, triageService.getCapturedByName(assessment)));
     }
 
     // Oldest first — the full timeline for this visit, ACTIVE and
@@ -55,7 +56,8 @@ public class TriageController {
     // is current and what was corrected along the way.
     @GetMapping("/api/v1/visits/{visitId}/triage")
     public ResponseEntity<Map<String, Object>> history(@PathVariable UUID visitId) {
-        var items = triageService.getHistory(visitId).stream().map(TriageAssessmentResponse::from).toList();
+        var items = triageService.getVisitHistoryWithCaptureNames(visitId).stream()
+                .map(v -> TriageAssessmentResponse.from(v.assessment(), v.capturedByName())).toList();
         return ResponseEntity.ok(Map.of("items", items));
     }
 
@@ -64,7 +66,8 @@ public class TriageController {
     // triage, not an error.
     @GetMapping("/api/v1/visits/{visitId}/triage/latest")
     public ResponseEntity<Map<String, Object>> latest(@PathVariable UUID visitId) {
-        var item = triageService.getLatestActive(visitId).map(TriageAssessmentResponse::from).orElse(null);
+        var item = triageService.getLatestActive(visitId)
+                .map(a -> TriageAssessmentResponse.from(a, triageService.getCapturedByName(a))).orElse(null);
         Map<String, Object> body = new HashMap<>();
         body.put("item", item);
         return ResponseEntity.ok(body);
@@ -126,12 +129,11 @@ public class TriageController {
     public record CaptureTriageRequest(boolean emergencySign, String emergencySignNote,
                                         ScoringProfile scoringProfileOverride, Integer respiratoryRate,
                                         Integer heartRate, Integer systolicBp, Integer diastolicBp,
-                                        Double temperatureCelsius, Integer spo2Percent, OxygenSupport oxygenSupport,
-                                        String oxygenDevice, Double oxygenFlowLpm, Avpu avpu, Mobility mobility,
-                                        Integer painScore, String painScale, String presentingComplaint,
+                                        Double temperatureCelsius, Integer spo2Percent, Avpu avpu,
                                         Set<TriageDiscriminator> discriminators, UUID supersedesAssessmentId,
                                         Instant observedAt, @NotBlank String idempotencyKey, boolean confirmOutOfRange,
-                                        TriageColour clinicianConfirmedColour, String colourConfirmationReason, AdditionalObservations additionalObservations) {
+                                        TriageColour clinicianConfirmedColour, String colourConfirmationReason,
+                                        AdditionalObservations additionalObservations, LocalDate dateOfBirth) {
     }
 
     public record ReasonRequest(@NotBlank String reason) {
@@ -154,31 +156,39 @@ public class TriageController {
         }
     }
 
-    public record TriageAssessmentResponse(UUID id, UUID visitId, TriageAssessmentStatus status,
+    public record TriageAssessmentResponse(UUID id, UUID visitId, UUID consultationId,
+                                            TriageAssessmentStatus status,
                                             UUID supersedesAssessmentId, String correctionReason,
                                             boolean emergencySign, String emergencySignNote,
                                             ScoringProfile scoringProfile, boolean profileManuallyConfirmed,
                                             Integer respiratoryRate, Integer heartRate, Integer systolicBp,
                                             Integer diastolicBp, Double temperatureCelsius, Integer spo2Percent,
-                                            OxygenSupport oxygenSupport, String oxygenDevice, Double oxygenFlowLpm,
-                                            Avpu avpu, Mobility mobility, Integer painScore, String painScale,
-                                            String presentingComplaint, boolean outOfRangeConfirmed,
+                                            Avpu avpu, boolean outOfRangeConfirmed,
                                             String validationWarnings, Set<TriageDiscriminator> discriminators,
                                             Integer tewsScore, String scoringVersion, TriageColour calculatedColour,
                                             TriageColour finalColour, String overrideReason,
                                             UUID overriddenByUserId, UUID capturedByUserId, Instant observedAt,
-                                            Instant recordedAt, AdditionalObservations additionalObservations) {
+                                            Instant recordedAt, AdditionalObservations additionalObservations,
+                                            Integer ageMonthsAtCapture, String temperatureClassification,
+                                            String respiratoryRateClassification, String bloodPressureClassification,
+                                            java.util.List<String> icd10Indications, String capturedByName) {
         static TriageAssessmentResponse from(TriageAssessment a) {
-            return new TriageAssessmentResponse(a.getId(), a.getVisitId(), a.getStatus(),
+            return from(a, null);
+        }
+
+        static TriageAssessmentResponse from(TriageAssessment a, String capturedByName) {
+            return new TriageAssessmentResponse(a.getId(), a.getVisitId(), a.getConsultationId(), a.getStatus(),
                     a.getSupersedesAssessmentId(), a.getCorrectionReason(), a.isEmergencySign(),
                     a.getEmergencySignNote(), a.getScoringProfile(), a.isProfileManuallyConfirmed(),
                     a.getRespiratoryRate(), a.getHeartRate(), a.getSystolicBp(), a.getDiastolicBp(),
-                    a.getTemperatureCelsius(), a.getSpo2Percent(), a.getOxygenSupport(), a.getOxygenDevice(),
-                    a.getOxygenFlowLpm(), a.getAvpu(), a.getMobility(), a.getPainScore(), a.getPainScale(),
-                    a.getPresentingComplaint(), a.isOutOfRangeConfirmed(), a.getValidationWarnings(),
+                    a.getTemperatureCelsius(), a.getSpo2Percent(), a.getAvpu(), a.isOutOfRangeConfirmed(),
+                    a.getValidationWarnings(),
                     a.getDiscriminators(), a.getTewsScore(), a.getScoringVersion(),
                     a.getCalculatedColour(), a.getFinalColour(), a.getOverrideReason(), a.getOverriddenByUserId(),
-                    a.getCapturedByUserId(), a.getObservedAt(), a.getRecordedAt(), a.getAdditionalObservations());
+                    a.getCapturedByUserId(), a.getObservedAt(), a.getRecordedAt(), a.getAdditionalObservations(),
+                    a.getAgeMonthsAtCapture(), a.getTemperatureClassification(),
+                    a.getRespiratoryRateClassification(), a.getBloodPressureClassification(),
+                    a.getIcd10Indications(), capturedByName);
         }
     }
 }

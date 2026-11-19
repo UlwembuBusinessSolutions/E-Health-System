@@ -9,6 +9,7 @@ import co.ehealth.platform.identity.UserRepository;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -67,6 +68,14 @@ public class PharmacyProductController {
         return ResponseEntity.ok(ProductResponse.from(productService.get(id)));
     }
 
+    @GetMapping("/atc-catalog")
+    public ResponseEntity<java.util.List<AtcCatalogEntry>> atcCatalog() {
+        permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        return ResponseEntity.ok(productService.atcCatalog().stream().map(p -> new AtcCatalogEntry(
+                p.getId(), p.getDisplayName(), p.getGenericName(), p.getAtcCode(), p.getAtcCode().substring(0, 5),
+                p.getGenericName() == null ? p.getDisplayName() : p.getGenericName())).toList());
+    }
+
     @PostMapping
     public ResponseEntity<ProductResponse> create(@jakarta.validation.Valid @RequestBody CreateProductRequest request,
                                                    @AuthenticationPrincipal AuthenticatedPrincipal principal) {
@@ -80,6 +89,7 @@ public class PharmacyProductController {
                         request.preferredSupplierId()),
                 request.facilityId(), request.reorderThreshold(), request.targetQuantity(), actor.getId(),
                 actorName(actor));
+        product = productService.updateAtcCode(product.getId(), request.atcCode());
         return ResponseEntity.status(HttpStatus.CREATED).body(ProductResponse.from(product));
     }
 
@@ -93,6 +103,7 @@ public class PharmacyProductController {
                 request.strength(), request.dosageForm(), request.packSize(), request.barcode(),
                 request.manufacturer(), request.storageInstructions(), request.schedule(), request.coldChain(),
                 request.preferredSupplierId(), request.levels(), actor.getId(), actorName(actor));
+        if (request.atcCode() != null) product = productService.updateAtcCode(id, request.atcCode());
         return ResponseEntity.ok(ProductResponse.from(product));
     }
 
@@ -123,7 +134,9 @@ public class PharmacyProductController {
     public record CreateProductRequest(
             @NotBlank String code, @NotBlank String displayName, String genericName, String strength,
             String dosageForm, @NotNull StockCategory category, @NotNull StockBaseUnit baseUnit, Integer packSize,
-            String barcode, String manufacturer, boolean batchTracked, boolean expiryTracked,
+            String barcode, String manufacturer,
+            @Pattern(regexp = "([A-Za-z][0-9]{2}[A-Za-z]{2}([A-Za-z0-9]{1,2})?)?") String atcCode,
+            boolean batchTracked, boolean expiryTracked,
             String storageInstructions, boolean serialTracked, DrugSchedule schedule, boolean coldChain,
             UUID preferredSupplierId, @NotNull UUID facilityId, Integer reorderThreshold,
             Integer targetQuantity) {
@@ -131,6 +144,7 @@ public class PharmacyProductController {
 
     public record UpdateProductRequest(@NotBlank String displayName, String genericName, String strength,
                                         String dosageForm, Integer packSize, String barcode, String manufacturer,
+                                        @Pattern(regexp = "([A-Za-z][0-9]{2}[A-Za-z]{2}([A-Za-z0-9]{1,2})?)?") String atcCode,
                                         String storageInstructions, DrugSchedule schedule, boolean coldChain,
                                         UUID preferredSupplierId, UUID facilityId,
                                         @PositiveOrZero Integer reorderThreshold,
@@ -145,16 +159,19 @@ public class PharmacyProductController {
     public record ProductResponse(UUID id, String code, String displayName, String genericName, String strength,
                                    String dosageForm, StockCategory category, StockBaseUnit baseUnit,
                                    Integer packSize, String barcode, String manufacturer, boolean batchTracked,
-                                   boolean expiryTracked, String storageInstructions, boolean serialTracked,
+                                   boolean expiryTracked, String storageInstructions, boolean serialTracked, String atcCode,
                                    DrugSchedule schedule, boolean coldChain, UUID preferredSupplierId,
                                    boolean active, String createdByName, Instant createdAt, String updatedByName, Instant updatedAt) {
         static ProductResponse from(PharmacyProduct p) {
             return new ProductResponse(p.getId(), p.getCode(), p.getDisplayName(), p.getGenericName(),
                     p.getStrength(), p.getDosageForm(), p.getCategory(), p.getBaseUnit(), p.getPackSize(),
                     p.getBarcode(), p.getManufacturer(), p.isBatchTracked(), p.isExpiryTracked(),
-                    p.getStorageInstructions(), p.isSerialTracked(), p.getSchedule(), p.isColdChain(),
+                    p.getStorageInstructions(), p.isSerialTracked(), p.getAtcCode(), p.getSchedule(), p.isColdChain(),
                     p.getPreferredSupplierId(), p.isActive(), p.getCreatedByName(), p.getCreatedAt(),
                     p.getUpdatedByName(), p.getUpdatedAt());
         }
     }
+
+    public record AtcCatalogEntry(UUID productId, String productName, String ingredientName, String atcCode,
+                                  String groupCode, String groupName) { }
 }

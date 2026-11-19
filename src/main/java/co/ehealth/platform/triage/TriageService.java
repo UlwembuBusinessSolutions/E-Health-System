@@ -2,6 +2,8 @@ package co.ehealth.platform.triage;
 
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
+import co.ehealth.platform.consultation.ConsultationRepository;
+import co.ehealth.platform.consultation.ConsultationStatus;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.identity.User;
@@ -47,6 +49,7 @@ public class TriageService {
             "Only clinical staff (nurse, doctor, clinician, or occupational health practitioner) may do this.";
 
     private final TriageAssessmentRepository triageAssessmentRepository;
+    private final ConsultationRepository consultationRepository;
     private final VisitRepository visitRepository;
     private final PatientService patientService;
     private final UserRepository userRepository;
@@ -54,10 +57,12 @@ public class TriageService {
     private final PermissionService permissionService;
     private final Clock clock;
 
-    public TriageService(TriageAssessmentRepository triageAssessmentRepository, VisitRepository visitRepository,
+    public TriageService(TriageAssessmentRepository triageAssessmentRepository,
+                          ConsultationRepository consultationRepository, VisitRepository visitRepository,
                           PatientService patientService, UserRepository userRepository,
                           AuditLogService auditLogService, PermissionService permissionService, Clock clock) {
         this.triageAssessmentRepository = triageAssessmentRepository;
+        this.consultationRepository = consultationRepository;
         this.visitRepository = visitRepository;
         this.patientService = patientService;
         this.userRepository = userRepository;
@@ -122,7 +127,7 @@ public class TriageService {
         Set<TriageDiscriminator> discriminators = cmd.discriminators() == null ? Set.of() : cmd.discriminators();
         TewsCalculator.Result result = new TewsCalculator().calculate(cmd.emergencySign(), profile,
                 cmd.respiratoryRate(), cmd.heartRate(), cmd.systolicBp(), cmd.temperatureCelsius(), cmd.avpu(),
-                cmd.mobility(), discriminators, cmd.additionalObservations());
+                discriminators, cmd.additionalObservations());
         if (!cmd.emergencySign() && profile != ScoringProfile.ADULT
                 && (cmd.clinicianConfirmedColour() == null || !StringUtils.hasText(cmd.colourConfirmationReason()))) {
             throw new InvalidTriageCaptureException(
@@ -143,13 +148,17 @@ public class TriageService {
         Instant now = clock.instant();
         TriageAssessment assessment = new TriageAssessment(cmd.visitId(), cmd.emergencySign(),
                 cmd.emergencySignNote(), profile, manuallyConfirmed, cmd.respiratoryRate(), cmd.heartRate(),
-                cmd.systolicBp(), cmd.diastolicBp(), cmd.temperatureCelsius(), cmd.spo2Percent(),
-                cmd.oxygenSupport() == null ? OxygenSupport.ROOM_AIR : cmd.oxygenSupport(), cmd.oxygenDevice(),
-                cmd.oxygenFlowLpm(), cmd.avpu(), cmd.mobility(), cmd.painScore(), cmd.painScale(),
-                cmd.presentingComplaint(), !validationWarnings.isEmpty(), String.join("; ", validationWarnings),
+                cmd.systolicBp(), cmd.diastolicBp(), cmd.temperatureCelsius(), cmd.spo2Percent(), cmd.avpu(),
+                !validationWarnings.isEmpty(), String.join("; ", validationWarnings),
                 discriminators, result.tewsScore(), TewsCalculator.SCORING_VERSION,
                 result.calculatedColour(), result.calculatedColour(), staffUserId, cmd.observedAt() != null
                         ? cmd.observedAt() : now, now, cmd.idempotencyKey());
+        consultationRepository.findFirstByVisitIdAndStatusOrderByCreatedAtDesc(
+                cmd.visitId(), ConsultationStatus.DRAFT)
+                .ifPresent(consultation -> assessment.linkToConsultation(consultation.getId()));
+        LocalDate observationDate = (cmd.observedAt() != null ? cmd.observedAt() : now)
+                .atZone(ZoneOffset.UTC).toLocalDate();
+        assessment.setAgeMonthsAtCapture(Math.toIntExact(Period.between(dateOfBirth, observationDate).toTotalMonths()));
 
         if (superseded != null) {
             assessment.linkSupersedes(superseded.getId());
@@ -227,6 +236,19 @@ public class TriageService {
     public List<TriageAssessment> getHistory(UUID visitId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
         return triageAssessmentRepository.findByVisitIdOrderByObservedAtAsc(visitId);
+    }
+
+    public List<PatientVitalsView> getVisitHistoryWithCaptureNames(UUID visitId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        List<TriageAssessment> assessments = triageAssessmentRepository.findByVisitIdOrderByObservedAtAsc(visitId);
+        Map<UUID, String> capturedByNames = resolveCapturedByNames(assessments);
+        return assessments.stream()
+                .map(a -> new PatientVitalsView(a, capturedByNames.get(a.getCapturedByUserId())))
+                .toList();
+    }
+
+    public String getCapturedByName(TriageAssessment assessment) {
+        return resolveCapturedByNames(List.of(assessment)).get(assessment.getCapturedByUserId());
     }
 
     public Optional<TriageAssessment> getLatestActive(UUID visitId) {
@@ -350,9 +372,6 @@ public class TriageService {
         if (cmd.avpu() == null) {
             throw new InvalidTriageCaptureException("AVPU is required.");
         }
-        if (cmd.mobility() == null) {
-            throw new InvalidTriageCaptureException("Mobility is required.");
-        }
     }
 
     private List<String> validateMeasurements(TriageCaptureCommand cmd) {
@@ -366,17 +385,6 @@ public class TriageService {
         }
         if (cmd.spo2Percent() != null && (cmd.spo2Percent() < 0 || cmd.spo2Percent() > 100)) {
             throw new InvalidTriageCaptureException("SpO2 must be between 0 and 100%.");
-        }
-        if (cmd.oxygenFlowLpm() != null && cmd.oxygenFlowLpm() < 0) {
-            throw new InvalidTriageCaptureException("Oxygen flow cannot be negative.");
-        }
-        if (cmd.painScore() != null && (cmd.painScore() < 0 || cmd.painScore() > 10)) {
-            throw new InvalidTriageCaptureException("Pain score must be between 0 and 10.");
-        }
-        if (cmd.oxygenSupport() == OxygenSupport.SUPPLEMENTAL
-                && (!StringUtils.hasText(cmd.oxygenDevice()) || cmd.oxygenFlowLpm() == null)) {
-            throw new InvalidTriageCaptureException(
-                    "Oxygen device and flow rate are required when supplemental oxygen is selected.");
         }
         warnOutside(warnings, cmd.respiratoryRate(), 1, 100, "Respiratory rate");
         warnOutside(warnings, cmd.heartRate(), 20, 300, "Heart rate");
@@ -440,11 +448,10 @@ public class TriageService {
     public record TriageCaptureCommand(UUID visitId, boolean emergencySign, String emergencySignNote,
                                         ScoringProfile scoringProfileOverride, Integer respiratoryRate,
                                         Integer heartRate, Integer systolicBp, Integer diastolicBp,
-                                        Double temperatureCelsius, Integer spo2Percent, OxygenSupport oxygenSupport,
-                                        String oxygenDevice, Double oxygenFlowLpm, Avpu avpu, Mobility mobility,
-                                        Integer painScore, String painScale, String presentingComplaint,
+                                        Double temperatureCelsius, Integer spo2Percent, Avpu avpu,
                                         Set<TriageDiscriminator> discriminators, UUID supersedesAssessmentId,
                                         Instant observedAt, String idempotencyKey, boolean confirmOutOfRange,
-                                        TriageColour clinicianConfirmedColour, String colourConfirmationReason, AdditionalObservations additionalObservations) {
+                                        TriageColour clinicianConfirmedColour, String colourConfirmationReason,
+                                        AdditionalObservations additionalObservations, LocalDate dateOfBirth) {
     }
 }

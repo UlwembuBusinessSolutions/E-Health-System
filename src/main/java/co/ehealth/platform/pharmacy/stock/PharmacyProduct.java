@@ -39,6 +39,9 @@ public class PharmacyProduct {
     @Column(length = 100)
     private String strength;
 
+    @Column(name = "atc_code", length = 7)
+    private String atcCode;
+
     @Column(name = "dosage_form", length = 100)
     private String dosageForm;
 
@@ -197,6 +200,9 @@ public class PharmacyProduct {
     public String getStrength() {
         return strength;
     }
+
+    public String getAtcCode() { return atcCode; }
+    public void setAtcCode(String atcCode) { this.atcCode = atcCode; }
 
     public String getDosageForm() {
         return dosageForm;

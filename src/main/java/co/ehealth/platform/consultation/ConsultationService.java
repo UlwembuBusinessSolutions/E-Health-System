@@ -73,6 +73,7 @@ public class ConsultationService {
     private final DiagnosisCatalogueService diagnosisCatalogue;
     private final Clock clock;
     private final ObjectMapper objectMapper;
+    private final ClassificationReasonRepository classificationReasonRepository;
 
     public ConsultationService(ConsultationRepository consultationRepository,
                                 ConsultationDiagnosisRepository consultationDiagnosisRepository,
@@ -80,7 +81,8 @@ public class ConsultationService {
                                 AuditLogService auditLogService, PermissionService permissionService,
                                 QueueService queueService, FacilityService facilityService,
                                 PrescriptionService prescriptionService, TriageAssessmentRepository triageRepository,
-                                DiagnosisCatalogueService diagnosisCatalogue, Clock clock, ObjectMapper objectMapper) {
+                                DiagnosisCatalogueService diagnosisCatalogue, Clock clock, ObjectMapper objectMapper,
+                                ClassificationReasonRepository classificationReasonRepository) {
         this.triageRepository = triageRepository;
         this.diagnosisCatalogue = diagnosisCatalogue;
         this.consultationRepository = consultationRepository;
@@ -94,6 +96,7 @@ public class ConsultationService {
         this.prescriptionService = prescriptionService;
         this.clock = clock;
         this.objectMapper = objectMapper;
+        this.classificationReasonRepository = classificationReasonRepository;
     }
 
     // AuditLog.beforeValue/afterValue are a raw jsonb column — the caller
@@ -280,12 +283,30 @@ public class ConsultationService {
         consultation.updateFields(cmd.relevantHistory(), cmd.currentMedications(), cmd.allergyStatus(),
                 cmd.allergyDetail(), cmd.examinationNotes(), cmd.investigationsNotes(), cmd.treatmentPlan(),
                 clock.instant());
+        if (cmd.classificationReasonIds() != null) applyClassificationReasons(consultation, cmd.classificationReasonIds());
         // null means the caller did not send a prescription, so what is saved stays as it is.
         if (cmd.prescriptionDraft() != null) {
             consultation.savePrescriptionDraft(cmd.prescriptionDraft().isBlank() ? null : cmd.prescriptionDraft());
         }
         consultationRepository.save(consultation);
         return consultation;
+    }
+
+    public List<ClassificationReason> getClassificationReasons(co.ehealth.platform.visit.ServiceStream stream) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        return classificationReasonRepository.findByServiceStreamOrderBySortOrderAscLabelAsc(stream);
+    }
+
+    private void applyClassificationReasons(Consultation consultation, Set<UUID> ids) {
+        Visit visit = visitRepository.findById(consultation.getVisitId()).orElseThrow(VisitNotFoundException::new);
+        Set<UUID> selected = ids == null ? Set.of() : ids;
+        Set<UUID> previouslySelected = consultation.getClassificationReasonIds();
+        List<ClassificationReason> valid = selected.isEmpty() ? List.of()
+                : classificationReasonRepository.findByIdInAndServiceStreamAndActiveTrue(selected, visit.getServiceStream());
+        Set<UUID> allowed = valid.stream().map(ClassificationReason::getId).collect(Collectors.toSet());
+        allowed.addAll(previouslySelected);
+        if (!allowed.containsAll(selected)) throw new InvalidConsultationException("Choose active classification reasons for this visit's care stream.");
+        consultation.setClassificationReasonIds(selected);
     }
 
     // Marking a new diagnosis primary auto-clears any existing primary on
@@ -416,6 +437,7 @@ public class ConsultationService {
         Consultation amendment = new Consultation(original.getVisitId(), staffUserId, now);
         amendment.updateFields(cmd.relevantHistory(), cmd.currentMedications(), cmd.allergyStatus(),
                 cmd.allergyDetail(), cmd.examinationNotes(), cmd.investigationsNotes(), cmd.treatmentPlan(), now);
+        applyClassificationReasons(amendment, cmd.classificationReasonIds());
         consultationRepository.save(amendment);
 
         int sortOrder = 0;
@@ -526,6 +548,12 @@ public class ConsultationService {
         return consultationDiagnosisRepository.findByConsultationIdOrderBySortOrderAsc(consultationId);
     }
 
+    @Transactional(readOnly = true)
+    public Set<UUID> getClassificationReasonIds(UUID consultationId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        return findConsultation(consultationId).getClassificationReasonIds();
+    }
+
     // SEND_TO_PHARMACY needs real medicine to prescribe, checked before any
     // of sign()/amend()'s other side effects run — an empty list here would
     // otherwise sign successfully, transfer the patient, and then either
@@ -633,14 +661,14 @@ public class ConsultationService {
     public record UpdateConsultationCommand(String relevantHistory, String currentMedications,
                                              AllergyStatus allergyStatus, String allergyDetail,
                                              String examinationNotes, String investigationsNotes,
-                                             String treatmentPlan, String prescriptionDraft) {
+                                             String treatmentPlan, String prescriptionDraft, Set<UUID> classificationReasonIds) {
 
         public UpdateConsultationCommand(String relevantHistory, String currentMedications,
                                          AllergyStatus allergyStatus, String allergyDetail,
                                          String examinationNotes, String investigationsNotes,
                                          String treatmentPlan) {
             this(relevantHistory, currentMedications, allergyStatus, allergyDetail, examinationNotes,
-                    investigationsNotes, treatmentPlan, null);
+                    investigationsNotes, treatmentPlan, null, null);
         }
     }
 
@@ -660,6 +688,6 @@ public class ConsultationService {
                                             String amendmentReason,
                                             List<PrescriptionService.PrescriptionItemInput> pharmacyItems,
                                             List<PrescriptionService.PrescriptionPurchaseItemInput> purchaseItems,
-                                            UUID destinationFacilityId) {
+                                            UUID destinationFacilityId, Set<UUID> classificationReasonIds) {
     }
 }

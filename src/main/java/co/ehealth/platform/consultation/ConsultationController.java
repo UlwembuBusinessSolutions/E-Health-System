@@ -2,12 +2,15 @@ package co.ehealth.platform.consultation;
 
 import co.ehealth.platform.core.security.AuthenticatedPrincipal;
 import co.ehealth.platform.identity.StaffService;
+import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.pharmacy.MedicineDirections;
 import co.ehealth.platform.pharmacy.PrescriptionService;
+import co.ehealth.platform.visit.ServiceStream;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -37,10 +41,16 @@ public class ConsultationController {
 
     private final ConsultationService consultationService;
     private final StaffService staffService;
+    private final ClassificationReasonRepository classificationReasonRepository;
+    private final PermissionService permissionService;
 
-    public ConsultationController(ConsultationService consultationService, StaffService staffService) {
+    public ConsultationController(ConsultationService consultationService, StaffService staffService,
+                                  ClassificationReasonRepository classificationReasonRepository,
+                                  PermissionService permissionService) {
         this.consultationService = consultationService;
         this.staffService = staffService;
+        this.classificationReasonRepository = classificationReasonRepository;
+        this.permissionService = permissionService;
     }
 
     @PostMapping("/api/v1/visits/{visitId}/consultations")
@@ -107,10 +117,83 @@ public class ConsultationController {
         var cmd = new ConsultationService.UpdateConsultationCommand(request.relevantHistory(),
                 request.currentMedications(), request.allergyStatus(), request.allergyDetail(),
                 request.examinationNotes(), request.investigationsNotes(), request.treatmentPlan(),
-                request.prescriptionDraft());
+                request.prescriptionDraft(), request.classificationReasonIds());
         Consultation consultation = consultationService.updateDraft(id, cmd, staff.userId());
         return ResponseEntity.ok(toResponse(consultation));
     }
+
+    @GetMapping("/api/v1/classification-reasons")
+    public ResponseEntity<ClassificationReasonCatalogResponse> classificationReasons(
+            @RequestParam ServiceStream serviceStream) {
+        var items = consultationService.getClassificationReasons(serviceStream).stream()
+                .map(ConsultationController::toClassificationReasonResponse)
+                .toList();
+        return ResponseEntity.ok(classificationReasonsResponse(items));
+    }
+
+    // Read-only catalog for browser previews and public app entry points.
+    // TenantFilter resolves the explicit tenant query parameter on this one
+    // route; consultation work itself continues to use the authenticated
+    // tenant-scoped endpoint above.
+    @GetMapping("/api/v1/public/classification-reasons")
+    public ResponseEntity<ClassificationReasonCatalogResponse> publicClassificationReasons(
+            @RequestParam ServiceStream serviceStream) {
+        var items = classificationReasonRepository
+                .findByServiceStreamAndActiveTrueOrderBySortOrderAscLabelAsc(serviceStream).stream()
+                .map(ConsultationController::toClassificationReasonResponse)
+                .toList();
+        return ResponseEntity.ok(classificationReasonsResponse(items));
+    }
+
+    private static ClassificationReasonCatalogResponse classificationReasonsResponse(
+            List<ClassificationReasonResponse> items) {
+        return new ClassificationReasonCatalogResponse(
+                "Patient care classification",
+                "Select every reason that applies to this consultation.",
+                "Healthcare professionals can select multiple classification reasons, and the available options correspond to the selected patient care stream.",
+                items);
+    }
+
+    private static ClassificationReasonResponse toClassificationReasonResponse(ClassificationReason reason) {
+        return new ClassificationReasonResponse(reason.getId(), reason.getServiceStream(),
+                serviceStreamLabel(reason.getServiceStream()), reason.getReasonCode(), reason.getLabel(),
+                reason.isActive());
+    }
+
+    private static String serviceStreamLabel(ServiceStream stream) {
+        return switch (stream) {
+            case GENERAL -> "Acute Episodic Care";
+            case CHRONIC_CARE -> "Chronic Care";
+            case MATERNAL_CHILD -> "Maternal & Child Health";
+            case OCCUPATIONAL_HEALTH -> "Occupational Health";
+        };
+    }
+
+    @GetMapping("/api/v1/admin/classification-reasons")
+    public ResponseEntity<Map<String, Object>> allClassificationReasons() {
+        requireOrgAdmin();
+        var items = classificationReasonRepository.findAll().stream()
+                .map(r -> new AdminClassificationReasonResponse(r.getId(), r.getServiceStream(), r.getReasonCode(), r.getLabel(), r.isActive(), r.getSortOrder()))
+                .toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    @PostMapping("/api/v1/admin/classification-reasons")
+    public ResponseEntity<AdminClassificationReasonResponse> createClassificationReason(@Valid @RequestBody ClassificationReasonRequest request) {
+        requireOrgAdmin();
+        var saved = classificationReasonRepository.save(new ClassificationReason(request.serviceStream(), request.reasonCode(), request.label(), request.sortOrder()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(AdminClassificationReasonResponse.from(saved));
+    }
+
+    @PatchMapping("/api/v1/admin/classification-reasons/{id}")
+    public ResponseEntity<AdminClassificationReasonResponse> updateClassificationReason(@PathVariable UUID id, @Valid @RequestBody ClassificationReasonUpdateRequest request) {
+        requireOrgAdmin();
+        var reason = classificationReasonRepository.findById(id).orElseThrow(() -> new InvalidConsultationException("Unknown classification reason."));
+        reason.update(request.label(), request.active(), request.sortOrder());
+        return ResponseEntity.ok(AdminClassificationReasonResponse.from(classificationReasonRepository.save(reason)));
+    }
+
+    private void requireOrgAdmin() { permissionService.requireAnyRole(Set.of("ORG_ADMIN"), "Only an organization administrator can maintain classification reasons."); }
 
     @PostMapping("/api/v1/consultations/{id}/diagnoses")
     public ResponseEntity<DiagnosisResponse> addDiagnosis(@PathVariable UUID id,
@@ -151,7 +234,7 @@ public class ConsultationController {
                 request.examinationNotes(), request.investigationsNotes(), request.treatmentPlan(), diagnoses,
                 request.outcome(), request.outcomeNotes(), request.amendmentReason(),
                 toPharmacyItems(request.pharmacyItems()), toPurchaseItems(request.purchaseItems()),
-                request.destinationFacilityId());
+                request.destinationFacilityId(), request.classificationReasonIds());
         Consultation amendment = consultationService.amend(id, cmd, staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(amendment));
     }
@@ -189,7 +272,7 @@ public class ConsultationController {
     private ConsultationResponse toResponse(Consultation c, Map<UUID, String> names) {
         var diagnoses = consultationService.getDiagnoses(c.getId()).stream().map(DiagnosisResponse::from).toList();
         var continuedFrom = consultationService.findContinuedFrom(c).map(this::toEarlierResponse).orElse(null);
-        return ConsultationResponse.from(c, diagnoses, names.get(c.getAuthorUserId()),
+        return ConsultationResponse.from(c, diagnoses, consultationService.getClassificationReasonIds(c.getId()), names.get(c.getAuthorUserId()),
                 c.getSignedByUserId() == null ? null : names.get(c.getSignedByUserId()), continuedFrom);
     }
 
@@ -216,7 +299,8 @@ public class ConsultationController {
     public record UpdateConsultationRequest(String relevantHistory, String currentMedications,
                                               @NotNull AllergyStatus allergyStatus, String allergyDetail,
                                               String examinationNotes, String investigationsNotes,
-                                              String treatmentPlan, @Size(max = 100000) String prescriptionDraft) {
+                                              String treatmentPlan, @Size(max = 100000) String prescriptionDraft,
+                                              Set<UUID> classificationReasonIds) {
     }
 
     // Both optional: only needed when the visit has no vitals on record.
@@ -261,7 +345,7 @@ public class ConsultationController {
                                             @NotBlank String amendmentReason,
                                             List<@Valid PharmacyItemRequest> pharmacyItems,
                                             List<@Valid PurchaseItemRequest> purchaseItems,
-                                            UUID destinationFacilityId) {
+                                            UUID destinationFacilityId, Set<UUID> classificationReasonIds) {
     }
 
     public record ReasonRequest(@NotBlank String reason) {
@@ -303,16 +387,36 @@ public class ConsultationController {
                                         ConsultationOutcome outcome, String outcomeNotes, Instant createdAt,
                                         Instant updatedAt, List<DiagnosisResponse> diagnoses,
                                         VitalsBypassReason vitalsBypassReason, String vitalsBypassNote,
-                                        String prescriptionDraft, EarlierConsultationResponse continuedFrom) {
-        static ConsultationResponse from(Consultation c, List<DiagnosisResponse> diagnoses, String authorName,
-                                          String signedByName, EarlierConsultationResponse continuedFrom) {
+                                        String prescriptionDraft, EarlierConsultationResponse continuedFrom,
+                                        Set<UUID> classificationReasonIds) {
+        static ConsultationResponse from(Consultation c, List<DiagnosisResponse> diagnoses,
+                                          Set<UUID> classificationReasonIds, String authorName, String signedByName,
+                                          EarlierConsultationResponse continuedFrom) {
             return new ConsultationResponse(c.getId(), c.getVisitId(), c.getStatus(),
                     c.getSupersedesConsultationId(), c.getAmendmentReason(), c.getAuthorUserId(), authorName,
                     c.getSignedByUserId(), signedByName, c.getSignedAt(), c.getRelevantHistory(),
                     c.getCurrentMedications(), c.getAllergyStatus(), c.getAllergyDetail(), c.getExaminationNotes(),
                     c.getInvestigationsNotes(), c.getTreatmentPlan(), c.getOutcome(), c.getOutcomeNotes(),
                     c.getCreatedAt(), c.getUpdatedAt(), diagnoses, c.getVitalsBypassReason(),
-                    c.getVitalsBypassNote(), c.getPrescriptionDraft(), continuedFrom);
+                    c.getVitalsBypassNote(), c.getPrescriptionDraft(), continuedFrom, classificationReasonIds);
         }
     }
+
+    public record ClassificationReasonResponse(UUID id, ServiceStream serviceStream, String serviceStreamLabel,
+                                               String reasonCode, String label, boolean active) {}
+    public record ClassificationReasonCatalogResponse(String title, String instruction,
+                                                       String acceptanceCriteria,
+                                                       List<ClassificationReasonResponse> items) {}
+    public record AdminClassificationReasonResponse(UUID id, ServiceStream serviceStream, String reasonCode,
+                                                     String label, boolean active, int sortOrder) {
+        static AdminClassificationReasonResponse from(ClassificationReason reason) {
+            return new AdminClassificationReasonResponse(reason.getId(), reason.getServiceStream(), reason.getReasonCode(), reason.getLabel(), reason.isActive(), reason.getSortOrder());
+        }
+    }
+    public record ClassificationReasonRequest(@NotNull ServiceStream serviceStream,
+                                               @NotBlank @Pattern(regexp = "[A-Z0-9_]{2,60}") String reasonCode,
+                                               @NotBlank @Size(max = 120) String label,
+                                               int sortOrder) {}
+    public record ClassificationReasonUpdateRequest(@NotBlank @Size(max = 120) String label,
+                                                     boolean active, int sortOrder) {}
 }

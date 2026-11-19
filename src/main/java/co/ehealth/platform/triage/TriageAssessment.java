@@ -43,6 +43,15 @@ public class TriageAssessment {
     @Column(name = "visit_id", nullable = false)
     private UUID visitId;
 
+    // Set only when these measurements were captured while a consultation
+    // draft was active for this visit. Earlier triage observations remain
+    // visit-linked and are not retroactively assigned to a consultation.
+    @Column(name = "consultation_id")
+    private UUID consultationId;
+
+    @Column(name = "age_months_at_capture")
+    private Integer ageMonthsAtCapture;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private TriageAssessmentStatus status;
@@ -85,31 +94,8 @@ public class TriageAssessment {
     private Integer spo2Percent;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "oxygen_support", nullable = false, length = 20)
-    private OxygenSupport oxygenSupport;
-
-    @Column(name = "oxygen_device")
-    private String oxygenDevice;
-
-    @Column(name = "oxygen_flow_lpm")
-    private Double oxygenFlowLpm;
-
-    @Enumerated(EnumType.STRING)
     @Column(length = 20)
     private Avpu avpu;
-
-    @Enumerated(EnumType.STRING)
-    @Column(length = 30)
-    private Mobility mobility;
-
-    @Column(name = "pain_score")
-    private Integer painScore;
-
-    @Column(name = "pain_scale")
-    private String painScale;
-
-    @Column(name = "presenting_complaint")
-    private String presentingComplaint;
 
     @Column(name = "out_of_range_confirmed", nullable = false)
     private boolean outOfRangeConfirmed;
@@ -172,9 +158,7 @@ public class TriageAssessment {
     public TriageAssessment(UUID visitId, boolean emergencySign, String emergencySignNote,
                              ScoringProfile scoringProfile, boolean profileManuallyConfirmed,
                              Integer respiratoryRate, Integer heartRate, Integer systolicBp, Integer diastolicBp,
-                             Double temperatureCelsius, Integer spo2Percent, OxygenSupport oxygenSupport,
-                             String oxygenDevice, Double oxygenFlowLpm, Avpu avpu, Mobility mobility,
-                             Integer painScore, String painScale, String presentingComplaint,
+                             Double temperatureCelsius, Integer spo2Percent, Avpu avpu,
                              boolean outOfRangeConfirmed, String validationWarnings,
                              Set<TriageDiscriminator> discriminators, Integer tewsScore, String scoringVersion,
                              TriageColour calculatedColour, TriageColour finalColour, UUID capturedByUserId,
@@ -191,14 +175,7 @@ public class TriageAssessment {
         this.diastolicBp = diastolicBp;
         this.temperatureCelsius = temperatureCelsius;
         this.spo2Percent = spo2Percent;
-        this.oxygenSupport = oxygenSupport;
-        this.oxygenDevice = oxygenDevice;
-        this.oxygenFlowLpm = oxygenFlowLpm;
         this.avpu = avpu;
-        this.mobility = mobility;
-        this.painScore = painScore;
-        this.painScale = painScale;
-        this.presentingComplaint = presentingComplaint;
         this.outOfRangeConfirmed = outOfRangeConfirmed;
         this.validationWarnings = validationWarnings;
         // EnumSet.copyOf() throws IllegalArgumentException on an EMPTY
@@ -247,6 +224,47 @@ public class TriageAssessment {
 
     public UUID getVisitId() {
         return visitId;
+    }
+
+    public UUID getConsultationId() {
+        return consultationId;
+    }
+
+    public void linkToConsultation(UUID consultationId) {
+        this.consultationId = consultationId;
+    }
+
+    public Integer getAgeMonthsAtCapture() { return ageMonthsAtCapture; }
+    public void setAgeMonthsAtCapture(Integer ageMonthsAtCapture) { this.ageMonthsAtCapture = ageMonthsAtCapture; }
+
+    // The classifications below are computed from the stored readings every time, never stored, so a rule
+    // change in VitalsClassifier applies to history too. Each is returned in brackets, e.g. "(Fever)".
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public String getTemperatureClassification() {
+        return VitalsClassifier.bracketed(VitalsClassifier.temperature(temperatureCelsius, ageMonthsAtCapture));
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public String getRespiratoryRateClassification() {
+        return VitalsClassifier.bracketed(VitalsClassifier.respiration(respiratoryRate, ageMonthsAtCapture));
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public String getBloodPressureClassification() {
+        return VitalsClassifier.bracketed(VitalsClassifier.bloodPressure(systolicBp, diastolicBp, ageMonthsAtCapture));
+    }
+
+    /**
+     * The ICD-10 codes this assessment points to, so the prescriber can prescribe against them:
+     * I10 from blood pressure, and the diabetes or hypoglycemia codes from blood glucose.
+     */
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public java.util.List<String> getIcd10Indications() {
+        java.util.LinkedHashSet<String> codes = new java.util.LinkedHashSet<>();
+        VitalsClassifier.Result bp = VitalsClassifier.bloodPressure(systolicBp, diastolicBp, ageMonthsAtCapture);
+        if (bp != null) codes.addAll(bp.icd10Codes());
+        if (additionalObservations != null) codes.addAll(additionalObservations.icd10Indications());
+        return java.util.List.copyOf(codes);
     }
 
     public TriageAssessmentStatus getStatus() {
@@ -301,36 +319,8 @@ public class TriageAssessment {
         return spo2Percent;
     }
 
-    public OxygenSupport getOxygenSupport() {
-        return oxygenSupport;
-    }
-
-    public String getOxygenDevice() {
-        return oxygenDevice;
-    }
-
-    public Double getOxygenFlowLpm() {
-        return oxygenFlowLpm;
-    }
-
     public Avpu getAvpu() {
         return avpu;
-    }
-
-    public Mobility getMobility() {
-        return mobility;
-    }
-
-    public Integer getPainScore() {
-        return painScore;
-    }
-
-    public String getPainScale() {
-        return painScale;
-    }
-
-    public String getPresentingComplaint() {
-        return presentingComplaint;
     }
 
     public boolean isOutOfRangeConfirmed() {

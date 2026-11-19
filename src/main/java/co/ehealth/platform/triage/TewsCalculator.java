@@ -19,7 +19,7 @@ public class TewsCalculator {
     // change — TriageAssessment.scoringVersion is copied from here at
     // capture time and never recalculated later, so a changed constant
     // here only affects assessments captured after the change.
-    public static final String SCORING_VERSION = "SATS-DRAFT-2026.2";
+    public static final String SCORING_VERSION = "SATS-DRAFT-2026.3";
 
     public record Result(Integer tewsScore, TriageColour calculatedColour) {
     }
@@ -31,7 +31,7 @@ public class TewsCalculator {
     // it should delay care while a form gets filled in.
     public Result calculate(boolean emergencySign, ScoringProfile profile, Integer respiratoryRate,
                              Integer heartRate, Integer systolicBp, Double temperatureCelsius, Avpu avpu,
-                             Mobility mobility, Set<TriageDiscriminator> discriminators, AdditionalObservations additional) {
+                             Set<TriageDiscriminator> discriminators, AdditionalObservations additional) {
         if (emergencySign || (additional != null && additional.glucoseMmolL != null && additional.glucoseMmolL < 3)) {
             return new Result(null, TriageColour.RED);
         }
@@ -49,7 +49,7 @@ public class TewsCalculator {
         }
 
         int score = scoreRespiratoryRate(respiratoryRate) + scoreHeartRate(heartRate) + scoreSystolicBp(systolicBp)
-                + scoreTemperature(temperatureCelsius) + scoreAvpu(avpu) + scoreMobility(mobility)
+                + scoreTemperature(temperatureCelsius) + scoreAvpu(avpu)
                 + (additional != null && Boolean.TRUE.equals(additional.traumaPresent) ? 1 : 0);
         TriageColour tewsColour = colourForScore(score);
         if (avpu != Avpu.ALERT && discriminatorColour.compareTo(TriageColour.ORANGE) < 0)
@@ -87,14 +87,6 @@ public class TewsCalculator {
 
     private int scoreAvpu(Avpu avpu) {
         return switch (avpu) { case ALERT -> 0; case CONFUSED -> 2; case VOICE -> 1; case PAIN -> 2; case UNRESPONSIVE -> 3; };
-    }
-
-    private int scoreMobility(Mobility mobility) {
-        return switch (mobility) {
-            case WALKING -> 0;
-            case MOBILE_WITH_ASSISTANCE -> 1;
-            case IMMOBILE -> 2;
-        };
     }
 
     private TriageColour colourForScore(int score) {
