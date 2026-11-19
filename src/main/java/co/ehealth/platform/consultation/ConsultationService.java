@@ -19,6 +19,7 @@ import co.ehealth.platform.triage.TriageAssessmentRepository;
 import co.ehealth.platform.visit.Visit;
 import co.ehealth.platform.visit.VisitNotFoundException;
 import co.ehealth.platform.visit.VisitRepository;
+import co.ehealth.platform.visit.ServiceStream;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.PageRequest;
@@ -141,6 +142,22 @@ public class ConsultationService {
     @Transactional
     public Consultation createDraft(UUID visitId, UUID staffUserId, VitalsBypassReason bypassReason,
                                     String bypassNote, UUID continueFromConsultationId) {
+        return createDraft(visitId, staffUserId, bypassReason, bypassNote, continueFromConsultationId, null, null);
+    }
+
+    @Transactional
+    public Consultation createDraft(UUID visitId, UUID staffUserId, VitalsBypassReason bypassReason,
+                                    String bypassNote, UUID continueFromConsultationId,
+                                    ServiceReasonCode serviceReasonCode, String serviceReasonNote) {
+        return createDraft(visitId, staffUserId, bypassReason, bypassNote, continueFromConsultationId,
+                serviceReasonCode, serviceReasonNote, null);
+    }
+
+    @Transactional
+    public Consultation createDraft(UUID visitId, UUID staffUserId, VitalsBypassReason bypassReason,
+                                    String bypassNote, UUID continueFromConsultationId,
+                                    ServiceReasonCode serviceReasonCode, String serviceReasonNote,
+                                    ArtPathwayCode artPathwayCode) {
         requireDraftAccess();
         Visit visit = visitRepository.findById(visitId).orElseThrow(VisitNotFoundException::new);
         Patient patient = patientService.get(visit.requirePatientId());
@@ -175,7 +192,11 @@ public class ConsultationService {
             }
         }
 
+        String normalizedServiceReasonNote = validateServiceReason(visit, serviceReasonCode, serviceReasonNote,
+                artPathwayCode);
         Consultation consultation = new Consultation(visitId, staffUserId, clock.instant());
+        consultation.recordServiceReason(serviceReasonCode, normalizedServiceReasonNote);
+        consultation.recordArtPathway(artPathwayCode);
         if (!hasVitals) {
             consultation.recordVitalsBypass(bypassReason, note == null || note.isEmpty() ? null : note);
         }
@@ -189,6 +210,40 @@ public class ConsultationService {
         auditLogService.append(staffUserId, visit.getFacilityId(), "CONSULTATION_DRAFT_CREATED", "Consultation",
                 consultation.getId().toString(), null, createdDetails(hasVitals, bypassReason, note, earlier));
         return consultation;
+    }
+
+    private static String validateServiceReason(Visit visit, ServiceReasonCode reasonCode, String reasonNote,
+                                                ArtPathwayCode artPathwayCode) {
+        String note = reasonNote == null ? null : reasonNote.trim();
+        if (visit.getServiceStream() != ServiceStream.CHRONIC_CARE) {
+            if (reasonCode != null || StringUtils.hasText(note) || artPathwayCode != null) {
+                throw new InvalidConsultationException("A service reason is only available for chronic care visits.");
+            }
+            return null;
+        }
+        if (artPathwayCode != null && reasonCode != ServiceReasonCode.ART) {
+            throw new InvalidConsultationException("An ART pathway can only be selected for the ART reason.");
+        }
+        if (reasonCode == ServiceReasonCode.ART && artPathwayCode == null) {
+            throw new InvalidConsultationException("Choose an ART visit type before starting this consultation.");
+        }
+        if (reasonCode == null) {
+            throw new InvalidConsultationException("Choose a reason for this chronic care consultation.");
+        }
+        if (reasonCode == ServiceReasonCode.OTHER) {
+            if (note == null || note.length() < MIN_BYPASS_NOTE_LENGTH) {
+                throw new InvalidConsultationException("Explain the other reason (at least "
+                        + MIN_BYPASS_NOTE_LENGTH + " characters).");
+            }
+            if (note.length() > 300) {
+                throw new InvalidConsultationException("The other reason must be 300 characters or fewer.");
+            }
+            return note;
+        }
+        if (StringUtils.hasText(note)) {
+            throw new InvalidConsultationException("A note is only accepted for the OTHER reason.");
+        }
+        return null;
     }
 
     private static String createdDetails(boolean hasVitals, VitalsBypassReason bypassReason, String note,
@@ -289,6 +344,21 @@ public class ConsultationService {
         if (cmd.prescriptionDraft() != null) {
             consultation.savePrescriptionDraft(cmd.prescriptionDraft().isBlank() ? null : cmd.prescriptionDraft());
         }
+        consultationRepository.save(consultation);
+        return consultation;
+    }
+
+    @Transactional
+    public Consultation updateServiceReason(UUID id, ServiceReasonCode reasonCode, String reasonNote,
+                                            ArtPathwayCode artPathwayCode) {
+        requireDraftAccess();
+        Consultation consultation = findConsultation(id);
+        requireDraft(consultation);
+        Visit visit = visitRepository.findById(consultation.getVisitId()).orElseThrow(VisitNotFoundException::new);
+        String normalizedNote = validateServiceReason(visit, reasonCode, reasonNote, artPathwayCode);
+        consultation.recordServiceReason(reasonCode, normalizedNote);
+        consultation.recordArtPathway(artPathwayCode);
+        consultation.touchUpdatedAt(clock.instant());
         consultationRepository.save(consultation);
         return consultation;
     }
@@ -419,6 +489,8 @@ public class ConsultationService {
 
         Instant now = clock.instant();
         Consultation amendment = new Consultation(original.getVisitId(), staffUserId, now);
+        amendment.recordServiceReason(original.getServiceReasonCode(), original.getServiceReasonNote());
+        amendment.recordArtPathway(original.getArtPathwayCode());
         amendment.updateFields(cmd.relevantHistory(), cmd.currentMedications(), cmd.allergyStatus(),
                 cmd.allergyDetail(), cmd.examinationNotes(), cmd.investigationsNotes(), cmd.treatmentPlan(), now);
         consultationRepository.save(amendment);

@@ -23,6 +23,8 @@ public interface VisitRepository extends JpaRepository<Visit, UUID> {
     // vitals list already reads most-recent-first).
     List<Visit> findByPatientIdOrderByVisitDateTimeDesc(UUID patientId);
 
+    Optional<Visit> findFirstByPatientIdOrderByVisitDateTimeDescIdDesc(UUID patientId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT v FROM Visit v WHERE v.id = :id")
     Optional<Visit> findByIdForUpdate(@Param("id") UUID id);

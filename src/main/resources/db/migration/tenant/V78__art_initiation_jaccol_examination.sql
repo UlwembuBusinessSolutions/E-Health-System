@@ -1,0 +1,22 @@
+CREATE TABLE art_initiation_jaccol_examination (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    visit_id UUID NOT NULL UNIQUE REFERENCES visits(id),
+    j_status VARCHAR(8) CHECK (j_status IS NULL OR j_status IN ('PRESENT', 'ABSENT')),
+    j_comment TEXT,
+    a_status VARCHAR(8) CHECK (a_status IS NULL OR a_status IN ('PRESENT', 'ABSENT')),
+    a_comment TEXT,
+    c1_status VARCHAR(8) CHECK (c1_status IS NULL OR c1_status IN ('PRESENT', 'ABSENT')),
+    c1_comment TEXT,
+    c2_status VARCHAR(8) CHECK (c2_status IS NULL OR c2_status IN ('PRESENT', 'ABSENT')),
+    c2_comment TEXT,
+    o_status VARCHAR(8) CHECK (o_status IS NULL OR o_status IN ('PRESENT', 'ABSENT')),
+    o_comment TEXT,
+    l_status VARCHAR(8) CHECK (l_status IS NULL OR l_status IN ('PRESENT', 'ABSENT')),
+    l_comment TEXT,
+    other_comment TEXT,
+    notes TEXT,
+    created_by_user_id UUID NOT NULL,
+    updated_by_user_id UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
