@@ -21,6 +21,8 @@ public interface PharmacyProductRepository extends JpaRepository<PharmacyProduct
     @Query(value = "SELECT * FROM pharmacy_products WHERE code_normalized = UPPER(TRIM(:code))", nativeQuery = true)
     Optional<PharmacyProduct> findByCodeNormalized(@Param("code") String code);
 
+    List<PharmacyProduct> findByActiveTrueAndAtcCodeIsNotNullOrderByDisplayNameAsc();
+
     // Batched SKU lookup for opening-stock validation — one query for the
     // whole sheet instead of one per row. Callers pass upper-cased, trimmed codes.
     @Query(value = "SELECT * FROM pharmacy_products WHERE code_normalized IN (:codes)", nativeQuery = true)

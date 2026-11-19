@@ -43,6 +43,9 @@ public class TriageAssessment {
     @Column(name = "visit_id", nullable = false)
     private UUID visitId;
 
+    @Column(name = "age_months_at_capture")
+    private Integer ageMonthsAtCapture;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private TriageAssessmentStatus status;
@@ -247,6 +250,39 @@ public class TriageAssessment {
 
     public UUID getVisitId() {
         return visitId;
+    }
+
+    public Integer getAgeMonthsAtCapture() { return ageMonthsAtCapture; }
+    public void setAgeMonthsAtCapture(Integer ageMonthsAtCapture) { this.ageMonthsAtCapture = ageMonthsAtCapture; }
+
+    // The classifications below are computed from the stored readings every time, never stored, so a rule
+    // change in VitalsClassifier applies to history too. Each is returned in brackets, e.g. "(Fever)".
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public String getTemperatureClassification() {
+        return VitalsClassifier.bracketed(VitalsClassifier.temperature(temperatureCelsius, ageMonthsAtCapture));
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public String getRespiratoryRateClassification() {
+        return VitalsClassifier.bracketed(VitalsClassifier.respiration(respiratoryRate, ageMonthsAtCapture));
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public String getBloodPressureClassification() {
+        return VitalsClassifier.bracketed(VitalsClassifier.bloodPressure(systolicBp, diastolicBp, ageMonthsAtCapture));
+    }
+
+    /**
+     * The ICD-10 codes this assessment points to, so the prescriber can prescribe against them:
+     * I10 from blood pressure, and the diabetes or hypoglycemia codes from blood glucose.
+     */
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.READ_ONLY)
+    public java.util.List<String> getIcd10Indications() {
+        java.util.LinkedHashSet<String> codes = new java.util.LinkedHashSet<>();
+        VitalsClassifier.Result bp = VitalsClassifier.bloodPressure(systolicBp, diastolicBp, ageMonthsAtCapture);
+        if (bp != null) codes.addAll(bp.icd10Codes());
+        if (additionalObservations != null) codes.addAll(additionalObservations.icd10Indications());
+        return java.util.List.copyOf(codes);
     }
 
     public TriageAssessmentStatus getStatus() {

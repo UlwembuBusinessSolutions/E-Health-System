@@ -245,7 +245,7 @@ public class EmailService {
                         + codeBox(esc(code), "Expires in " + codeTtlMinutes + " minutes")
                         + muted("If you didn&rsquo;t start this registration, you can ignore this email."),
                 footer(FooterAudience.PATIENT));
-        send(toEmail, subject, body, html);
+        send(toEmail, subject, body, html, true);
     }
 
     // Fired once per PlatformOperatorService.resetPassword() call — the
@@ -442,6 +442,11 @@ public class EmailService {
     }
 
     private void send(String toEmail, String subject, String textBody, String htmlBody) {
+        send(toEmail, subject, textBody, htmlBody, false);
+    }
+
+    private void send(String toEmail, String subject, String textBody, String htmlBody,
+                      boolean requireSuccessfulDelivery) {
         // Resolved here, on the request thread, not inside
         // EmailDeliveryWorker — TenantContext is a ThreadLocal, so it's only
         // readable before the @Async hop, and only some callers even have a
@@ -473,7 +478,13 @@ public class EmailService {
         // mode this split exists to remove.
         MailOverride mailOverride = override.map(creds ->
                 new MailOverride(creds.host(), creds.port(), creds.username(), creds.password())).orElse(null);
-        deliveryWorker.deliver(toEmail, subject, textBody, htmlBody, effectiveFrom, mailOverride);
+        if (requireSuccessfulDelivery) {
+            if (!deliveryWorker.deliverNow(toEmail, subject, textBody, htmlBody, effectiveFrom, mailOverride)) {
+                throw new EmailDeliveryFailedException();
+            }
+        } else {
+            deliveryWorker.deliver(toEmail, subject, textBody, htmlBody, effectiveFrom, mailOverride);
+        }
     }
 
     // Local-dev/testing aid: every outbound email is written to disk BEFORE

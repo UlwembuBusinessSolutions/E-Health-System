@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.util.stream.Collectors;
 
 @Service
@@ -51,6 +52,13 @@ public class PrescriptionService {
     private final PrescriptionRollup prescriptionRollup;
     private final PrescriptionPurchaseItemRepository purchaseItemRepository;
     private final PrescribingStockService prescribingStock;
+    // Setter-injected so the existing constructor signature stays as it was.
+    private AllergyAtcGuard allergyGuard;
+
+    @Autowired
+    void setAllergyGuard(AllergyAtcGuard allergyGuard) {
+        this.allergyGuard = allergyGuard;
+    }
 
     public PrescriptionService(PrescriptionRepository prescriptionRepository,
                                 PrescriptionItemRepository prescriptionItemRepository,
@@ -98,6 +106,14 @@ public class PrescriptionService {
         List<PrescriptionPurchaseItemInput> purchaseInputs = cmd.purchaseItems();
         if (cmd.items().isEmpty() && purchaseInputs.isEmpty()) {
             throw new PharmacyValidationException("A prescription needs at least one medicine.");
+        }
+        // The allergy rule from the story: a medicine whose ATC code shares its first 5 characters with a
+        // recorded allergy cannot be prescribed. Checked here, inside the sign transaction.
+        if (allergyGuard != null) {
+            List<UUID> productIds = new java.util.ArrayList<>();
+            cmd.items().forEach(item -> productIds.add(item.productId()));
+            purchaseInputs.forEach(item -> productIds.add(item.productId()));
+            allergyGuard.requireSafe(cmd.consultationId(), productIds);
         }
         // The pharmacy may only be asked for what it holds: checked here, inside the
         // sign transaction, so a prescription can never leave the consulting room
