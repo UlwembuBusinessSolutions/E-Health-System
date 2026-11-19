@@ -21,6 +21,12 @@ import type { ServiceStream } from "@/shared/api/visits";
 // protection without losing that one-time storage clone.
 export function printQueueTicket(tokenId: string, serviceStream?: ServiceStream): void {
   const query = serviceStream ? `?serviceStream=${encodeURIComponent(serviceStream)}` : "";
-  const tab = window.open(`/print/ticket/${tokenId}${query}`, "ticket-print", "width=380,height=640");
-  if (tab) tab.opener = null;
+  const url = `/print/ticket/${tokenId}${query}`;
+  const tab = window.open(url, "_blank", "popup,width=380,height=640");
+  if (tab) {
+    tab.focus();
+    tab.opener = null;
+  } else {
+    window.location.assign(url);
+  }
 }

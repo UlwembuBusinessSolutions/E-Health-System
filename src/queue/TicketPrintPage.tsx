@@ -89,9 +89,21 @@ export function TicketPrintPage() {
       <style>{`
         @media print {
           @page { size: 80mm auto; margin: 4mm; }
+          body { background: white !important; }
+          body * { visibility: hidden !important; }
+          .queue-ticket-print, .queue-ticket-print * { visibility: visible !important; }
+          .queue-ticket-print {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 80mm;
+            max-width: 80mm;
+            margin: 0;
+            padding: 0;
+          }
         }
       `}</style>
-      <div className="w-[80mm] max-w-full rounded-xl border border-border-subtle bg-white p-4 text-black shadow-card print:rounded-none print:border-0 print:shadow-none">
+      <div className="queue-ticket-print w-[80mm] max-w-full rounded-xl border border-border-subtle bg-white p-4 text-black shadow-card print:rounded-none print:border-0 print:shadow-none">
         <div className="flex flex-col items-center gap-1 border-b border-dashed border-black/25 pb-3 text-center">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-black/70">
             {facility?.name ?? "Queue Ticket"}

@@ -33,6 +33,7 @@ import {
 } from "@/shared/api/queue";
 import { getFacilities } from "@/shared/api/facilities";
 import { printQueueTicket } from "@/shared/lib/printTicket";
+import { announceQueueToken } from "@/shared/lib/queueAnnouncement";
 import { ApiError } from "@/shared/api/client";
 import { Card } from "@/shared/components/Card";
 import { Button } from "@/shared/components/Button";
@@ -41,7 +42,6 @@ import { RowActionsMenu, type RowActionItem } from "@/shared/components/RowActio
 import { StatusPill, type PillTone } from "@/shared/components/StatusPill";
 import { Switch } from "@/shared/components/Switch";
 
-const SPEAKER_STORAGE_KEY = "queue.speakerEnabled";
 const ALL_STATUSES: TokenStatus[] = ["ISSUED", "CALLED", "MISSED", "COMPLETED", "CANCELLED"];
 
 // Priority-escalation reasons — why someone should be bumped up (boost) or
@@ -106,49 +106,6 @@ const STATUS_TONE: Record<TokenStatus, PillTone> = {
   COMPLETED: "success",
   CANCELLED: "neutral",
 };
-
-// A short two-tone chime, synthesised rather than shipped as an audio file
-// — there's nothing to fetch, cache, or fail to load. Best-effort only: if
-// the Web Audio API isn't available, the spoken announcement below still
-// carries the information on its own.
-function playChime() {
-  try {
-    const AudioContextClass = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
-    let t = ctx.currentTime;
-    for (const freq of [880, 1108.73]) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.2, t + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(t);
-      osc.stop(t + 0.28);
-      t += 0.22;
-    }
-  } catch {
-    // No Web Audio support — the chime is a nicety, not a requirement.
-  }
-}
-
-// RECQ-US-015 (queue-appointments-plan.md §3.2) — the cheapest version of
-// the speaker call-out: browser SpeechSynthesis through whatever speakers
-// are attached to the machine running this page, in practice a kiosk PC
-// wired to the waiting-room PA. No Station entity exists yet
-// (RECQ-US-012), so the announcement names reception rather than a
-// specific counter.
-function announce(tokenNumber: number) {
-  playChime();
-  if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(`Token ${tokenNumber}. Please proceed to reception.`);
-  utterance.rate = 0.95;
-  window.speechSynthesis.speak(utterance);
-}
 
 // One row's worth of RowActionItems, status-gated the same way the old
 // inline button row was — each condition below matches exactly what used
@@ -265,7 +222,7 @@ export function QueuePage() {
   const [pageSize, setPageSize] = useState(25);
   const [speakerEnabled, setSpeakerEnabled] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(SPEAKER_STORAGE_KEY) !== "off";
+      return localStorage.getItem("queue.speakerEnabled") !== "off";
     } catch {
       return true;
     }
@@ -303,7 +260,7 @@ export function QueuePage() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(SPEAKER_STORAGE_KEY, speakerEnabled ? "on" : "off");
+      localStorage.setItem("queue.speakerEnabled", speakerEnabled ? "on" : "off");
     } catch {
       // Best-effort persistence — the toggle still works for this session
       // even if storage is unavailable (private browsing, etc.).
@@ -345,7 +302,7 @@ export function QueuePage() {
     onMutate: () => setActionError(null),
     onSuccess: (entry) => {
       setJustCalled(entry);
-      if (speakerEnabled) announce(entry.token.tokenNumber);
+      if (speakerEnabled) announceQueueToken(entry.token.tokenNumber);
       invalidateQueue();
     },
     onError: (error) => {
@@ -545,7 +502,7 @@ export function QueuePage() {
                 variant="secondary"
                 size="lg"
                 icon={<Repeat className="size-4" aria-hidden />}
-                onClick={() => announce(justCalled.token.tokenNumber)}
+                onClick={() => announceQueueToken(justCalled.token.tokenNumber)}
                 title="Replay the speaker announcement"
               >
                 Replay
@@ -832,7 +789,7 @@ export function QueuePage() {
                               onBoost: () => openReasonAction(entry.token.id, "boost"),
                               onVitals: () =>
                                 navigate(`/app/patients/${entry.patientId}?visitId=${entry.token.visitId}`),
-                              onReplayCall: () => announce(entry.token.tokenNumber),
+                              onReplayCall: () => announceQueueToken(entry.token.tokenNumber),
                               onComplete: () => completeMutation.mutate(entry.token.id),
                               completeLoading:
                                 completeMutation.isPending && completeMutation.variables === entry.token.id,

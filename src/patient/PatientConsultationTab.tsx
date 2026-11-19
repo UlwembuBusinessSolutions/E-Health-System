@@ -10,11 +10,14 @@ import { Input } from "@/shared/components/Input";
 import { Select } from "@/shared/components/Select";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { ApiError } from "@/shared/api/client";
+import { getVisit, SERVICE_STREAM_DETAILS } from "@/shared/api/visits";
 import { getLatestTriage } from "@/shared/api/triage";
 import { getFacilities } from "@/shared/api/facilities";
+import { Modal } from "@/pharmacy/components/Modal";
 import {
   addConsultationDiagnosis,
   amendConsultation,
+  ART_PATHWAY_LABELS,
   createConsultationDraft,
   getContinuableConsultation,
   getConsultationHistory,
@@ -22,18 +25,43 @@ import {
   markConsultationEnteredInError,
   removeConsultationDiagnosis,
   signConsultation,
+  updateConsultationServiceReason,
   updateConsultationDraft,
   type AllergyStatus,
+  type ArtPathwayCode,
   type Consultation,
   type ConsultationDiagnosis,
   type ConsultationOutcome,
   type DiagnosisCertainty,
   type EarlierConsultation,
+  type ConsultationServiceReason,
   type PharmacyItemPayload,
   type PurchaseItemPayload,
+  SERVICE_REASON_LABELS,
+  type ServiceReasonCode,
   type VitalsBypass,
 } from "@/shared/api/consultations";
 import { PatientConsultationList } from "./PatientConsultationList";
+import { LaboratoryInvestigationForm } from "./LaboratoryInvestigationForm";
+import { ArtLongitudinalRecordForm } from "./ArtLongitudinalRecordForm";
+import { ArtInitiationLongitudinalRecordForm } from "./ArtInitiationLongitudinalRecordForm";
+import { ArtInitiationPriorHaartHistoryForm } from "./ArtInitiationPriorHaartHistoryForm";
+import { ArtInitiationTbScreeningForm } from "./ArtInitiationTbScreeningForm";
+import { ArtInitiationMedicalHistoryForm } from "./ArtInitiationMedicalHistoryForm";
+import { ArtInitiationJaccolExaminationForm } from "./ArtInitiationJaccolExaminationForm";
+import { ArtInitiationMusculoskeletalForm } from "./ArtInitiationMusculoskeletalForm";
+import { ArtInitiationMentalStateExaminationForm } from "./ArtInitiationMentalStateExaminationForm";
+import { ArtInitiationCentralNervousSystemForm } from "./ArtInitiationCentralNervousSystemForm";
+import { ArtInitiationSkinExaminationForm } from "./ArtInitiationSkinExaminationForm";
+import { ArtInitiationEntExaminationForm } from "./ArtInitiationEntExaminationForm";
+import { ArtInitiationHealthEducationForm } from "./ArtInitiationHealthEducationForm";
+import { ArtInitiationReferralConfirmationForm } from "./ArtInitiationReferralConfirmationForm";
+import { ArtInitiationAdditionalClinicalNotesForm } from "./ArtInitiationAdditionalClinicalNotesForm";
+import { ArtInitiationClinicianDetailsForm } from "./ArtInitiationClinicianDetailsForm";
+import { ArtInitiationSummaryForm } from "./ArtInitiationSummaryForm";
+import { ArtEyesExaminationForm } from "./ArtEyesExaminationForm";
+import { ArtReproductiveHealthForm } from "./ArtReproductiveHealthForm";
+import { ArtStage1ConditionsForm } from "./ArtStage1ConditionsForm";
 import { ContinuedFromNote, ContinueConsultation } from "./ContinueConsultation";
 import { DiagnosisSearchInput, type DiagnosisChoice } from "./DiagnosisSearchInput";
 import { PrescriptionWorkspace } from "@/prescribing/PrescriptionWorkspace";
@@ -50,6 +78,32 @@ const CERTAINTY_OPTIONS: { value: DiagnosisCertainty; label: string }[] = [
   { value: "PROVISIONAL", label: "Provisional" },
   { value: "CONFIRMED", label: "Confirmed" },
 ];
+
+const SERVICE_REASON_CODES: ServiceReasonCode[] = [
+  "ART",
+  "TUBERCULOSIS",
+  "OTHER",
+  "MENTAL_HEALTH",
+  "ASTHMA",
+  "HYPERTENSION",
+  "EPILEPSY",
+  "DIABETES_MELLITUS",
+];
+
+const SERVICE_REASON_OPTIONS = SERVICE_REASON_CODES.map((value) => ({
+  value,
+  label: SERVICE_REASON_LABELS[value],
+}));
+
+const MIN_SERVICE_REASON_NOTE_LENGTH = 3;
+
+const ART_PATHWAY_OPTIONS: { value: ArtPathwayCode; label: string }[] = [
+  { value: "ADULT_ART_INITIATION", label: ART_PATHWAY_LABELS.ADULT_ART_INITIATION },
+  { value: "ADULT_ART_FOLLOW_UP_VISIT", label: ART_PATHWAY_LABELS.ADULT_ART_FOLLOW_UP_VISIT },
+];
+
+const ART_INITIATION_SECTIONS = ["SUBJECTIVE", "OBJECTIVE", "ASSESSMENT", "PLAN"] as const;
+type ArtInitiationSection = (typeof ART_INITIATION_SECTIONS)[number];
 
 // What "send to pharmacy" carries: medicines the pharmacy hands over, and ones the patient buys.
 interface PrescribedMedicines {
@@ -94,15 +148,26 @@ function outcomeLabel(outcome: ConsultationOutcome | null): string {
 export function PatientConsultationTab({
   patientId,
   visitId,
+  pendingServiceReasons,
+  onConfirmServiceReason,
+  visitLookupLoading = false,
+  visitLookupError = false,
+  onRetryVisitLookup,
   onTakeVitals,
 }: {
   patientId: string;
   visitId: string | null;
+  pendingServiceReasons: Record<string, { confirmed: boolean; serviceReason?: ConsultationServiceReason }>;
+  onConfirmServiceReason: (visitId: string, serviceReason: ConsultationServiceReason | undefined) => void;
+  visitLookupLoading?: boolean;
+  visitLookupError?: boolean;
+  onRetryVisitLookup?: () => void;
   onTakeVitals?: () => void;
 }) {
   // Set when the doctor opens a consultation from another visit.
   const [openedVisit, setOpenedVisit] = useState<{ visitId: string; label: string } | null>(null);
   const shownVisitId = openedVisit?.visitId ?? visitId;
+  const shownVisitReason = shownVisitId ? pendingServiceReasons[shownVisitId] : undefined;
 
   return (
     <>
@@ -117,21 +182,45 @@ export function PatientConsultationTab({
         </div>
       )}
       {shownVisitId ? (
-        <VisitConsultation key={shownVisitId} visitId={shownVisitId} onTakeVitals={openedVisit ? undefined : onTakeVitals} />
+        <VisitConsultation
+          key={shownVisitId}
+          visitId={shownVisitId}
+          serviceReasonConfirmed={shownVisitReason?.confirmed ?? false}
+          pendingServiceReason={shownVisitReason?.serviceReason}
+          onConfirmServiceReason={(serviceReason) => onConfirmServiceReason(shownVisitId, serviceReason)}
+          onTakeVitals={openedVisit ? undefined : onTakeVitals}
+        />
       ) : (
         <Card className="mb-6 p-6">
           <h2 className="mb-3 text-[14.5px] font-semibold text-text-primary">Consultation</h2>
           <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
-            <p className="text-[13.5px] text-text-secondary">
-              Check in at Reception before beginning a consultation. Earlier consultations are listed below.
-            </p>
-            <Link
-              to="/app/reception"
-              state={{ registeredPatientId: patientId }}
-              className="mt-3 inline-flex text-[13px] font-semibold text-brand-600 hover:underline"
-            >
-              Continue at Reception
-            </Link>
+            {visitLookupLoading ? (
+              <p className="text-[13.5px] text-text-secondary">Checking for an active queue visit…</p>
+            ) : visitLookupError ? (
+              <>
+                <p role="alert" className="text-[13.5px] text-danger-600">
+                  Couldn’t check whether this patient already has an active queue visit. Try again before checking in to avoid creating a duplicate visit.
+                </p>
+                {onRetryVisitLookup && (
+                  <Button variant="secondary" className="mt-3" onClick={onRetryVisitLookup}>
+                    Try again
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-[13.5px] text-text-secondary">
+                  Check in at Reception before beginning a consultation. Earlier consultations are listed below.
+                </p>
+                <Link
+                  to="/app/reception"
+                  state={{ registeredPatientId: patientId }}
+                  className="mt-3 inline-flex text-[13px] font-semibold text-brand-600 hover:underline"
+                >
+                  Continue at Reception
+                </Link>
+              </>
+            )}
           </div>
         </Card>
       )}
@@ -148,12 +237,37 @@ export function PatientConsultationTab({
   );
 }
 
-function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeVitals?: () => void }) {
+function VisitConsultation({
+  visitId,
+  serviceReasonConfirmed,
+  pendingServiceReason,
+  onConfirmServiceReason,
+  onTakeVitals,
+}: {
+  visitId: string;
+  serviceReasonConfirmed: boolean;
+  pendingServiceReason?: ConsultationServiceReason;
+  onConfirmServiceReason: (serviceReason: ConsultationServiceReason | undefined) => void;
+  onTakeVitals?: () => void;
+}) {
   const queryClient = useQueryClient();
+  const [editingServiceReason, setEditingServiceReason] = useState(false);
+  const [selectedServiceReason, setSelectedServiceReason] = useState<ServiceReasonCode | "">(
+    pendingServiceReason?.serviceReasonCode ?? "",
+  );
+  const [serviceReasonNote, setServiceReasonNote] = useState(pendingServiceReason?.serviceReasonNote ?? "");
+  const [selectedArtPathway, setSelectedArtPathway] = useState<ArtPathwayCode | "">(
+    pendingServiceReason?.artPathwayCode ?? "",
+  );
+  const [serviceReasonError, setServiceReasonError] = useState<string | null>(null);
 
   const currentQuery = useQuery({
     queryKey: ["consultation-current", visitId],
     queryFn: () => getCurrentConsultation(visitId),
+  });
+  const visitQuery = useQuery({
+    queryKey: ["visit", visitId],
+    queryFn: () => getVisit(visitId),
   });
   const historyQuery = useQuery({
     queryKey: ["consultation-history", visitId],
@@ -165,6 +279,15 @@ function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeV
   });
 
   const noConsultationYet = currentQuery.isSuccess && currentQuery.data === null;
+  const chronicCareVisit = visitQuery.data?.serviceStream === "CHRONIC_CARE";
+  const serviceReasonModalOpen =
+    visitQuery.isSuccess &&
+    ((noConsultationYet && !serviceReasonConfirmed) || editingServiceReason);
+  const canConfirmServiceReason =
+    !chronicCareVisit ||
+    (selectedServiceReason !== "" &&
+      (selectedServiceReason !== "OTHER" || serviceReasonNote.trim().length >= MIN_SERVICE_REASON_NOTE_LENGTH) &&
+      (selectedServiceReason !== "ART" || selectedArtPathway !== ""));
   const continuableQuery = useQuery({
     queryKey: ["consultation-continuable", visitId],
     queryFn: () => getContinuableConsultation(visitId),
@@ -181,7 +304,7 @@ function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeV
   const [startError, setStartError] = useState<string | null>(null);
   const startConsultation = useMutation({
     mutationFn: ({ bypass, continueFrom }: { bypass?: VitalsBypass; continueFrom?: string }) =>
-      createConsultationDraft(visitId, bypass, continueFrom),
+      createConsultationDraft(visitId, bypass, continueFrom, pendingServiceReason),
     onSuccess: () => {
       setStartError(null);
       queryClient.invalidateQueries({ queryKey: ["consultation-current", visitId] });
@@ -195,6 +318,20 @@ function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeV
     },
   });
 
+  const updateReason = useMutation({
+    mutationFn: (reason: ConsultationServiceReason) => updateConsultationServiceReason(current!.id, reason),
+    onSuccess: () => {
+      setServiceReasonError(null);
+      setEditingServiceReason(false);
+      queryClient.invalidateQueries({ queryKey: ["consultation-current", visitId] });
+      queryClient.invalidateQueries({ queryKey: ["consultation-history", visitId] });
+      queryClient.invalidateQueries({ queryKey: ["patient-consultations"] });
+    },
+    onError: (error) => {
+      setServiceReasonError(error instanceof ApiError ? error.message : "Couldn't update the consultation reason. Try again.");
+    },
+  });
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["consultation-current", visitId] });
     queryClient.invalidateQueries({ queryKey: ["consultation-history", visitId] });
@@ -204,57 +341,235 @@ function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeV
 
   const current = currentQuery.data ?? null;
   const history = (historyQuery.data ?? []).filter((c) => c.id !== current?.id);
+  const streamDetails = visitQuery.data ? SERVICE_STREAM_DETAILS[visitQuery.data.serviceStream] : null;
+
+  function confirmServiceReason() {
+    if (!canConfirmServiceReason) return;
+    const nextServiceReason =
+      chronicCareVisit && selectedServiceReason
+        ? {
+            serviceReasonCode: selectedServiceReason,
+            serviceReasonNote: selectedServiceReason === "OTHER" ? serviceReasonNote.trim() : undefined,
+            artPathwayCode:
+              selectedServiceReason === "ART" && selectedArtPathway ? selectedArtPathway : undefined,
+          }
+        : undefined;
+    if (editingServiceReason && current && nextServiceReason) {
+      updateReason.mutate(nextServiceReason);
+      return;
+    }
+    onConfirmServiceReason(nextServiceReason);
+    setEditingServiceReason(false);
+  }
+
+  function openServiceReasonEditor() {
+    setSelectedServiceReason(current?.serviceReasonCode ?? pendingServiceReason?.serviceReasonCode ?? "");
+    setServiceReasonNote(current?.serviceReasonNote ?? pendingServiceReason?.serviceReasonNote ?? "");
+    setSelectedArtPathway(current?.artPathwayCode ?? pendingServiceReason?.artPathwayCode ?? "");
+    setServiceReasonError(null);
+    setEditingServiceReason(true);
+  }
 
   return (
-    <Card className="mb-6 p-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Stethoscope className="size-4 text-text-secondary" aria-hidden />
-          <h2 className="text-[14.5px] font-semibold text-text-primary">Consultation</h2>
+    <>
+      <Card className="mb-6 p-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Stethoscope className="size-4 text-text-secondary" aria-hidden />
+            <h2 className="text-[14.5px] font-semibold text-text-primary">Consultation</h2>
+          </div>
+          {current?.status === "SIGNED" && <StatusPill tone="success">Signed</StatusPill>}
+          {current?.status === "DRAFT" && <StatusPill tone="warning">Draft</StatusPill>}
         </div>
-        {current?.status === "SIGNED" && <StatusPill tone="success">Signed</StatusPill>}
-        {current?.status === "DRAFT" && <StatusPill tone="warning">Draft</StatusPill>}
-      </div>
 
-      {currentQuery.isLoading ? (
-        <p className="text-[13.5px] text-text-secondary">Loading…</p>
-      ) : !current ? (
-        continuableQuery.isLoading ? (
+        {current && chronicCareVisit && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-sunken px-3.5 py-2.5">
+            <p className="text-[13px] text-text-secondary">
+              Service reason:{" "}
+              <strong className="font-semibold text-text-primary">
+                {current.serviceReasonCode ? SERVICE_REASON_LABELS[current.serviceReasonCode] : "Not selected"}
+              </strong>
+              {current.serviceReasonNote && ` — ${current.serviceReasonNote}`}
+              {current.artPathwayCode && ` · ${ART_PATHWAY_LABELS[current.artPathwayCode]}`}
+            </p>
+            {current.status === "DRAFT" && (
+              <Button variant="secondary" size="md" onClick={openServiceReasonEditor}>
+                {current.serviceReasonCode ? "Change reason" : "Select reason"}
+              </Button>
+            )}
+          </div>
+        )}
+        {!current && chronicCareVisit && serviceReasonConfirmed && pendingServiceReason && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-sunken px-3.5 py-2.5">
+            <p className="text-[13px] text-text-secondary">
+              Selected service reason:{" "}
+              <strong className="font-semibold text-text-primary">
+                {SERVICE_REASON_LABELS[pendingServiceReason.serviceReasonCode]}
+              </strong>
+              {pendingServiceReason.serviceReasonNote && ` — ${pendingServiceReason.serviceReasonNote}`}
+              {pendingServiceReason.artPathwayCode &&
+                ` · ${ART_PATHWAY_LABELS[pendingServiceReason.artPathwayCode]}`}
+            </p>
+            <Button variant="secondary" size="md" onClick={openServiceReasonEditor}>
+              Change selection
+            </Button>
+          </div>
+        )}
+
+        {currentQuery.isLoading ? (
           <p className="text-[13.5px] text-text-secondary">Loading…</p>
+        ) : currentQuery.isError ? (
+          <div role="alert" className="flex flex-wrap items-center gap-3 text-[13.5px] text-danger-600">
+            <p>Couldn’t load this visit’s consultation.</p>
+            <Button variant="secondary" onClick={() => currentQuery.refetch()}>
+              Try again
+            </Button>
+          </div>
+        ) : !current ? (
+          visitQuery.isLoading ? (
+            <p className="text-[13.5px] text-text-secondary">Loading the visit’s care stream…</p>
+          ) : visitQuery.isError || !streamDetails ? (
+            <div role="alert" className="flex flex-wrap items-center gap-3 text-[13.5px] text-danger-600">
+              <p>Couldn’t load this visit’s care stream. A consultation cannot be started until it is available.</p>
+              <Button variant="secondary" onClick={() => visitQuery.refetch()}>
+                Try again
+              </Button>
+            </div>
+          ) : serviceReasonModalOpen ? (
+            <p className="text-[13.5px] text-text-secondary">Confirm the visit’s care stream to continue.</p>
+          ) : continuableQuery.isLoading ? (
+            <p className="text-[13.5px] text-text-secondary">Loading…</p>
+          ) : (
+            <ConsultationStart
+              earlier={continuableQuery.data ?? null}
+              panel={
+                <StartConsultationPanel
+                  vitalsMissing={triageQuery.isSuccess && triageQuery.data === null}
+                  loading={startConsultation.isPending}
+                  error={startError}
+                  onStart={(bypass) => startConsultation.mutate({ bypass })}
+                  onTakeVitals={onTakeVitals}
+                />
+              }
+              loading={startConsultation.isPending}
+              error={startError}
+              onContinue={(continueFrom) => startConsultation.mutate({ continueFrom })}
+            />
+          )
         ) : (
-          <ConsultationStart
-            earlier={continuableQuery.data ?? null}
-            panel={
-              <StartConsultationPanel
-                vitalsMissing={triageQuery.isSuccess && triageQuery.data === null}
-                loading={startConsultation.isPending}
-                error={startError}
-                onStart={(bypass) => startConsultation.mutate({ bypass })}
-                onTakeVitals={onTakeVitals}
-              />
-            }
-            loading={startConsultation.isPending}
-            error={startError}
-            onContinue={(continueFrom) => startConsultation.mutate({ continueFrom })}
-          />
-        )
-      ) : (
-        <>
-          {current.vitalsBypassReason && <VitalsSkippedNote consultation={current} />}
-          {current.continuedFrom && (
-            <ContinuedFromNote earlier={current.continuedFrom} vitals={carriedVitalsQuery.data ?? triageQuery.data ?? null} />
-          )}
-          <ConsultationRecord
-            key={current.id}
-            consultation={current}
-            presentingComplaint={triageQuery.data?.presentingComplaint ?? carriedVitalsQuery.data?.presentingComplaint ?? null}
-            onChanged={invalidate}
-          />
-        </>
-      )}
+          <>
+            {current.vitalsBypassReason && <VitalsSkippedNote consultation={current} />}
+            {current.continuedFrom && (
+              <ContinuedFromNote earlier={current.continuedFrom} vitals={carriedVitalsQuery.data ?? triageQuery.data ?? null} />
+            )}
+            <ConsultationRecord
+              key={current.id}
+              consultation={current}
+              presentingComplaint={triageQuery.data?.presentingComplaint ?? carriedVitalsQuery.data?.presentingComplaint ?? null}
+              onChanged={invalidate}
+            />
+          </>
+        )}
 
-      {history.length > 0 && <ConsultationHistorySection entries={history} />}
-    </Card>
+        {history.length > 0 && <ConsultationHistorySection entries={history} />}
+      </Card>
+      <Modal
+        open={serviceReasonModalOpen}
+        title={editingServiceReason ? "Change consultation reason" : "Confirm consultation service"}
+        description={
+          editingServiceReason
+            ? "Update the reason for this consultation. This changes the draft on the current visit."
+            : "The stream selected for this visit is shown below. Confirm it before starting the consultation."
+        }
+        dismissible={editingServiceReason && !updateReason.isPending}
+        onClose={() => {
+          setEditingServiceReason(false);
+          setServiceReasonError(null);
+        }}
+        footer={
+          <>
+            {editingServiceReason && (
+              <Button
+                variant="secondary"
+                disabled={updateReason.isPending}
+                onClick={() => setEditingServiceReason(false)}
+              >
+                Cancel
+              </Button>
+            )}
+            <Button
+              variant="primary"
+              loading={updateReason.isPending}
+              disabled={!canConfirmServiceReason}
+              onClick={confirmServiceReason}
+            >
+              {editingServiceReason ? "Save reason" : "Continue"}
+            </Button>
+          </>
+        }
+      >
+        {streamDetails && (
+          <div className="flex flex-col gap-4">
+            {serviceReasonError && (
+              <p role="alert" className="text-[13px] text-danger-600">{serviceReasonError}</p>
+            )}
+            <div className="rounded-lg border border-border-default bg-surface-sunken px-3.5 py-3">
+              <p className="text-[12px] font-medium uppercase tracking-wide text-text-secondary">Visit stream</p>
+              <p className="mt-1 text-[14px] font-semibold text-text-primary">{streamDetails.label}</p>
+            </div>
+            {chronicCareVisit && (
+              <>
+                <Select
+                  label="Reason for chronic care"
+                  placeholder="Select a reason"
+                  options={SERVICE_REASON_OPTIONS}
+                  value={selectedServiceReason}
+                  required
+                  onChange={(event) => {
+                    setSelectedServiceReason(event.target.value as ServiceReasonCode | "");
+                    setServiceReasonNote("");
+                    setSelectedArtPathway("");
+                  }}
+                />
+                {selectedServiceReason === "ART" && (
+                  <fieldset className="flex flex-col gap-2">
+                    <legend className="mb-1 text-[13px] font-medium text-text-primary">
+                      Select the ART visit type
+                    </legend>
+                    {ART_PATHWAY_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={selectedArtPathway === option.value}
+                        onClick={() => setSelectedArtPathway(option.value)}
+                        className={clsx(
+                          "min-h-12 rounded-lg border px-3.5 py-3 text-left text-[14px] font-medium transition-colors",
+                          selectedArtPathway === option.value
+                            ? "border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-100"
+                            : "border-border-strong bg-surface-raised text-text-primary hover:bg-surface-sunken",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </fieldset>
+                )}
+                {selectedServiceReason === "OTHER" && (
+                  <Input
+                    label="Explain the other reason"
+                    value={serviceReasonNote}
+                    onChange={(event) => setServiceReasonNote(event.target.value)}
+                    required
+                    maxLength={300}
+                    hint="Enter at least 3 characters."
+                  />
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
+    </>
   );
 }
 
@@ -640,6 +955,7 @@ function DraftView({
   const [outcomeNotes, setOutcomeNotes] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [activeArtSection, setActiveArtSection] = useState<ArtInitiationSection>("SUBJECTIVE");
   const saveErrorRef = useRef<HTMLParagraphElement>(null);
   // Set by any edit, so autosave only runs after the doctor changed something.
   const unsaved = useRef(false);
@@ -768,16 +1084,9 @@ function DraftView({
     },
   });
 
-  return (
+  const subjectiveSection = (
     <div className="flex flex-col gap-4">
       <PresentingComplaint value={presentingComplaint} />
-
-      {saveError && (
-        <p ref={saveErrorRef} role="alert" className="text-[13.5px] text-danger-600">
-          {saveError}
-        </p>
-      )}
-
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TextAreaField
           label="History & current medicines"
@@ -790,86 +1099,105 @@ function DraftView({
           onChange={(v) => set("currentMedications", v)}
         />
       </div>
-
       <AllergyStatusPicker
         value={fields.allergyStatus}
         detail={fields.allergyDetail}
         onChangeStatus={(v) => set("allergyStatus", v)}
         onChangeDetail={(v) => set("allergyDetail", v)}
       />
+    </div>
+  );
 
+  const objectiveSection = (
+    <div className="flex flex-col gap-4">
       <TextAreaField
         label="Examination & clinical notes"
         value={fields.examinationNotes}
         onChange={(v) => set("examinationNotes", v)}
       />
-
-      <div>
-        <p className="mb-2 text-[13px] font-medium text-text-primary">Diagnoses</p>
-        <div className="flex flex-col gap-2">
-          {consultation.diagnoses.length === 0 ? (
-            <p className="text-[13px] text-text-secondary">
-              No diagnosis recorded yet — a symptom-based assessment is fine if nothing definitive is available.
-            </p>
-          ) : (
-            consultation.diagnoses.map((d) => (
-              <DiagnosisRow key={d.id} diagnosis={d} onRemove={() => removeDiagnosis.mutate(d.id)} />
-            ))
-          )}
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[2fr_auto_auto_auto] sm:items-end">
-          <DiagnosisSearchInput
-            label="Add diagnosis"
-            placeholder="Search by name or ICD-10 code, e.g. bronchitis or J20"
-            value={newDiagnosisText}
-            onChangeText={setNewDiagnosisText}
-            onChoose={(choice) => addDiagnosis.mutate(choice)}
-          />
-          <label className="flex items-center gap-1.5 pb-3 text-[12.5px] text-text-secondary">
-            <input
-              type="checkbox"
-              checked={newDiagnosisPrimary}
-              onChange={(e) => setNewDiagnosisPrimary(e.target.checked)}
-            />
-            Primary
-          </label>
-          <Select
-            label="Certainty"
-            options={CERTAINTY_OPTIONS}
-            value={newDiagnosisCertainty}
-            onChange={(e) => setNewDiagnosisCertainty(e.target.value as DiagnosisCertainty)}
-          />
-          <Button
-            variant="secondary"
-            size="md"
-            icon={<Plus className="size-3.5" aria-hidden />}
-            loading={addDiagnosis.isPending}
-            disabled={!newDiagnosisText.trim()}
-            onClick={() => addDiagnosis.mutate({ diagnosisText: newDiagnosisText.trim() })}
-          >
-            Add
-          </Button>
-        </div>
-      </div>
-
       <TextAreaField
         label="Investigations"
         value={fields.investigationsNotes}
         onChange={(v) => set("investigationsNotes", v)}
       />
+    </div>
+  );
+
+  const assessmentSection = (
+    <div>
+      <p className="mb-2 text-[13px] font-medium text-text-primary">Diagnoses</p>
+      <div className="flex flex-col gap-2">
+        {consultation.diagnoses.length === 0 ? (
+          <p className="text-[13px] text-text-secondary">
+            No diagnosis recorded yet — a symptom-based assessment is fine if nothing definitive is available.
+          </p>
+        ) : (
+          consultation.diagnoses.map((d) => (
+            <DiagnosisRow key={d.id} diagnosis={d} onRemove={() => removeDiagnosis.mutate(d.id)} />
+          ))
+        )}
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[2fr_auto_auto_auto] sm:items-end">
+        <DiagnosisSearchInput
+          label="Add diagnosis"
+          placeholder="Search by name or ICD-10 code, e.g. bronchitis or J20"
+          value={newDiagnosisText}
+          onChangeText={setNewDiagnosisText}
+          onChoose={(choice) => addDiagnosis.mutate(choice)}
+        />
+        <label className="flex items-center gap-1.5 pb-3 text-[12.5px] text-text-secondary">
+          <input
+            type="checkbox"
+            checked={newDiagnosisPrimary}
+            onChange={(e) => setNewDiagnosisPrimary(e.target.checked)}
+          />
+          Primary
+        </label>
+        <Select
+          label="Certainty"
+          options={CERTAINTY_OPTIONS}
+          value={newDiagnosisCertainty}
+          onChange={(e) => setNewDiagnosisCertainty(e.target.value as DiagnosisCertainty)}
+        />
+        <Button
+          variant="secondary"
+          size="md"
+          icon={<Plus className="size-3.5" aria-hidden />}
+          loading={addDiagnosis.isPending}
+          disabled={!newDiagnosisText.trim()}
+          onClick={() => addDiagnosis.mutate({ diagnosisText: newDiagnosisText.trim() })}
+        >
+          Add
+        </Button>
+      </div>
+    </div>
+  );
+
+  const planSection = (
+    <div className="flex flex-col gap-4">
       <TextAreaField
         label="Treatment plan & patient instructions"
         value={fields.treatmentPlan}
         onChange={(v) => set("treatmentPlan", v)}
       />
-
+      {consultation.artPathwayCode === "ADULT_ART_INITIATION" && (
+        <ArtInitiationHealthEducationForm visitId={consultation.visitId} />
+      )}
+      {consultation.artPathwayCode === "ADULT_ART_INITIATION" && (
+        <ArtInitiationReferralConfirmationForm visitId={consultation.visitId} />
+      )}
+      {consultation.artPathwayCode === "ADULT_ART_INITIATION" && (
+        <ArtInitiationAdditionalClinicalNotesForm visitId={consultation.visitId} />
+      )}
+      {consultation.artPathwayCode === "ADULT_ART_INITIATION" && (
+        <ArtInitiationClinicianDetailsForm visitId={consultation.visitId} />
+      )}
       <PrescriptionWorkspace
         state={prescription}
         onChange={changePrescription}
         allergyNote={allergyNoteOf(fields)}
         patientLabel="Prescription for this visit"
       />
-
       {showOutcomePicker ? (
         <OutcomePicker
           prescription={prescription}
@@ -882,10 +1210,162 @@ function DraftView({
           onCancel={() => setShowOutcomePicker(false)}
         />
       ) : (
+        <Button size="md" onClick={() => setShowOutcomePicker(true)}>
+          Sign & choose next step
+        </Button>
+      )}
+    </div>
+  );
+
+  const artSectionContent: Record<ArtInitiationSection, ReactNode> = {
+    SUBJECTIVE: subjectiveSection,
+    OBJECTIVE: objectiveSection,
+    ASSESSMENT: assessmentSection,
+    PLAN: planSection,
+  };
+  const isArtInitiation = consultation.artPathwayCode === "ADULT_ART_INITIATION";
+  const isArtPathway =
+    isArtInitiation || consultation.artPathwayCode === "ADULT_ART_FOLLOW_UP_VISIT";
+
+  useEffect(() => {
+    setActiveArtSection("SUBJECTIVE");
+  }, [consultation.artPathwayCode]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {saveError && (
+        <p ref={saveErrorRef} role="alert" className="text-[13.5px] text-danger-600">
+          {saveError}
+        </p>
+      )}
+
+      {isArtPathway ? (
+        <>
+          <div role="tablist" aria-label="ART consultation sections" className="flex flex-wrap gap-2 border-b border-border-subtle pb-3">
+            {ART_INITIATION_SECTIONS.map((section) => (
+              <button
+                key={section}
+                id={`art-consultation-tab-${section.toLowerCase()}`}
+                type="button"
+                role="tab"
+                aria-selected={activeArtSection === section}
+                aria-controls="art-consultation-tab-panel"
+                tabIndex={activeArtSection === section ? 0 : -1}
+                onClick={() => setActiveArtSection(section)}
+                onKeyDown={(event) => {
+                  const currentIndex = ART_INITIATION_SECTIONS.indexOf(section);
+                  const nextIndex =
+                    event.key === "ArrowRight"
+                      ? (currentIndex + 1) % ART_INITIATION_SECTIONS.length
+                      : event.key === "ArrowLeft"
+                        ? (currentIndex - 1 + ART_INITIATION_SECTIONS.length) % ART_INITIATION_SECTIONS.length
+                        : event.key === "Home"
+                          ? 0
+                          : event.key === "End"
+                            ? ART_INITIATION_SECTIONS.length - 1
+                            : null;
+                  if (nextIndex === null) return;
+                  event.preventDefault();
+                  const nextSection = ART_INITIATION_SECTIONS[nextIndex];
+                  setActiveArtSection(nextSection);
+                  event.currentTarget.parentElement
+                    ?.querySelector<HTMLButtonElement>(`#art-consultation-tab-${nextSection.toLowerCase()}`)
+                    ?.focus();
+                }}
+                className={clsx(
+                  "rounded-lg border px-3.5 py-2 text-[12.5px] font-semibold transition-colors",
+                  activeArtSection === section
+                    ? "border-brand-500 bg-brand-50 text-brand-700"
+                    : "border-border-strong bg-surface-raised text-text-secondary hover:text-text-primary",
+                )}
+              >
+                {section}
+              </button>
+            ))}
+          </div>
+          <section
+            id="art-consultation-tab-panel"
+            role="tabpanel"
+            aria-labelledby={`art-consultation-tab-${activeArtSection.toLowerCase()}`}
+            className="flex flex-col gap-4"
+          >
+            {artSectionContent[activeArtSection]}
+            {isArtInitiation && activeArtSection === "SUBJECTIVE" && (
+              <LaboratoryInvestigationForm visitId={consultation.visitId} />
+            )}
+            {consultation.artPathwayCode === "ADULT_ART_FOLLOW_UP_VISIT" &&
+              activeArtSection === "SUBJECTIVE" && (
+                <ArtLongitudinalRecordForm visitId={consultation.visitId} />
+              )}
+            {isArtInitiation && activeArtSection === "OBJECTIVE" && (
+              <div
+                aria-label="Adult ART Initiation objective forms"
+                className="flex max-h-[9.5rem] flex-col gap-2 overflow-y-auto overscroll-contain pr-1 [&>button]:shrink-0"
+              >
+                <ArtInitiationSummaryForm visitId={consultation.visitId} />
+                <ArtEyesExaminationForm visitId={consultation.visitId} />
+                <ArtReproductiveHealthForm visitId={consultation.visitId} />
+                <ArtStage1ConditionsForm visitId={consultation.visitId} />
+                <ArtInitiationLongitudinalRecordForm visitId={consultation.visitId} />
+                <ArtInitiationPriorHaartHistoryForm visitId={consultation.visitId} />
+                <ArtInitiationTbScreeningForm visitId={consultation.visitId} />
+                <ArtInitiationMedicalHistoryForm visitId={consultation.visitId} />
+                <ArtInitiationJaccolExaminationForm visitId={consultation.visitId} />
+                <ArtInitiationMusculoskeletalForm visitId={consultation.visitId} />
+                <ArtInitiationMentalStateExaminationForm visitId={consultation.visitId} />
+                <ArtInitiationCentralNervousSystemForm visitId={consultation.visitId} />
+                <ArtInitiationSkinExaminationForm visitId={consultation.visitId} />
+                <ArtInitiationEntExaminationForm visitId={consultation.visitId} />
+              </div>
+            )}
+          </section>
+        </>
+      ) : (
+        <>
+          {subjectiveSection}
+          <TextAreaField
+            label="Examination & clinical notes"
+            value={fields.examinationNotes}
+            onChange={(v) => set("examinationNotes", v)}
+          />
+          {assessmentSection}
+          <TextAreaField
+            label="Investigations"
+            value={fields.investigationsNotes}
+            onChange={(v) => set("investigationsNotes", v)}
+          />
+          <TextAreaField
+            label="Treatment plan & patient instructions"
+            value={fields.treatmentPlan}
+            onChange={(v) => set("treatmentPlan", v)}
+          />
+          <PrescriptionWorkspace
+            state={prescription}
+            onChange={changePrescription}
+            allergyNote={allergyNoteOf(fields)}
+            patientLabel="Prescription for this visit"
+          />
+          {showOutcomePicker ? (
+            <OutcomePicker
+              prescription={prescription}
+              outcomeNotes={outcomeNotes}
+              onChangeNotes={setOutcomeNotes}
+              loading={sign.isPending}
+              onChoose={(outcome, medicines, destinationFacilityId) =>
+                sign.mutate({ outcome, medicines, destinationFacilityId })
+              }
+              onCancel={() => setShowOutcomePicker(false)}
+            />
+          ) : (
+            <Button size="md" onClick={() => setShowOutcomePicker(true)}>
+              Sign & choose next step
+            </Button>
+          )}
+        </>
+      )}
+
+      {!showOutcomePicker && (
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="md" onClick={() => setShowOutcomePicker(true)}>
-            Sign & choose next step
-          </Button>
           <Button variant="secondary" size="md" loading={saveDraft.isPending} onClick={() => saveDraft.mutate()}>
             Save draft
           </Button>

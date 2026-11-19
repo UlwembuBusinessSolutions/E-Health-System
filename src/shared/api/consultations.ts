@@ -14,6 +14,39 @@ export type ConsultationOutcome =
   | "CONTINUE_INVESTIGATION"
   | "FINISH_NO_MEDICATION"
   | "REFER_OR_TRANSFER";
+export type ServiceReasonCode =
+  | "ART"
+  | "TUBERCULOSIS"
+  | "OTHER"
+  | "MENTAL_HEALTH"
+  | "ASTHMA"
+  | "HYPERTENSION"
+  | "EPILEPSY"
+  | "DIABETES_MELLITUS";
+
+export type ArtPathwayCode = "ADULT_ART_INITIATION" | "ADULT_ART_FOLLOW_UP_VISIT";
+
+export interface ConsultationServiceReason {
+  serviceReasonCode: ServiceReasonCode;
+  serviceReasonNote?: string;
+  artPathwayCode?: ArtPathwayCode;
+}
+
+export const SERVICE_REASON_LABELS: Record<ServiceReasonCode, string> = {
+  ART: "ART",
+  TUBERCULOSIS: "Tuberculosis",
+  OTHER: "Other",
+  MENTAL_HEALTH: "Mental health",
+  ASTHMA: "Asthma",
+  HYPERTENSION: "Hypertension",
+  EPILEPSY: "Epilepsy",
+  DIABETES_MELLITUS: "Diabetes Mellitus",
+};
+
+export const ART_PATHWAY_LABELS: Record<ArtPathwayCode, string> = {
+  ADULT_ART_INITIATION: "Adult ART initiation",
+  ADULT_ART_FOLLOW_UP_VISIT: "Adult on ART follow-up Visit",
+};
 
 export interface ConsultationDiagnosis {
   id: string;
@@ -72,6 +105,9 @@ export interface Consultation {
   // Set when the consultation was started with no vitals on the visit.
   vitalsBypassReason: VitalsBypassReason | null;
   vitalsBypassNote: string | null;
+  serviceReasonCode: ServiceReasonCode | null;
+  serviceReasonNote: string | null;
+  artPathwayCode: ArtPathwayCode | null;
   // The doctor's unsigned prescription as JSON; null when none was saved.
   prescriptionDraft: string | null;
   /** Set when this consultation carries on from an earlier one. */
@@ -96,10 +132,18 @@ export async function createConsultationDraft(
   visitId: string,
   bypass?: VitalsBypass,
   continueFromConsultationId?: string,
+  serviceReason?: ConsultationServiceReason,
 ): Promise<Consultation> {
   const body =
-    bypass || continueFromConsultationId
-      ? { vitalsBypassReason: bypass?.reason, vitalsBypassNote: bypass?.note, continueFromConsultationId }
+    bypass || continueFromConsultationId || serviceReason
+      ? {
+          vitalsBypassReason: bypass?.reason,
+          vitalsBypassNote: bypass?.note,
+          continueFromConsultationId,
+          serviceReasonCode: serviceReason?.serviceReasonCode,
+          serviceReasonNote: serviceReason?.serviceReasonNote,
+          artPathwayCode: serviceReason?.artPathwayCode,
+        }
       : undefined;
   return apiClient.post<Consultation>(`/api/v1/visits/${visitId}/consultations`, body, {
     headers: tenantAuthHeaders(),
@@ -190,6 +234,15 @@ export async function updateConsultationDraft(
   payload: UpdateConsultationPayload,
 ): Promise<Consultation> {
   return apiClient.patch<Consultation>(`/api/v1/consultations/${id}`, payload, { headers: tenantAuthHeaders() });
+}
+
+export async function updateConsultationServiceReason(
+  id: string,
+  payload: ConsultationServiceReason,
+): Promise<Consultation> {
+  return apiClient.patch<Consultation>(`/api/v1/consultations/${id}/service-reason`, payload, {
+    headers: tenantAuthHeaders(),
+  });
 }
 
 /** Either a catalogue pick (`diagnosisId`) or a typed name; a name not in the catalogue is added to it. */

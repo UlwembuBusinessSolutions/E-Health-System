@@ -9,7 +9,7 @@ import { Button } from "@/shared/components/Button";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { StatusPill } from "@/shared/components/StatusPill";
 
-const OPEN_STATUSES: TokenStatus[] = ["ISSUED", "CALLED"];
+const QUEUE_STATUSES: TokenStatus[] = ["ISSUED", "CALLED", "MISSED", "COMPLETED", "CANCELLED"];
 
 function localDateValue(date = new Date()): string {
   const offset = date.getTimezoneOffset();
@@ -22,14 +22,9 @@ function formatTime(iso: string): string {
 
 // The "which patient am I taking vitals for" entry point Sidebar's "Take
 // Vitals" link lands on — a purpose-built view over the same live queue
-// QueuePage manages, not a copy of it: only today's still-open tokens
-// (waiting or already called; a completed/missed/cancelled ticket has
-// nothing left to triage) and one action per row, so a nurse or doctor
-// reaching for this doesn't have to pick their patient out of Boost/
-// Complete/Missed/Cancel controls meant for queue-marshal work. Capturing
-// vitals before a patient is called is the clinically ordinary order (SATS
-// triage informs priority), which is exactly why ISSUED tokens are listed
-// here too, not just CALLED ones.
+// QueuePage manages, not a copy of it: every queue status and both registered
+// and unregistered arrivals are visible here. An unfinished token continues
+// its existing visit; only a completed token can go through reception again.
 export function VitalsIntakePage() {
   const navigate = useNavigate();
   const [facilityId, setFacilityId] = useState("");
@@ -50,11 +45,11 @@ export function VitalsIntakePage() {
   }, [searchInput]);
 
   const queueQuery = useQuery({
-    queryKey: ["queue", facilityId, search, OPEN_STATUSES, "", localDateValue(), 0, 100],
+    queryKey: ["queue", facilityId, search, QUEUE_STATUSES, "", localDateValue(), 0, 100],
     queryFn: () =>
       listQueue(facilityId, {
         search: search || undefined,
-        statuses: OPEN_STATUSES,
+        statuses: QUEUE_STATUSES,
         date: localDateValue(),
         page: 0,
         pageSize: 100,
@@ -64,13 +59,13 @@ export function VitalsIntakePage() {
   });
 
   const facilities = facilitiesQuery.data ?? [];
-  const entries = (queueQuery.data?.items ?? []).filter((entry) => entry.patientId === null);
+  const entries = queueQuery.data?.items ?? [];
 
   return (
     <div>
       <PageHeader
         title="Take Vitals"
-        description="Today's unregistered walk-ins who are waiting or called, ready for vitals or triage capture."
+        description="Continue care for anyone already in today's queue. A new visit can only be started after the current token is completed."
         action={
           facilities.length > 1 ? (
             <select
@@ -104,7 +99,7 @@ export function VitalsIntakePage() {
 
         {entries.length === 0 ? (
           <p className="p-8 text-center text-[13.5px] text-text-secondary">
-            {queueQuery.isLoading ? "Loading…" : "No unregistered walk-ins are waiting or called right now."}
+            {queueQuery.isLoading ? "Loading…" : "No queue entries found for today."}
           </p>
         ) : (
           <table className="w-full text-left">
@@ -125,29 +120,63 @@ export function VitalsIntakePage() {
                   </td>
                   <td className="px-5 py-3.5">
                     <p className="text-[13.5px] font-medium text-text-primary">{entry.patientName}</p>
-                    <p className="text-[12px] text-text-secondary">Unregistered walk-in</p>
+                    <p className="text-[12px] text-text-secondary">
+                      {entry.patientId ? entry.patientMpi ?? "Registered patient" : "Unregistered walk-in"}
+                    </p>
                   </td>
                   <td className="px-5 py-3.5">
-                    <StatusPill tone={entry.token.status === "CALLED" ? "success" : "neutral"}>
-                      {entry.token.status === "CALLED" ? "Called" : "Waiting"}
+                    <StatusPill
+                      tone={
+                        entry.token.status === "COMPLETED"
+                          ? "success"
+                          : entry.token.status === "CANCELLED"
+                            ? "danger"
+                            : entry.token.status === "MISSED"
+                              ? "warning"
+                              : entry.token.status === "CALLED"
+                                ? "success"
+                                : "neutral"
+                      }
+                    >
+                      {entry.token.status.charAt(0) + entry.token.status.slice(1).toLowerCase()}
                     </StatusPill>
                   </td>
                   <td className="px-5 py-3.5 font-mono text-[13px] text-text-secondary tabular-nums">
                     {formatTime(entry.token.issuedAt)}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      icon={<HeartPulse className="size-3.5" aria-hidden />}
-                      onClick={() =>
-                        navigate(
-                          `/app/patients/walk-in?visitId=${entry.token.visitId}&tokenNumber=${entry.token.tokenNumber}&tab=vitals`,
-                        )
-                      }
-                    >
-                      Take vitals
-                    </Button>
+                    {entry.token.status === "COMPLETED" ? (
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        onClick={() =>
+                          navigate("/app/reception", {
+                            state: {
+                              facilityId,
+                              registeredPatientId: entry.patientId ?? undefined,
+                              fromQueue: true,
+                            },
+                          })
+                        }
+                      >
+                        Go to reception
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        icon={<HeartPulse className="size-3.5" aria-hidden />}
+                        onClick={() =>
+                          navigate(
+                            entry.patientId
+                              ? `/app/patients/${entry.patientId}?visitId=${entry.token.visitId}&tab=vitals`
+                              : `/app/patients/walk-in?visitId=${entry.token.visitId}&tokenNumber=${entry.token.tokenNumber}&tab=vitals`,
+                          )
+                        }
+                      >
+                        Continue visit
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}
