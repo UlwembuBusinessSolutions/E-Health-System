@@ -95,9 +95,17 @@ public class TriageService {
         }
 
         Visit visit = visitRepository.findById(cmd.visitId()).orElseThrow(VisitNotFoundException::new);
-        Patient patient = patientService.get(visit.getPatientId());
-        if (patient.isArchived()) {
+        Patient patient = visit.getPatientId() == null ? null : patientService.get(visit.getPatientId());
+        if (patient != null && patient.isArchived()) {
             throw new PatientArchivedException();
+        }
+        LocalDate dateOfBirth = patient == null ? cmd.dateOfBirth() : patient.getDateOfBirth();
+        if (patient == null && dateOfBirth == null) {
+            throw new InvalidTriageCaptureException(
+                    "Date of birth is required to capture vitals for an unregistered walk-in.");
+        }
+        if (patient == null && dateOfBirth.isAfter(clock.instant().atZone(ZoneOffset.UTC).toLocalDate())) {
+            throw new InvalidTriageCaptureException("Date of birth cannot be in the future.");
         }
 
         if (cmd.emergencySign() && !StringUtils.hasText(cmd.emergencySignNote())) {

@@ -35,8 +35,7 @@ class VitalsPersistenceTest {
                         .setProperty("hibernate.hbm2ddl.auto", "validate");
                 try (var factory = config.buildSessionFactory()) {
                     var a = new TriageAssessment(visitId, false, null, ScoringProfile.ADULT, false, 18, 80, 120, 80,
-                            37.0, 98, OxygenSupport.ROOM_AIR, null, null, Avpu.ALERT, Mobility.WALKING, 0, "NRS",
-                            "Test observation", false, null, Set.of(), 1, TewsCalculator.SCORING_VERSION,
+                            37.0, 98, Avpu.ALERT, false, null, Set.of(), 1, TewsCalculator.SCORING_VERSION,
                             TriageColour.GREEN, TriageColour.GREEN, UUID.randomUUID(), Instant.now(), Instant.now(), UUID.randomUUID().toString());
                     var additional = new AdditionalObservations();
                     additional.traumaPresent = true; additional.weightKg = 72.5; additional.heightCm = 170.0;

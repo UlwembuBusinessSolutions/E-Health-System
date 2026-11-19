@@ -14,7 +14,7 @@ class VitalsTest {
     private TewsCalculator.Result score(int rr, int hr, int bp, double temp, Avpu avpu, Mobility mobility, boolean trauma) {
         var observations = new AdditionalObservations();
         observations.traumaPresent = trauma;
-        return calculator.calculate(false, ScoringProfile.ADULT, rr, hr, bp, temp, avpu, mobility, Set.of(), observations);
+        return calculator.calculate(false, ScoringProfile.ADULT, rr, hr, bp, temp, avpu, Set.of(), observations);
     }
 
     // SATS manual adult chart, pp. 8/26. Exercise both ends of every band.
@@ -62,10 +62,10 @@ class VitalsTest {
     @Test void glucoseBelowThreeRaisesRedEvenWithNormalVitals() {
         var observations = new AdditionalObservations(); observations.glucoseMmolL = 2.9;
         assertEquals(TriageColour.RED, calculator.calculate(false, ScoringProfile.ADULT, 18, 80, 120,
-                37.0, Avpu.ALERT, Mobility.WALKING, Set.of(), observations).calculatedColour());
+                37.0, Avpu.ALERT, Set.of(), observations).calculatedColour());
         observations.glucoseMmolL = 3.0;
         assertEquals(TriageColour.GREEN, calculator.calculate(false, ScoringProfile.ADULT, 18, 80, 120,
-                37.0, Avpu.ALERT, Mobility.WALKING, Set.of(), observations).calculatedColour());
+                37.0, Avpu.ALERT, Set.of(), observations).calculatedColour());
     }
 
     @Test void optionalValuesAndNegativeResultsRemainDistinct() throws Exception {
