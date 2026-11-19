@@ -1,6 +1,8 @@
 package co.ehealth.platform.triage;
 
 import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.consultation.ConsultationRepository;
+import co.ehealth.platform.consultation.ConsultationStatus;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
@@ -50,6 +52,7 @@ public class TriageService {
             "Capturing vitals requires Reception access or the Pharmacist role.";
 
     private final TriageAssessmentRepository triageAssessmentRepository;
+    private final ConsultationRepository consultationRepository;
     private final VisitRepository visitRepository;
     private final PatientService patientService;
     private final UserRepository userRepository;
@@ -57,10 +60,12 @@ public class TriageService {
     private final PermissionService permissionService;
     private final Clock clock;
 
-    public TriageService(TriageAssessmentRepository triageAssessmentRepository, VisitRepository visitRepository,
+    public TriageService(TriageAssessmentRepository triageAssessmentRepository,
+                          ConsultationRepository consultationRepository, VisitRepository visitRepository,
                           PatientService patientService, UserRepository userRepository,
                           AuditLogService auditLogService, PermissionService permissionService, Clock clock) {
         this.triageAssessmentRepository = triageAssessmentRepository;
+        this.consultationRepository = consultationRepository;
         this.visitRepository = visitRepository;
         this.patientService = patientService;
         this.userRepository = userRepository;
@@ -164,7 +169,10 @@ public class TriageService {
                         ? cmd.observedAt() : now, now, cmd.idempotencyKey());
         LocalDate observationDate = (cmd.observedAt() != null ? cmd.observedAt() : now)
                 .atZone(ZoneOffset.UTC).toLocalDate();
-        assessment.setAgeMonthsAtCapture(Math.toIntExact(Period.between(patient.getDateOfBirth(), observationDate).toTotalMonths()));
+        assessment.setAgeMonthsAtCapture(Math.toIntExact(Period.between(dateOfBirth, observationDate).toTotalMonths()));
+        consultationRepository.findFirstByVisitIdAndStatusOrderByCreatedAtDesc(
+                cmd.visitId(), ConsultationStatus.DRAFT)
+                .ifPresent(consultation -> assessment.linkToConsultation(consultation.getId()));
 
         if (superseded != null) {
             assessment.linkSupersedes(superseded.getId());
@@ -242,6 +250,17 @@ public class TriageService {
     public List<TriageAssessment> getHistory(UUID visitId) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
         return triageAssessmentRepository.findByVisitIdOrderByObservedAtAsc(visitId);
+    }
+
+    public List<PatientVitalsView> getVisitHistoryWithCaptureNames(UUID visitId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        List<TriageAssessment> assessments = triageAssessmentRepository.findByVisitIdOrderByObservedAtAsc(visitId);
+        Map<UUID, String> names = resolveCapturedByNames(assessments);
+        return assessments.stream().map(a -> new PatientVitalsView(a, names.get(a.getCapturedByUserId()))).toList();
+    }
+
+    public String getCapturedByName(TriageAssessment assessment) {
+        return resolveCapturedByNames(List.of(assessment)).get(assessment.getCapturedByUserId());
     }
 
     public Optional<TriageAssessment> getLatestActive(UUID visitId) {

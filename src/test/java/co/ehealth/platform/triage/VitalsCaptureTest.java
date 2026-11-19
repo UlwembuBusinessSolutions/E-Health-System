@@ -23,7 +23,9 @@ class VitalsCaptureTest {
     final VisitRepository visits = mock(VisitRepository.class);
     final PatientService patients = mock(PatientService.class);
     final UUID visitId = UUID.randomUUID(), patientId = UUID.randomUUID(), actor = UUID.randomUUID();
-    final TriageService service = new TriageService(repository, visits, patients, mock(UserRepository.class),
+    final TriageService service = new TriageService(repository,
+            mock(co.ehealth.platform.consultation.ConsultationRepository.class), visits, patients,
+            mock(UserRepository.class),
             mock(AuditLogService.class), mock(PermissionService.class), Clock.fixed(Instant.parse("2026-09-08T12:00:00Z"), ZoneOffset.UTC));
 
     @BeforeEach void setup() {

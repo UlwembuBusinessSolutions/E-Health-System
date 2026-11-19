@@ -1,0 +1,42 @@
+const {chromium}=require('../../target/pharmacy-browser/node_modules/playwright');
+const fs=require('fs');const assert=require('assert/strict');
+(async()=>{
+ const fixture=JSON.parse(fs.readFileSync('target/pharmacy-screenshot-fixture.json','utf8'));
+ const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
+ try {
+  const context=await browser.newContext({viewport:{width:1500,height:950}});
+  await context.addInitScript(f=>{sessionStorage.setItem('ulwembu.tenantToken',f.token);sessionStorage.setItem('ulwembu.tenantSlug','amo');sessionStorage.setItem('pharmacy.facility.amo',f.facilityId);},fixture);
+  const page=await context.newPage();page.setDefaultTimeout(120000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('http://localhost:5176/app/pharmacy?facilityId='+fixture.facilityId,{waitUntil:'domcontentloaded',timeout:180000});
+  const rows=fixture.items.map(id=>page.locator('[data-item-id="'+id+'"]'));
+  await rows[0].getByText('Lerato Mokoena',{exact:true}).waitFor();
+  assert.ok((await rows[0].innerText()).includes('20 tablets'));
+  await rows[0].getByText('Partially dispensed',{exact:true}).waitFor();
+  await rows[1].getByRole('button',{name:'Review',exact:true}).waitFor();
+  await rows[2].getByText('Ready to dispense',{exact:true}).waitFor();
+  await rows[0].getByRole('button',{name:'Dispense',exact:true}).click();
+  await page.getByLabel('Quantity to dispense').fill('10');
+  await page.waitForFunction(()=>[...document.querySelectorAll('dialog button')].some(button=>button.textContent==='Confirm dispensing' && !button.disabled),null,{timeout:120000});
+  await page.screenshot({path:'target/pharmacy-screenshot-live-dispense.png'});
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  await rows[1].getByRole('button',{name:'Review',exact:true}).click();
+  await page.getByText('Interaction check required',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Confirm dispensing',exact:true}).count(),0);
+  await page.screenshot({path:'target/pharmacy-screenshot-live-review.png'});
+  await page.getByRole('button',{name:'Close',exact:true}).click();
+  const stock=page.getByRole('region',{name:'Stock',exact:true});
+  await stock.getByText('Paracetamol 500 mg',{exact:true}).waitFor();
+  const expired=stock.getByRole('row').filter({hasText:'PAR-25-11'});
+  await expired.getByText('Expired',{exact:true}).waitFor();
+  const ledger=page.getByRole('region',{name:'Stock ledger',exact:true});
+  await ledger.getByText('RX-2026-00091',{exact:true}).waitFor();
+  const stockBox=await stock.boundingBox(), ledgerBox=await ledger.boundingBox();
+  assert.ok(Math.abs(stockBox.y-ledgerBox.y)<2,'Stock and ledger are side by side');
+  assert.ok(Math.abs(stockBox.height-ledgerBox.height)<2,'Stock and ledger cards have equal heights');
+  await page.getByRole('heading',{name:'Concurrency test',exact:true}).waitFor();
+  await page.screenshot({path:'target/pharmacy-stock-ledger-live.png',fullPage:true});
+  await page.screenshot({path:'target/pharmacy-screenshot-live-table.png',fullPage:true});
+  assert.equal(errors.length,0,errors.join('\n'));
+  console.log('PASS: real persisted screenshot rows, partial status, ready status, quantity dialog, review-only dialog and no React errors.');
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

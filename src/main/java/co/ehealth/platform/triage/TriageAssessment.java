@@ -43,6 +43,10 @@ public class TriageAssessment {
     @Column(name = "visit_id", nullable = false)
     private UUID visitId;
 
+    // Set only when captured while a consultation draft is active for this visit.
+    @Column(name = "consultation_id")
+    private UUID consultationId;
+
     @Column(name = "age_months_at_capture")
     private Integer ageMonthsAtCapture;
 
@@ -250,6 +254,14 @@ public class TriageAssessment {
 
     public UUID getVisitId() {
         return visitId;
+    }
+
+    public UUID getConsultationId() {
+        return consultationId;
+    }
+
+    public void linkToConsultation(UUID consultationId) {
+        this.consultationId = consultationId;
     }
 
     public Integer getAgeMonthsAtCapture() { return ageMonthsAtCapture; }

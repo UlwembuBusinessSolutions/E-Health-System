@@ -5,11 +5,6 @@ import co.ehealth.platform.consultation.InvalidConsultationException;
 import co.ehealth.platform.consultation.InvalidConsultationStateException;
 import co.ehealth.platform.core.security.InvalidTokenException;
 import co.ehealth.platform.core.notification.EmailDeliveryFailedException;
-import co.ehealth.platform.identity.InvalidRolePermissionChangeException;
-import co.ehealth.platform.identity.RoleNotFoundException;
-import co.ehealth.platform.identity.mfa.InvalidMfaCodeException;
-import co.ehealth.platform.identity.mfa.InvalidMfaStateException;
-import co.ehealth.platform.identity.mfa.MfaChallengeExpiredException;
 import co.ehealth.platform.identity.AccountLockedException;
 import co.ehealth.platform.identity.DuplicateFieldException;
 import co.ehealth.platform.identity.InvalidCredentialsException;
@@ -25,6 +20,7 @@ import co.ehealth.platform.platform.OrganizationNotFoundException;
 import co.ehealth.platform.platform.OrganizationSuspendedException;
 import co.ehealth.platform.platform.PlatformOperatorNotFoundException;
 import co.ehealth.platform.patient.InvalidIdNumberException;
+import co.ehealth.platform.patient.InvalidPatientVerificationCodeException;
 import co.ehealth.platform.patient.InvalidMigrationDestinationException;
 import co.ehealth.platform.patient.MigrationNotFoundException;
 import co.ehealth.platform.patient.PatientAlreadyArchivedException;
@@ -32,9 +28,8 @@ import co.ehealth.platform.patient.PatientAlreadyExistsAtDestinationException;
 import co.ehealth.platform.patient.PatientArchivedException;
 import co.ehealth.platform.patient.PatientDocumentNotFoundException;
 import co.ehealth.platform.patient.PatientGuardianNotFoundException;
-import co.ehealth.platform.patient.PatientNotFoundException;
-import co.ehealth.platform.patient.InvalidPatientVerificationCodeException;
 import co.ehealth.platform.patient.PatientIdentityMismatchException;
+import co.ehealth.platform.patient.PatientNotFoundException;
 import co.ehealth.platform.patient.TooManyGuardiansException;
 
 import co.ehealth.platform.patient.InvalidOfflineSyncException;
@@ -53,9 +48,7 @@ import co.ehealth.platform.visit.InvalidTokenTransitionException;
 import co.ehealth.platform.visit.InvalidQueueReasonException;
 import co.ehealth.platform.visit.InvalidTransferException;
 import co.ehealth.platform.visit.QueueTokenNotFoundException;
-import co.ehealth.platform.visit.QueueTokenAlreadyLinkedException;
 import co.ehealth.platform.visit.VisitNotFoundException;
-import co.ehealth.platform.visit.UnregisteredWalkInVisitException;
 import co.ehealth.platform.triage.InvalidTriageCaptureException;
 import co.ehealth.platform.triage.TriageAssessmentNotFoundException;
 import co.ehealth.platform.pharmacy.csvimport.ImportBatchNotFoundException;
@@ -203,11 +196,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler(PatientIdentityMismatchException.class)
-    public ResponseEntity<ApiErrorResponse> handlePatientIdentityMismatch(PatientIdentityMismatchException ex) {
-        return ResponseEntity.unprocessableEntity().body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
     @ExceptionHandler(DuplicateFieldException.class)
     public ResponseEntity<ApiErrorResponse> handleDuplicateField(DuplicateFieldException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -270,17 +258,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler(RoleNotFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleRoleNotFound(RoleNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
-    @ExceptionHandler(InvalidRolePermissionChangeException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidRolePermissionChange(
-            InvalidRolePermissionChangeException ex) {
-        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
     // The safety check in the same method: refusing to remove an
     // organization's last remaining admin, since every endpoint that could
     // add another one back requires ORG_ADMIN to call it in the first
@@ -327,6 +304,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(InvalidIdNumberException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidIdNumber(InvalidIdNumberException ex) {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(PatientIdentityMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handlePatientIdentityMismatch(PatientIdentityMismatchException ex) {
+        return ResponseEntity.unprocessableEntity().body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     @ExceptionHandler(PatientNotFoundException.class)
@@ -404,11 +386,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler(UnregisteredWalkInVisitException.class)
-    public ResponseEntity<ApiErrorResponse> handleUnregisteredWalkIn(UnregisteredWalkInVisitException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
     // QueueService.callNext() against an empty queue — the facility and
     // request are both valid, the current state just has no one to call.
     // Same "conflicts with current state" shape as LastRemainingAdminException/
@@ -424,11 +401,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(QueueTokenNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleQueueTokenNotFound(QueueTokenNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
-    @ExceptionHandler(QueueTokenAlreadyLinkedException.class)
-    public ResponseEntity<ApiErrorResponse> handleQueueTokenAlreadyLinked(QueueTokenAlreadyLinkedException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
     // QueueToken's transition guards — e.g. recalling a token that was
@@ -501,7 +473,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler({ CollectionNotFoundException.class, CollectionProofNotFoundException.class })
+    @ExceptionHandler({CollectionNotFoundException.class, CollectionProofNotFoundException.class})
     public ResponseEntity<ApiErrorResponse> handleCollectionRecordNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
@@ -648,16 +620,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(DuplicateSupplierResponse.from(ex));
     }
 
-    @ExceptionHandler({ SupplierNotFoundException.class, ReceiptNotFoundException.class,
-            ImportBatchNotFoundException.class })
+    @ExceptionHandler({SupplierNotFoundException.class, ReceiptNotFoundException.class,
+            ImportBatchNotFoundException.class})
     public ResponseEntity<ApiErrorResponse> handlePharmacyRecordNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler({ InvalidSupplierStateException.class, DuplicateSerialException.class,
+    @ExceptionHandler({InvalidSupplierStateException.class, DuplicateSerialException.class,
             SerialNotInStockException.class, ReceiptAlreadyReversedException.class,
             ReceiptStockUsedException.class, OpeningStockAlreadyLoadedException.class,
-            ImportConflictException.class })
+            ImportConflictException.class})
     public ResponseEntity<ApiErrorResponse> handlePharmacyConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
@@ -670,19 +642,19 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // Pharmacy stock counts and the scheduled medicines register
     // (co.ehealth.platform.pharmacy.count / .register). 422 is used where the
     // request is well-formed but breaks a business rule the user can fix.
-    @ExceptionHandler({ StockCountNotFoundException.class, StockCountLineNotFoundException.class })
+    @ExceptionHandler({StockCountNotFoundException.class, StockCountLineNotFoundException.class})
     public ResponseEntity<ApiErrorResponse> handleStockCountNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler({ InvalidStockCountStateException.class, RegisterBalanceExceededException.class,
-            RegisterDayClosedException.class })
+    @ExceptionHandler({InvalidStockCountStateException.class, RegisterBalanceExceededException.class,
+            RegisterDayClosedException.class})
     public ResponseEntity<ApiErrorResponse> handlePharmacyCountOrRegisterConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 
-    @ExceptionHandler({ InvalidStockCountException.class, InvalidRegisterEntryException.class,
-            InvalidWitnessException.class })
+    @ExceptionHandler({InvalidStockCountException.class, InvalidRegisterEntryException.class,
+            InvalidWitnessException.class})
     public ResponseEntity<ApiErrorResponse> handlePharmacyCountOrRegisterInvalid(RuntimeException ex) {
         return ResponseEntity.unprocessableEntity().body(new ApiErrorResponse(ex.getMessage(), null));
     }
@@ -787,20 +759,5 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.error("Unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ApiErrorResponse("Something went wrong. Please try again.", null));
-    }
-
-    @ExceptionHandler(InvalidMfaCodeException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidMfaCode(InvalidMfaCodeException ex) {
-        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
-    @ExceptionHandler(MfaChallengeExpiredException.class)
-    public ResponseEntity<ApiErrorResponse> handleMfaChallengeExpired(MfaChallengeExpiredException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ApiErrorResponse(ex.getMessage(), null));
-    }
-
-    @ExceptionHandler(InvalidMfaStateException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidMfaState(InvalidMfaStateException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ApiErrorResponse(ex.getMessage(), null));
     }
 }

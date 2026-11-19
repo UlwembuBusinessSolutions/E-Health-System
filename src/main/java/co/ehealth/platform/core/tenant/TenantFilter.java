@@ -97,7 +97,17 @@ public class TenantFilter extends OncePerRequestFilter {
         }
         String host = request.getServerName(); // cot.ehealth.example.com -> "cot"
         int firstDot = host.indexOf('.');
-        return firstDot > 0 ? host.substring(0, firstDot) : null;
+        if (firstDot > 0) {
+            return host.substring(0, firstDot);
+        }
+        // The read-only public classification catalog is also directly
+        // addressable in local browsers, which have no way to attach the
+        // X-Tenant-ID header used by the application client.
+        if ("/api/v1/public/classification-reasons".equals(request.getRequestURI())) {
+            String tenant = request.getParameter("tenant");
+            return tenant == null || tenant.isBlank() ? null : tenant.trim();
+        }
+        return null;
     }
 
     @Override

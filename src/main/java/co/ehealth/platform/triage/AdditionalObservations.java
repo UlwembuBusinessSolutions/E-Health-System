@@ -17,6 +17,8 @@ public class AdditionalObservations {
     public Double glucoseMmolL;
     @Column(name = "haemoglobin_gdl")
     public Double haemoglobinGdl;
+    @Column(name = "peak_flow_lpm")
+    public Double peakFlowLpm;
     @Column(name = "urine_protein", length = 20)
     public String urineProtein;
     @Column(name = "urine_glucose", length = 20)
@@ -105,6 +107,7 @@ public class AdditionalObservations {
         if (glucoseMmolL != null && (!Double.isFinite(glucoseMmolL) || glucoseMmolL < 0))
             throw new InvalidTriageCaptureException("Blood glucose must be a finite number of zero or more.");
         positive(haemoglobinGdl, "Haemoglobin (g/dL)");
+        positive(peakFlowLpm, "Peak flow (L/min)");
         result(urineProtein, Set.of("NEGATIVE", "TRACE", "ONE_PLUS", "TWO_PLUS", "THREE_PLUS", "FOUR_PLUS"), "urine protein");
         result(urineGlucose, Set.of("NEGATIVE", "TRACE", "ONE_PLUS", "TWO_PLUS", "THREE_PLUS", "FOUR_PLUS"), "urine glucose");
         result(urineKetones, Set.of("NEGATIVE", "TRACE", "ONE_PLUS", "TWO_PLUS", "THREE_PLUS", "FOUR_PLUS"), "urine ketones");

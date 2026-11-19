@@ -1,10 +1,9 @@
 package co.ehealth.platform.pharmacy.dispensing;
 
-// Only the prescriber chooses medicines. A line the prescriber never matched to a
-// stock product cannot be dispensed, and the pharmacist cannot pick one for it.
+// A prescription line is free text until a pharmacist picks the stock
+// product behind it; stock is never deducted from a guessed product.
 public class ProductNotMappedException extends DispensingValidationException {
     public ProductNotMappedException(String drugName) {
-        super("The prescriber has not chosen a stock product for \"" + drugName
-                + "\". Message the prescriber to correct the prescription before it is dispensed.");
+        super("Choose the product to dispense from for \"" + drugName + "\" before dispensing it.");
     }
 }
