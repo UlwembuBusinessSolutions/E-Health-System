@@ -63,9 +63,11 @@ import {
   type PatientDocument,
   type PatientDocumentType,
 } from "@/shared/api/patients";
+import { getActiveQueueVisit } from "@/shared/api/visits";
 import {
   getPatientPrescriptions,
 } from "@/shared/api/pharmacy";
+import type { ConsultationServiceReason } from "@/shared/api/consultations";
 import { printVitalsReading } from "@/shared/lib/printVitals";
 import { printPrescription } from "@/shared/lib/printPrescription";
 import {
@@ -137,6 +139,12 @@ interface VitalsFormState {
   clinicianConfirmedColour: TriageColour | "";
   colourConfirmationReason: string;
   dateOfBirth: string;
+}
+
+interface PendingConsultationServiceReason {
+  visitId: string;
+  confirmed: boolean;
+  serviceReason?: ConsultationServiceReason;
 }
 
 const EMPTY_VITALS_FORM: VitalsFormState = {
@@ -819,7 +827,17 @@ export function PatientDetailPage() {
   // Reception-issued tokens carry their linked visitId into this patient
   // record so vitals and consultation stay attached to that check-in.
   const linkedVisitId = searchParams.get("visitId");
-  const activeVisitId = linkedVisitId;
+  const activeQueueVisitQuery = useQuery({
+    queryKey: ["patient-active-queue-visit", patientId],
+    queryFn: () => getActiveQueueVisit(patientId),
+    enabled: !!patientId && !linkedVisitId,
+  });
+  const activeVisitId = linkedVisitId ?? activeQueueVisitQuery.data?.id ?? null;
+  const [pendingConsultationServiceReasons, setPendingConsultationServiceReasons] =
+    useState<Record<string, PendingConsultationServiceReason>>({});
+  useEffect(() => {
+    setPendingConsultationServiceReasons({});
+  }, [patientId]);
 
   const [isCapturingVitals, setIsCapturingVitals] = useState(false);
   const [vitalsForm, setVitalsForm] = useState<VitalsFormState>(EMPTY_VITALS_FORM);
@@ -1691,7 +1709,23 @@ export function PatientDetailPage() {
             </>
           )}
 
-          {activeTab === "consultation" && <PatientConsultationTab patientId={patient.id} visitId={activeVisitId} onTakeVitals={() => setActiveTab("vitals")} />}
+          {activeTab === "consultation" && (
+            <PatientConsultationTab
+              patientId={patient.id}
+              visitId={activeVisitId}
+              pendingServiceReasons={pendingConsultationServiceReasons}
+              onConfirmServiceReason={(visitId, serviceReason) =>
+                setPendingConsultationServiceReasons((pending) => ({
+                  ...pending,
+                  [visitId]: { visitId, confirmed: true, serviceReason },
+                }))
+              }
+              visitLookupLoading={!linkedVisitId && activeQueueVisitQuery.isLoading}
+              visitLookupError={!linkedVisitId && activeQueueVisitQuery.isError}
+              onRetryVisitLookup={() => activeQueueVisitQuery.refetch()}
+              onTakeVitals={() => setActiveTab("vitals")}
+            />
+          )}
 
           {activeTab === "medication" && <PatientPrescriptionsTab patientId={patient.id} />}
 

@@ -61,6 +61,14 @@ export async function getVisit(visitId: string): Promise<Visit> {
   return apiClient.get<Visit>(`/api/v1/visits/${visitId}`, { headers: tenantAuthHeaders() });
 }
 
+export async function getActiveQueueVisit(patientId: string): Promise<Visit | null> {
+  const response = await apiClient.get<{ item: Visit | null }>(
+    `/api/v1/patients/${patientId}/active-queue-visit`,
+    { headers: tenantAuthHeaders() },
+  );
+  return response.item;
+}
+
 // The patient record's Visits tab — every visit this patient has ever had,
 // across every facility, newest first. facilityName travels with each row
 // (resolved server-side) so the page never has to look it up itself.

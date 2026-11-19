@@ -4,6 +4,8 @@ import { Eraser } from "lucide-react";
 interface SignaturePadProps {
   onChange: (signature: Blob | null) => void;
   disabled?: boolean;
+  initialDataUrl?: string | null;
+  emptyLabel?: string;
 }
 
 // A guardian's consent-to-act signature — drawn with mouse/touch/pen via
@@ -12,7 +14,12 @@ interface SignaturePadProps {
 // stroke-end; nothing is staged until the caller actually needs it
 // (RegisterPatientScreen holds it in state the same way it holds a picked
 // document file, right up until the guardian record itself exists).
-export function SignaturePad({ onChange, disabled }: SignaturePadProps) {
+export function SignaturePad({
+  onChange,
+  disabled,
+  initialDataUrl,
+  emptyLabel = "Sign here to consent to act on the patient's behalf",
+}: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
   const [hasDrawn, setHasDrawn] = useState(false);
@@ -29,6 +36,26 @@ export function SignaturePad({ onChange, disabled }: SignaturePadProps) {
     canvas.height = height * ratio;
     canvas.getContext("2d")?.scale(ratio, ratio);
   }, []);
+
+  useEffect(() => {
+    if (!initialDataUrl) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let active = true;
+    const image = new Image();
+    image.onload = () => {
+      if (!active) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const { width, height } = canvas.getBoundingClientRect();
+      ctx.drawImage(image, 0, 0, width, height);
+      setHasDrawn(true);
+    };
+    image.src = initialDataUrl;
+    return () => {
+      active = false;
+    };
+  }, [initialDataUrl]);
 
   const point = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -87,7 +114,7 @@ export function SignaturePad({ onChange, disabled }: SignaturePadProps) {
         />
         {!hasDrawn && (
           <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-[12.5px] text-text-secondary">
-            Sign here to consent to act on the patient's behalf
+            {emptyLabel}
           </p>
         )}
       </div>
