@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -53,6 +54,12 @@ public class VisitController {
         return ResponseEntity.ok(VisitResponse.from(visitService.get(id)));
     }
 
+    @GetMapping("/api/v1/patients/{patientId}/active-queue-visit")
+    public ResponseEntity<ActiveQueueVisitResponse> activeQueueVisit(@PathVariable UUID patientId) {
+        var item = visitService.getActiveQueueVisit(patientId).map(VisitResponse::from).orElse(null);
+        return ResponseEntity.ok(new ActiveQueueVisitResponse(item));
+    }
+
     // The patient record's Visits tab — every visit this patient has ever
     // had, newest first, each one carrying the facility's name so the UI
     // never has to resolve facilityId itself.
@@ -76,6 +83,9 @@ public class VisitController {
             return new VisitResponse(v.getId(), v.getPatientId(), v.getFacilityId(), v.getVisitType(),
                     v.getServiceStream(), v.getVisitDateTime());
         }
+    }
+
+    public record ActiveQueueVisitResponse(VisitResponse item) {
     }
 
     public record VisitWithTokenResponse(VisitResponse visit, QueueTokenResponse token) {

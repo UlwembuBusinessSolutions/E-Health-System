@@ -50,8 +50,11 @@ public class ConsultationController {
         VitalsBypassReason reason = request == null ? null : request.vitalsBypassReason();
         String note = request == null ? null : request.vitalsBypassNote();
         UUID continueFrom = request == null ? null : request.continueFromConsultationId();
+        ServiceReasonCode serviceReasonCode = request == null ? null : request.serviceReasonCode();
+        String serviceReasonNote = request == null ? null : request.serviceReasonNote();
         Consultation consultation = consultationService.createDraft(visitId, staff.userId(), reason, note,
-                continueFrom);
+                continueFrom, serviceReasonCode, serviceReasonNote,
+                request == null ? null : request.artPathwayCode());
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(consultation));
     }
 
@@ -121,6 +124,14 @@ public class ConsultationController {
                 request.examinationNotes(), request.investigationsNotes(), request.treatmentPlan(),
                 request.prescriptionDraft());
         Consultation consultation = consultationService.updateDraft(id, cmd, staff.userId());
+        return ResponseEntity.ok(toResponse(consultation));
+    }
+
+    @PatchMapping("/api/v1/consultations/{id}/service-reason")
+    public ResponseEntity<ConsultationResponse> updateServiceReason(@PathVariable UUID id,
+            @Valid @RequestBody ServiceReasonRequest request) {
+        Consultation consultation = consultationService.updateServiceReason(id, request.serviceReasonCode(),
+                request.serviceReasonNote(), request.artPathwayCode());
         return ResponseEntity.ok(toResponse(consultation));
     }
 
@@ -234,7 +245,15 @@ public class ConsultationController {
     // Both optional: only needed when the visit has no vitals on record.
     public record StartConsultationRequest(VitalsBypassReason vitalsBypassReason,
                                            @Size(max = 300) String vitalsBypassNote,
-                                           UUID continueFromConsultationId) {
+                                           UUID continueFromConsultationId,
+                                           ServiceReasonCode serviceReasonCode,
+                                           @Size(max = 300) String serviceReasonNote,
+                                           ArtPathwayCode artPathwayCode) {
+    }
+
+    public record ServiceReasonRequest(@NotNull ServiceReasonCode serviceReasonCode,
+                                       @Size(max = 300) String serviceReasonNote,
+                                       ArtPathwayCode artPathwayCode) {
     }
 
     // Either diagnosisId (picked from the catalogue) or diagnosisText (typed) is needed; a typed name that is
@@ -320,7 +339,9 @@ public class ConsultationController {
                                         ConsultationOutcome outcome, String outcomeNotes, Instant createdAt,
                                         Instant updatedAt, List<DiagnosisResponse> diagnoses,
                                         VitalsBypassReason vitalsBypassReason, String vitalsBypassNote,
-                                        String prescriptionDraft, EarlierConsultationResponse continuedFrom) {
+                                        String prescriptionDraft, EarlierConsultationResponse continuedFrom,
+                                        ServiceReasonCode serviceReasonCode, String serviceReasonNote,
+                                        ArtPathwayCode artPathwayCode) {
         static ConsultationResponse from(Consultation c, List<DiagnosisResponse> diagnoses, String authorName,
                                           String signedByName, EarlierConsultationResponse continuedFrom) {
             return new ConsultationResponse(c.getId(), c.getVisitId(), c.getStatus(),
@@ -329,7 +350,8 @@ public class ConsultationController {
                     c.getCurrentMedications(), c.getAllergyStatus(), c.getAllergyDetail(), c.getExaminationNotes(),
                     c.getInvestigationsNotes(), c.getTreatmentPlan(), c.getOutcome(), c.getOutcomeNotes(),
                     c.getCreatedAt(), c.getUpdatedAt(), diagnoses, c.getVitalsBypassReason(),
-                    c.getVitalsBypassNote(), c.getPrescriptionDraft(), continuedFrom);
+                    c.getVitalsBypassNote(), c.getPrescriptionDraft(), continuedFrom, c.getServiceReasonCode(),
+                    c.getServiceReasonNote(), c.getArtPathwayCode());
         }
     }
 }

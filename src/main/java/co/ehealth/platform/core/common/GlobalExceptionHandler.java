@@ -18,6 +18,26 @@ import co.ehealth.platform.identity.NotAnOrgAdminException;
 import co.ehealth.platform.identity.NotAClinicalRoleException;
 import co.ehealth.platform.identity.NotAuthorizedException;
 import co.ehealth.platform.identity.RateLimitExceededException;
+import co.ehealth.platform.art.InvalidArtEyesExaminationException;
+import co.ehealth.platform.art.InvalidArtStage1ConditionsException;
+import co.ehealth.platform.art.InvalidArtInitiationSummaryException;
+import co.ehealth.platform.art.InvalidArtInitiationLongitudinalRecordException;
+import co.ehealth.platform.art.InvalidArtInitiationPriorHaartHistoryException;
+import co.ehealth.platform.art.InvalidArtInitiationTbScreeningException;
+import co.ehealth.platform.art.InvalidArtInitiationMedicalHistoryException;
+import co.ehealth.platform.art.InvalidArtInitiationJaccolExaminationException;
+import co.ehealth.platform.art.InvalidArtInitiationMusculoskeletalException;
+import co.ehealth.platform.art.InvalidArtInitiationMentalStateExaminationException;
+import co.ehealth.platform.art.InvalidArtInitiationCentralNervousSystemException;
+import co.ehealth.platform.art.InvalidArtInitiationSkinExaminationException;
+import co.ehealth.platform.art.InvalidArtInitiationEntExaminationException;
+import co.ehealth.platform.art.InvalidArtInitiationHealthEducationException;
+import co.ehealth.platform.art.InvalidArtInitiationReferralConfirmationException;
+import co.ehealth.platform.art.InvalidArtInitiationAdditionalClinicalNotesException;
+import co.ehealth.platform.art.InvalidArtInitiationClinicianDetailsException;
+import co.ehealth.platform.art.InvalidArtInitiationSummaryException;
+import co.ehealth.platform.art.InvalidArtLongitudinalRecordException;
+import co.ehealth.platform.laboratory.InvalidLaboratoryInvestigationException;
 import co.ehealth.platform.platform.FoundationModuleException;
 import co.ehealth.platform.platform.LastActiveOperatorException;
 import co.ehealth.platform.platform.OrganizationNotFoundException;
@@ -487,6 +507,119 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // problem, not a server error, same shape as InvalidQueueReasonException.
     @ExceptionHandler(InvalidTriageCaptureException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidTriageCapture(InvalidTriageCaptureException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidLaboratoryInvestigationException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidLaboratoryInvestigation(
+            InvalidLaboratoryInvestigationException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtLongitudinalRecordException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtLongitudinalRecord(
+            InvalidArtLongitudinalRecordException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationLongitudinalRecordException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationLongitudinalRecord(
+            InvalidArtInitiationLongitudinalRecordException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationSummaryException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationSummary(
+            InvalidArtInitiationSummaryException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtEyesExaminationException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtEyesExamination(
+            InvalidArtEyesExaminationException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtStage1ConditionsException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtStage1Conditions(InvalidArtStage1ConditionsException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationPriorHaartHistoryException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationPriorHaartHistory(
+            InvalidArtInitiationPriorHaartHistoryException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationTbScreeningException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationTbScreening(
+            InvalidArtInitiationTbScreeningException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationMedicalHistoryException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationMedicalHistory(
+            InvalidArtInitiationMedicalHistoryException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationJaccolExaminationException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationJaccolExamination(
+            InvalidArtInitiationJaccolExaminationException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationMusculoskeletalException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationMusculoskeletal(
+            InvalidArtInitiationMusculoskeletalException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationMentalStateExaminationException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationMentalStateExamination(
+            InvalidArtInitiationMentalStateExaminationException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationCentralNervousSystemException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationCentralNervousSystem(
+            InvalidArtInitiationCentralNervousSystemException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationSkinExaminationException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationSkinExamination(
+            InvalidArtInitiationSkinExaminationException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationEntExaminationException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationEntExamination(
+            InvalidArtInitiationEntExaminationException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationHealthEducationException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationHealthEducation(
+            InvalidArtInitiationHealthEducationException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationReferralConfirmationException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationReferralConfirmation(
+            InvalidArtInitiationReferralConfirmationException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationAdditionalClinicalNotesException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationAdditionalClinicalNotes(
+            InvalidArtInitiationAdditionalClinicalNotesException ex) {
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
+    }
+
+    @ExceptionHandler(InvalidArtInitiationClinicianDetailsException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidArtInitiationClinicianDetails(
+            InvalidArtInitiationClinicianDetailsException ex) {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(ex.getMessage(), null));
     }
 

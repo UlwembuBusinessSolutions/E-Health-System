@@ -1,0 +1,21 @@
+CREATE TABLE art_initiation_health_education (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    visit_id UUID NOT NULL UNIQUE REFERENCES visits(id),
+    condom_importance BOOLEAN,
+    healthy_lifestyle_diet BOOLEAN,
+    partner_testing BOOLEAN,
+    hiv_status_disclosure BOOLEAN,
+    adherence_compliance BOOLEAN,
+    family_planning BOOLEAN,
+    general_hiv_information BOOLEAN,
+    regular_pap_smear BOOLEAN,
+    medication_side_effects BOOLEAN,
+    clinic_attendance_for_health_issues BOOLEAN,
+    herbal_traditional_medication_discussion BOOLEAN,
+    other_discussed BOOLEAN,
+    other_specify TEXT,
+    created_by_user_id UUID NOT NULL,
+    updated_by_user_id UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

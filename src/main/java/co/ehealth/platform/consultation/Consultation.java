@@ -107,6 +107,17 @@ public class Consultation {
     @Column(name = "vitals_bypass_note", length = 300)
     private String vitalsBypassNote;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "service_reason_code", length = 30)
+    private ServiceReasonCode serviceReasonCode;
+
+    @Column(name = "service_reason_note", length = 300)
+    private String serviceReasonNote;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "art_pathway_code", length = 40)
+    private ArtPathwayCode artPathwayCode;
+
     // The doctor's unsigned prescription as JSON, kept so closing the record loses nothing.
     @Column(name = "prescription_draft")
     private String prescriptionDraft;
@@ -207,6 +218,18 @@ public class Consultation {
         return vitalsBypassNote;
     }
 
+    public ServiceReasonCode getServiceReasonCode() {
+        return serviceReasonCode;
+    }
+
+    public String getServiceReasonNote() {
+        return serviceReasonNote;
+    }
+
+    public ArtPathwayCode getArtPathwayCode() {
+        return artPathwayCode;
+    }
+
     public UUID getContinuedFromConsultationId() {
         return continuedFromConsultationId;
     }
@@ -221,6 +244,15 @@ public class Consultation {
     public void recordVitalsBypass(VitalsBypassReason reason, String note) {
         this.vitalsBypassReason = reason;
         this.vitalsBypassNote = note;
+    }
+
+    public void recordServiceReason(ServiceReasonCode reason, String note) {
+        this.serviceReasonCode = reason;
+        this.serviceReasonNote = note;
+    }
+
+    public void recordArtPathway(ArtPathwayCode pathway) {
+        this.artPathwayCode = pathway;
     }
 
     public UUID getAuthorUserId() {

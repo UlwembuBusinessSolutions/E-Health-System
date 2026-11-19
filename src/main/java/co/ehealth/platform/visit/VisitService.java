@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -29,6 +30,7 @@ public class VisitService {
     private final PatientService patientService;
     private final FacilityService facilityService;
     private final FacilityRepository facilityRepository;
+    private final QueueTokenRepository queueTokenRepository;
     private final QueueService queueService;
     private final AuditLogService auditLogService;
     private final Clock clock;
@@ -36,12 +38,14 @@ public class VisitService {
 
     public VisitService(VisitRepository visitRepository, PatientService patientService,
                          FacilityService facilityService, FacilityRepository facilityRepository,
-                         QueueService queueService, AuditLogService auditLogService, Clock clock,
+                         QueueTokenRepository queueTokenRepository, QueueService queueService,
+                         AuditLogService auditLogService, Clock clock,
                          PermissionService permissionService) {
         this.visitRepository = visitRepository;
         this.patientService = patientService;
         this.facilityService = facilityService;
         this.facilityRepository = facilityRepository;
+        this.queueTokenRepository = queueTokenRepository;
         this.queueService = queueService;
         this.auditLogService = auditLogService;
         this.clock = clock;
@@ -98,6 +102,25 @@ public class VisitService {
     public Visit get(UUID id) {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
         return visitRepository.findById(id).orElseThrow(VisitNotFoundException::new);
+    }
+
+    // Resolves the latest visit that still has a live queue token, so a
+    // patient profile opened outside the Reception/Queue link can continue
+    // the existing visit instead of asking staff to check in again.
+    public Optional<Visit> getActiveQueueVisit(UUID patientId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        List<Visit> visits = visitRepository.findByPatientIdOrderByVisitDateTimeDesc(patientId);
+        if (visits.isEmpty()) return Optional.empty();
+
+        Set<UUID> activeVisitIds = queueTokenRepository.findByVisitIdIn(
+                        visits.stream().map(Visit::getId).toList())
+                .stream()
+                .filter(token -> token.getStatus() == TokenStatus.ISSUED
+                        || token.getStatus() == TokenStatus.CALLED
+                        || token.getStatus() == TokenStatus.MISSED)
+                .map(QueueToken::getVisitId)
+                .collect(Collectors.toSet());
+        return visits.stream().filter(visit -> activeVisitIds.contains(visit.getId())).findFirst();
     }
 
     // The patient record's own Visits tab — every visit this patient has
