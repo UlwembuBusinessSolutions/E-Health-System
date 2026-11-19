@@ -1,16 +1,14 @@
-import { apiClient } from "./client";
+﻿import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
 
 // RECQ-US-008/009/010. Matches TriageController field-for-field.
 export type ScoringProfile = "ADULT" | "PAEDIATRIC_OLDER_CHILD" | "PAEDIATRIC_YOUNGER_CHILD";
 export type Avpu = "ALERT" | "CONFUSED" | "VOICE" | "PAIN" | "UNRESPONSIVE";
-export type Mobility = "WALKING" | "MOBILE_WITH_ASSISTANCE" | "IMMOBILE";
-export type OxygenSupport = "ROOM_AIR" | "SUPPLEMENTAL";
 export type TriageColour = "GREEN" | "YELLOW" | "ORANGE" | "RED";
 export type TriageAssessmentStatus = "ACTIVE" | "SUPERSEDED" | "ENTERED_IN_ERROR";
 
 // A small, representative starter set, not the exhaustive licensed SATS
-// discriminator list — TriageDiscriminator.java's own why-note.
+// discriminator list â€” TriageDiscriminator.java's own why-note.
 export type TriageDiscriminator =
   | "CHEST_PAIN"
   | "DIFFICULTY_BREATHING"
@@ -29,6 +27,7 @@ export interface AdditionalObservations {
   heightCm?: number | null;
   glucoseMmolL?: number | null;
   haemoglobinGdl?: number | null;
+  peakFlowLpm?: number | null;
   bmi?: number | null;
   urineProtein?: string | null;
   urineGlucose?: string | null;
@@ -36,6 +35,9 @@ export interface AdditionalObservations {
   urineBlood?: string | null;
   urineLeukocytes?: string | null;
   urineNitrites?: string | null;
+  urineUrobilinogen?: string | null;
+  urineBilirubin?: string | null;
+  urinePh?: number | null;
   pregnancyTest?: string | null;
 }
 
@@ -43,6 +45,8 @@ export interface TriageAssessment {
   additionalObservations?: AdditionalObservations | null;
   id: string;
   visitId: string;
+  consultationId?: string | null;
+  capturedByName?: string | null;
   status: TriageAssessmentStatus;
   supersedesAssessmentId: string | null;
   correctionReason: string | null;
@@ -56,14 +60,7 @@ export interface TriageAssessment {
   diastolicBp: number | null;
   temperatureCelsius: number | null;
   spo2Percent: number | null;
-  oxygenSupport: OxygenSupport;
-  oxygenDevice: string | null;
-  oxygenFlowLpm: number | null;
   avpu: Avpu | null;
-  mobility: Mobility | null;
-  painScore: number | null;
-  painScale: string | null;
-  presentingComplaint: string | null;
   outOfRangeConfirmed: boolean;
   validationWarnings: string | null;
   discriminators: TriageDiscriminator[];
@@ -82,6 +79,7 @@ export interface CaptureTriagePayload {
   additionalObservations?: AdditionalObservations;
   emergencySign: boolean;
   emergencySignNote?: string;
+  dateOfBirth?: string;
   scoringProfileOverride?: ScoringProfile;
   respiratoryRate?: number;
   heartRate?: number;
@@ -89,14 +87,7 @@ export interface CaptureTriagePayload {
   diastolicBp?: number;
   temperatureCelsius?: number;
   spo2Percent?: number;
-  oxygenSupport?: OxygenSupport;
-  oxygenDevice?: string;
-  oxygenFlowLpm?: number;
   avpu?: Avpu;
-  mobility?: Mobility;
-  painScore?: number;
-  painScale?: string;
-  presentingComplaint?: string;
   discriminators?: TriageDiscriminator[];
   supersedesAssessmentId?: string;
   idempotencyKey?: string;
@@ -105,7 +96,7 @@ export interface CaptureTriagePayload {
   colourConfirmationReason?: string;
 }
 
-// RECQ-US-008/009/010 — one capture. `idempotencyKey` should be a fresh
+// RECQ-US-008/009/010 â€” one capture. `idempotencyKey` should be a fresh
 // value per user-initiated submit (a uuid generated client-side), not
 // reused across retries with different data: the backend treats a repeat
 // of the same key on the same visit as "this exact request already
@@ -116,7 +107,7 @@ export async function captureTriage(visitId: string, payload: CaptureTriagePaylo
   });
 }
 
-// Full history, oldest first — ACTIVE and corrected/superseded entries
+// Full history, oldest first â€” ACTIVE and corrected/superseded entries
 // alike, so the timeline shows both what's current and what changed.
 export async function getTriageHistory(visitId: string): Promise<TriageAssessment[]> {
   const response = await apiClient.get<{ items: TriageAssessment[] }>(`/api/v1/visits/${visitId}/triage`, {
@@ -138,12 +129,12 @@ export interface PatientVitalsHistoryPage {
   totalPages: number;
 }
 
-// The patient-level Vitals tab (PatientDetailPage) — every capture across
+// The patient-level Vitals tab (PatientDetailPage) â€” every capture across
 // every visit this patient has ever had, each one annotated with who
 // captured it. `from`/`to` (yyyy-mm-dd) filter by observed date; either or
 // both may be omitted to leave that side unbounded. `ascending` reverses
 // the default newest-first order. Paginated the same shape listQueue()
-// below already uses — page/pageSize in, items/page/pageSize/totalElements/
+// below already uses â€” page/pageSize in, items/page/pageSize/totalElements/
 // totalPages out.
 export async function getPatientVitalsHistory(
   patientId: string,
@@ -164,10 +155,10 @@ export interface VitalsAssessmentDetail {
   assessment: TriageAssessment;
   capturedByName: string | null;
   patientName: string;
-  patientMpi: string;
+  patientMpi: string | null;
 }
 
-// VitalsPrintPage — one assessment by id. Unlike PatientVitalsEntry above,
+// VitalsPrintPage â€” one assessment by id. Unlike PatientVitalsEntry above,
 // this carries the patient's own name/MPI: the print page opens in a fresh
 // popup with no surrounding page to show whose record it is, so that has to
 // travel with the assessment itself (TriageService.getAssessment()'s own
@@ -183,7 +174,7 @@ export async function getLatestTriage(visitId: string): Promise<TriageAssessment
   return response.item;
 }
 
-// A pure mistake (wrong patient, fat-fingered) with nothing to replace —
+// A pure mistake (wrong patient, fat-fingered) with nothing to replace â€”
 // unlike capturing again with supersedesAssessmentId set, which corrects
 // by replacing.
 export async function markTriageEnteredInError(assessmentId: string, reason: string): Promise<TriageAssessment> {
@@ -205,3 +196,4 @@ export async function overrideTriageColour(
     { headers: tenantAuthHeaders() },
   );
 }
+

@@ -64,13 +64,13 @@ export function VitalsIntakePage() {
   });
 
   const facilities = facilitiesQuery.data ?? [];
-  const entries = queueQuery.data?.items ?? [];
+  const entries = (queueQuery.data?.items ?? []).filter((entry) => entry.patientId === null);
 
   return (
     <div>
       <PageHeader
         title="Take Vitals"
-        description="Today's waiting and called patients, ready for vitals or triage capture."
+        description="Today's unregistered walk-ins who are waiting or called, ready for vitals or triage capture."
         action={
           facilities.length > 1 ? (
             <select
@@ -104,7 +104,7 @@ export function VitalsIntakePage() {
 
         {entries.length === 0 ? (
           <p className="p-8 text-center text-[13.5px] text-text-secondary">
-            {queueQuery.isLoading ? "Loading…" : "No one is waiting or called right now."}
+            {queueQuery.isLoading ? "Loading…" : "No unregistered walk-ins are waiting or called right now."}
           </p>
         ) : (
           <table className="w-full text-left">
@@ -125,7 +125,7 @@ export function VitalsIntakePage() {
                   </td>
                   <td className="px-5 py-3.5">
                     <p className="text-[13.5px] font-medium text-text-primary">{entry.patientName}</p>
-                    <p className="text-[12px] text-text-secondary">{entry.patientMpi}</p>
+                    <p className="text-[12px] text-text-secondary">Unregistered walk-in</p>
                   </td>
                   <td className="px-5 py-3.5">
                     <StatusPill tone={entry.token.status === "CALLED" ? "success" : "neutral"}>
@@ -140,7 +140,11 @@ export function VitalsIntakePage() {
                       variant="secondary"
                       size="md"
                       icon={<HeartPulse className="size-3.5" aria-hidden />}
-                      onClick={() => navigate(`/app/patients/${entry.patientId}?visitId=${entry.token.visitId}`)}
+                      onClick={() =>
+                        navigate(
+                          `/app/patients/walk-in?visitId=${entry.token.visitId}&tokenNumber=${entry.token.tokenNumber}&tab=vitals`,
+                        )
+                      }
                     >
                       Take vitals
                     </Button>

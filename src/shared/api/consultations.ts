@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
+import type { ServiceStream } from './visits';
 
 // The "Consultation MVP" slice of
 // Docs/vitals-to-consultation-pharmacy-closure-brainstorm.md §5/§13.5/§13.7.
@@ -25,6 +26,21 @@ export interface ConsultationDiagnosis {
   catalogueVersion: string | null;
   code: string | null;
   displayText: string | null;
+  /** The catalogue entry this is, so the same condition can be counted across consultations. */
+  diagnosisId: string | null;
+}
+
+/** An earlier signed consultation of the same episode of care, for example before the patient was sent elsewhere and came back. */
+export interface EarlierConsultation {
+  consultationId: string;
+  visitId: string;
+  facilityName: string;
+  signedAt: string | null;
+  signedByName: string | null;
+  outcome: ConsultationOutcome | null;
+  diagnoses: ConsultationDiagnosis[];
+  /** The nearest visit, this one first, with vitals on record; null when no visit has any. */
+  vitalsVisitId: string | null;
 }
 
 export interface Consultation {
@@ -54,14 +70,128 @@ export interface Consultation {
   createdAt: string;
   updatedAt: string;
   diagnoses: ConsultationDiagnosis[];
+  // Set when the consultation was started with no vitals on the visit.
+  vitalsBypassReason: VitalsBypassReason | null;
+  vitalsBypassNote: string | null;
+  // The doctor's unsigned prescription as JSON; null when none was saved.
+  prescriptionDraft: string | null;
+  /** Set when this consultation carries on from an earlier one. */
+  continuedFrom: EarlierConsultation | null;
+  classificationReasonIds: string[];
+}
+
+export interface ClassificationReason {
+  id: string;
+  serviceStream: ServiceStream;
+  serviceStreamLabel: string;
+  reasonCode: string;
+  label: string;
+  active: boolean;
+}
+
+export interface ClassificationReasonCatalog {
+  title: string;
+  instruction: string;
+  acceptanceCriteria: string;
+  items: ClassificationReason[];
+}
+
+export async function getClassificationReasons(serviceStream: ServiceStream): Promise<ClassificationReasonCatalog> {
+  return apiClient.get<ClassificationReasonCatalog>(
+    `/api/v1/classification-reasons?serviceStream=${encodeURIComponent(serviceStream)}`,
+    { headers: tenantAuthHeaders() },
+  );
+}
+
+export interface ManagedClassificationReason extends ClassificationReason {
+  active: boolean;
+  sortOrder: number;
+}
+
+export async function getManagedClassificationReasons(): Promise<ManagedClassificationReason[]> {
+  const response = await apiClient.get<{ items: ManagedClassificationReason[] }>("/api/v1/admin/classification-reasons", { headers: tenantAuthHeaders() });
+  return response.items;
+}
+
+export async function createClassificationReason(payload: { serviceStream: string; reasonCode: string; label: string; sortOrder: number }): Promise<ManagedClassificationReason> {
+  return apiClient.post<ManagedClassificationReason>("/api/v1/admin/classification-reasons", payload, { headers: tenantAuthHeaders() });
+}
+
+export async function updateClassificationReason(id: string, payload: { label: string; active: boolean; sortOrder: number }): Promise<ManagedClassificationReason> {
+  return apiClient.patch<ManagedClassificationReason>(`/api/v1/admin/classification-reasons/${id}`, payload, { headers: tenantAuthHeaders() });
 }
 
 // Get-or-create — a second call against a visit that already has a draft
 // returns that same draft rather than creating a sibling.
-export async function createConsultationDraft(visitId: string): Promise<Consultation> {
-  return apiClient.post<Consultation>(`/api/v1/visits/${visitId}/consultations`, undefined, {
+/** Why a consultation was started for a visit with no vitals on record. */
+export type VitalsBypassReason = "EMERGENCY" | "FOLLOW_UP_NO_CHANGE" | "OTHER";
+
+export interface VitalsBypass {
+  reason: VitalsBypassReason;
+  /** Required (3+ characters) for OTHER. */
+  note?: string;
+}
+
+// A visit without vitals needs a bypass reason; the server refuses to start without one. Carrying on from an
+// earlier consultation (see getContinuableConsultation) copies its notes and diagnoses and needs no reason,
+// because the vitals from the earlier visit count.
+export async function createConsultationDraft(
+  visitId: string,
+  bypass?: VitalsBypass,
+  continueFromConsultationId?: string,
+): Promise<Consultation> {
+  const body =
+    bypass || continueFromConsultationId
+      ? { vitalsBypassReason: bypass?.reason, vitalsBypassNote: bypass?.note, continueFromConsultationId }
+      : undefined;
+  return apiClient.post<Consultation>(`/api/v1/visits/${visitId}/consultations`, body, {
     headers: tenantAuthHeaders(),
   });
+}
+
+/** One of the signed-in clinician's unsigned consultations, with the patient and visit it is for. */
+export interface InProgressConsultation {
+  consultationId: string;
+  visitId: string;
+  patientId: string;
+  patientName: string;
+  patientMpi: string;
+  facilityName: string;
+  visitDateTime: string;
+  startedAt: string;
+  updatedAt: string;
+}
+
+/** The clinician's own unsigned consultations, most recently saved first. */
+export async function getInProgressConsultations(): Promise<InProgressConsultation[]> {
+  const response = await apiClient.get<{ items: InProgressConsultation[] }>("/api/v1/consultations/in-progress", {
+    headers: tenantAuthHeaders(),
+  });
+  return response.items;
+}
+
+/** A consultation with the visit it belongs to, as listed on the patient's record. */
+export interface PatientConsultation {
+  consultation: Consultation;
+  visitDateTime: string;
+  facilityName: string;
+}
+
+/** The patient's consultations from every visit, newest first: in progress and signed (amended ones as their latest version). */
+export async function getPatientConsultations(patientId: string): Promise<PatientConsultation[]> {
+  const response = await apiClient.get<{ items: PatientConsultation[] }>(`/api/v1/patients/${patientId}/consultations`, {
+    headers: tenantAuthHeaders(),
+  });
+  return response.items;
+}
+
+/** The earlier consultation this visit can carry on from, or null when there is none. */
+export async function getContinuableConsultation(visitId: string): Promise<EarlierConsultation | null> {
+  const response = await apiClient.get<{ item: EarlierConsultation | null }>(
+    `/api/v1/visits/${visitId}/consultations/continuable`,
+    { headers: tenantAuthHeaders() },
+  );
+  return response.item;
 }
 
 // Full history, oldest first — DRAFT/SIGNED and SUPERSEDED/ENTERED_IN_ERROR
@@ -92,6 +222,9 @@ export interface UpdateConsultationPayload {
   examinationNotes?: string;
   investigationsNotes?: string;
   treatmentPlan?: string;
+  // The unsigned prescription as JSON, saved with the draft. Leave out to keep what is saved.
+  prescriptionDraft?: string;
+  classificationReasonIds: string[];
 }
 
 // DRAFT only — a 409 (ApiError) means the consultation was signed since it
@@ -103,8 +236,10 @@ export async function updateConsultationDraft(
   return apiClient.patch<Consultation>(`/api/v1/consultations/${id}`, payload, { headers: tenantAuthHeaders() });
 }
 
+/** Either a catalogue pick (`diagnosisId`) or a typed name; a name not in the catalogue is added to it. */
 export interface AddDiagnosisPayload {
-  diagnosisText: string;
+  diagnosisId?: string;
+  diagnosisText?: string;
   isPrimary: boolean;
   certainty: DiagnosisCertainty;
 }
@@ -124,6 +259,17 @@ export async function removeConsultationDiagnosis(id: string, diagnosisId: strin
   });
 }
 
+/** How a medicine is taken, as separate facts. `dosage` stays the readable sentence of the same thing. */
+export interface MedicineDirections {
+  strengthForm?: string;
+  dose?: string;
+  route?: string;
+  frequency?: string;
+  duration?: string;
+  quantityUnit?: string;
+  instructions?: string;
+}
+
 export interface PharmacyItemPayload {
   drugName: string;
   dosage: string;
@@ -132,6 +278,7 @@ export interface PharmacyItemPayload {
   // list; the pharmacist then needs no matching step, and the server refuses
   // a quantity the shelf cannot cover.
   productId?: string;
+  directions?: MedicineDirections;
 }
 
 // A medicine the patient should buy instead of receiving it from the
@@ -142,6 +289,7 @@ export interface PurchaseItemPayload {
   quantity: number;
   productId?: string;
   note?: string;
+  directions?: MedicineDirections;
 }
 
 export interface SignConsultationPayload {
@@ -160,6 +308,7 @@ export interface SignConsultationPayload {
   // SEND_TO_PHARMACY (always the one org-wide pharmacy), a referral has no
   // single sensible default.
   destinationFacilityId?: string;
+  classificationReasonIds: string[];
 }
 
 // Does not require a diagnosis first — a symptom-based assessment is
@@ -183,6 +332,7 @@ export interface AmendConsultationPayload {
   pharmacyItems?: PharmacyItemPayload[];
   purchaseItems?: PurchaseItemPayload[];
   destinationFacilityId?: string;
+  classificationReasonIds: string[];
 }
 
 // A correction to a signed consultation never edits it in place — this

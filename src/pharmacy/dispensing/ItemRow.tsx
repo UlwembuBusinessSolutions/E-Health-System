@@ -1,15 +1,14 @@
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import type { DispenseItemPayload, Prescription, PrescriptionItem, ProductRef, WitnessCredentials } from "@/shared/api/pharmacy";
-import { describeError, isPbpaClinicScheduleRequired, isWitnessRequired } from "../lib/problem";
-import { useDispenseItem, useMapProduct, useMarkOutOfStock, useRecordReturn } from "./hooks/useItemMutations";
+import { describeError, isWitnessRequired } from "../lib/problem";
+import { useDispenseItem, useMarkOutOfStock, useRecordReturn } from "./hooks/useItemMutations";
 import { ChangeLotPicker } from "./ChangeLotPicker";
 import { ItemActions, type ItemPanel } from "./ItemActions";
 import { ItemBadges, itemStatusNote } from "./ItemBadges";
-import { activeLot, isMapped, lotAdvice, returnableQuantity, suggestedProductOf } from "./itemState";
+import { activeLot, isMapped, lotAdvice, returnableQuantity } from "./itemState";
 import { OutOfStockForm } from "./OutOfStockForm";
 import { PartialDispenseForm } from "./PartialDispenseForm";
-import { ProductPicker } from "./ProductPicker";
 import { RecordReturnForm } from "./RecordReturnForm";
 import { StockLine } from "./StockLine";
 import { SubstitutionAnswer } from "./SubstitutionAnswer";
@@ -29,14 +28,9 @@ export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
   const [chosenBatchId, setChosenBatchId] = useState<string | null>(null);
   // The dispense the server refused for lack of a witness, kept so it can be sent again with one.
   const [needsWitness, setNeedsWitness] = useState<DispenseItemPayload | null>(null);
-  const [needsManagerOverride, setNeedsManagerOverride] = useState<DispenseItemPayload | null>(null);
-  const [managerEmail, setManagerEmail] = useState("");
-  const [managerPassword, setManagerPassword] = useState("");
-  const [overrideReason, setOverrideReason] = useState("");
 
   const dispense = useDispenseItem(prescription.id, item.id);
   const markOutOfStock = useMarkOutOfStock(prescription.id, item.id);
-  const mapProduct = useMapProduct(prescription.id, item.id);
   const recordReturn = useRecordReturn(prescription.id, item.id);
 
   const lot = activeLot(item, chosenBatchId);
@@ -48,13 +42,10 @@ export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
     dispense.mutate(payload, {
       onSuccess: () => {
         setNeedsWitness(null);
-        setNeedsManagerOverride(null);
-        setManagerPassword("");
         onDone?.();
       },
       onError: (error) => {
         if (isWitnessRequired(error)) setNeedsWitness(payload);
-        if (isPbpaClinicScheduleRequired(error)) setNeedsManagerOverride(payload);
       },
     });
   }
@@ -90,12 +81,12 @@ export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
       )}
 
       {!isMapped(item) ? (
-        <ProductPicker
-          drugName={item.drugName}
-          suggestion={suggestedProductOf(item)}
-          loading={mapProduct.isPending}
-          onConfirm={(productId) => mapProduct.mutate(productId)}
-        />
+        // Only the prescriber chooses the medicine, so there is nothing to pick here:
+        // the pharmacist asks the prescriber to correct the prescription instead.
+        <p role="note" className="mt-3 rounded-lg border border-amber-500/40 bg-amber-50 p-3 text-[13.5px] text-text-primary">
+          The prescriber did not choose a stock medicine for this line, so it cannot be dispensed. Use
+          &quot;Message prescriber&quot; to ask for a corrected prescription.
+        </p>
       ) : (
         <ItemActions
           item={item}
@@ -163,21 +154,6 @@ export function ItemRow({ prescription, item, onAskSubstitute }: ItemRowProps) {
           onConfirm={dispenseWitnessed}
           onCancel={() => setNeedsWitness(null)}
         />
-      )}
-      {needsManagerOverride && (
-        <div role="dialog" aria-label="Manager clinic override" className="mt-3 rounded-lg border border-amber-500/40 bg-amber-50 p-3">
-          <p className="text-sm font-semibold text-text-primary">Manager approval required</p>
-          <p className="mt-1 text-xs text-text-secondary">This assistant is not scheduled at this clinic. A facility manager must approve and give a reason.</p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <input aria-label="Facility manager email" type="email" placeholder="Facility manager email" value={managerEmail} onChange={(event) => setManagerEmail(event.target.value)} className="rounded border border-border-subtle bg-white px-3 py-2 text-sm" />
-            <input aria-label="Manager password" type="password" placeholder="Manager password" value={managerPassword} onChange={(event) => setManagerPassword(event.target.value)} className="rounded border border-border-subtle bg-white px-3 py-2 text-sm" />
-            <input aria-label="Override reason" placeholder="Reason for override" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} className="rounded border border-border-subtle bg-white px-3 py-2 text-sm sm:col-span-2" />
-          </div>
-          <div className="mt-3 flex justify-end gap-2">
-            <button type="button" className="rounded border border-border-subtle px-3 py-1.5 text-sm" onClick={() => setNeedsManagerOverride(null)}>Cancel</button>
-            <button type="button" disabled={!managerEmail || !managerPassword || !overrideReason || dispense.isPending} className="rounded bg-primary px-3 py-1.5 text-sm text-white disabled:opacity-50" onClick={() => sendDispense({ ...needsManagerOverride, managerUserId: managerEmail, managerPassword, managerOverrideReason: overrideReason })}>Approve and dispense</button>
-          </div>
-        </div>
       )}
     </li>
   );

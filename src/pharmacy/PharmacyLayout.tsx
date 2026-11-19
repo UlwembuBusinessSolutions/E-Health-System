@@ -1,9 +1,9 @@
 import { NavLink, Outlet } from "react-router-dom";
 import clsx from "clsx";
 import {
-  CalendarDays,
   ClipboardCheck,
   FileUp,
+  LayoutDashboard,
   Package,
   PackagePlus,
   PackageOpen,
@@ -15,14 +15,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { WithPageLoading } from "@/app/pharmacyPages";
-import { useAuth } from "@/auth/AuthContext";
 import { PharmacyMoreMenu, type MoreMenuLink } from "./PharmacyMoreMenu";
 
 interface PharmacyTab {
   to: string;
   label: string;
   icon: LucideIcon;
-  /** Dispensing lives at the module root, so it must match exactly or it would stay active everywhere. */
+  /** Overview lives at the module root, so it must match exactly or it would stay active everywhere. */
   end?: boolean;
 }
 
@@ -30,7 +29,8 @@ interface PharmacyTab {
 // register, one-off opening stock) live under "More". Routes for pages that
 // aren't built yet are listed here on purpose: the integrator registers them.
 const TABS: PharmacyTab[] = [
-  { to: "/app/pharmacy", label: "Dispensing", icon: Pill, end: true },
+  { to: "/app/pharmacy", label: "Overview", icon: LayoutDashboard, end: true },
+  { to: "/app/pharmacy/dispensing", label: "Dispensing", icon: Pill },
   { to: "/app/pharmacy/stock", label: "Stock", icon: Package },
   { to: "/app/pharmacy/receive", label: "Receive", icon: PackagePlus },
   { to: "/app/pharmacy/reorder", label: "Reorder", icon: ShoppingCart },
@@ -46,11 +46,6 @@ const MORE_LINKS: MoreMenuLink[] = [
 ];
 
 export function PharmacyLayout() {
-  const { user } = useAuth();
-  const assignedRoles = user?.roles ?? (user ? [user.role] : []);
-  const moreLinks = assignedRoles.some((role) => role === "ORG_ADMIN" || role === "Facility Manager")
-    ? [...MORE_LINKS, { to: "/app/pharmacy/clinic-schedules", label: "PBPA clinic schedules", icon: CalendarDays }]
-    : MORE_LINKS;
   return (
     <div>
       <nav aria-label="Pharmacy" className="mb-6 flex items-end border-b border-border-subtle">
@@ -76,7 +71,7 @@ export function PharmacyLayout() {
             </NavLink>
           ))}
         </div>
-        <PharmacyMoreMenu links={moreLinks} />
+        <PharmacyMoreMenu links={MORE_LINKS} />
       </nav>
       {/* The tab strip stays put while a page's chunk loads. */}
       <WithPageLoading>

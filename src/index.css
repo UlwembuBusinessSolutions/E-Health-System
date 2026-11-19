@@ -64,6 +64,27 @@
   --critical-background: #fbeeec;
   --critical-foreground: #863225;
   --critical-accent: #a13d2e;
+  /* Chart marks (pharmacy Overview). The two series colours are a
+     colour-blind-safe pair; status colours always travel with a text label. */
+  --chart-series-1: #2a78d6;
+  --chart-series-2: #eb6834;
+  --chart-critical: #d03b3b;
+  --chart-warning: #eda100;
+  --chart-ok: #4f958a;
+  --chart-soon: #ec835a;
+  --chart-grid: #e8eae8;
+  --chart-axis: #c2c7bf;
+  --chart-band: #f1f2ef;
+  --chart-tooltip-bg: #171916;
+  --chart-tooltip-fg: #ffffff;
+  --chart-tooltip-muted: #d2d6d1;
+  /* South African Triage Scale colours for the waiting-room bar; the legend
+     beside it names each colour, so colour never carries meaning alone. */
+  --triage-red: #b42318;
+  --triage-orange: #e8710a;
+  --triage-yellow: #f2c200;
+  --triage-green: #2e7d32;
+  --triage-none-bar: #9aa29a;
   color-scheme: light;
 }
 
@@ -82,6 +103,19 @@
   --critical-background: #351f20;
   --critical-foreground: #ffaaa0;
   --critical-accent: #ed8f82;
+  --chart-series-1: #3987e5;
+  --chart-series-2: #d95926;
+  --chart-critical: #d03b3b;
+  --chart-warning: #fab219;
+  --chart-ok: #5aa597;
+  --chart-soon: #ec835a;
+  --chart-grid: #262b28;
+  --chart-axis: #3a423c;
+  --chart-band: #1f2427;
+  --chart-tooltip-bg: #eceeec;
+  --chart-tooltip-fg: #171916;
+  --chart-tooltip-muted: #4d534b;
+  --triage-none-bar: #5d665e;
   color-scheme: dark;
 }
 
@@ -101,6 +135,19 @@
     --critical-background: #351f20;
     --critical-foreground: #ffaaa0;
     --critical-accent: #ed8f82;
+    --chart-series-1: #3987e5;
+    --chart-series-2: #d95926;
+    --chart-critical: #d03b3b;
+    --chart-warning: #fab219;
+    --chart-ok: #5aa597;
+    --chart-soon: #ec835a;
+    --chart-grid: #262b28;
+    --chart-axis: #3a423c;
+    --chart-band: #1f2427;
+    --chart-tooltip-bg: #eceeec;
+    --chart-tooltip-fg: #171916;
+    --chart-tooltip-muted: #4d534b;
+    --triage-none-bar: #5d665e;
     color-scheme: dark;
   }
 }
@@ -120,6 +167,23 @@
   --color-critical-50: var(--critical-background);
   --color-critical-500: var(--critical-accent);
   --color-critical-600: var(--critical-foreground);
+  --color-chart-series-1: var(--chart-series-1);
+  --color-chart-series-2: var(--chart-series-2);
+  --color-chart-critical: var(--chart-critical);
+  --color-chart-warning: var(--chart-warning);
+  --color-chart-ok: var(--chart-ok);
+  --color-chart-soon: var(--chart-soon);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-axis: var(--chart-axis);
+  --color-chart-band: var(--chart-band);
+  --color-chart-tooltip-bg: var(--chart-tooltip-bg);
+  --color-chart-tooltip-fg: var(--chart-tooltip-fg);
+  --color-chart-tooltip-muted: var(--chart-tooltip-muted);
+  --color-triage-red: var(--triage-red);
+  --color-triage-orange: var(--triage-orange);
+  --color-triage-yellow: var(--triage-yellow);
+  --color-triage-green: var(--triage-green);
+  --color-triage-none-bar: var(--triage-none-bar);
 }
 
 * {

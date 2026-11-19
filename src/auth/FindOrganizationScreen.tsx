@@ -1,6 +1,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Building2 } from "lucide-react";
 import { AuthLayout } from "./AuthLayout";
 import { findOrganizationSchema, type FindOrganizationValues } from "./validation";
@@ -30,7 +30,7 @@ export function FindOrganizationScreen() {
   };
 
   return (
-    <AuthLayout title="Find your organisation" subtitle="Enter the slug your organisation was provisioned with." footer={<span>Looking for the patient portal? <Link to="/patient-login" className="font-semibold text-brand-600 hover:text-brand-700">Find your clinic</Link></span>}>
+    <AuthLayout title="Find your organisation" subtitle="Enter the slug your organisation was provisioned with.">
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="auth-fields flex flex-col gap-4">
         <Input
           label="Organization"

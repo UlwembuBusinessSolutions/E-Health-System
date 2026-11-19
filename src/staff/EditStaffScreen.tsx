@@ -18,7 +18,7 @@ import { editStaffSchema, type EditStaffValues } from "./validation";
 import {
   deleteStaffDocument,
   getStaffDetail,
-  getStaffDocumentContent,
+  getStaffDocumentDownloadUrl,
   listStaffDocuments,
   STAFF_DOCUMENT_TYPE_OPTIONS,
   updateStaffDetails,
@@ -227,12 +227,9 @@ export function EditStaffScreen() {
   // reason.
   const handleViewDocument = (documentId: string) => {
     const tab = window.open("", "_blank");
-    getStaffDocumentContent(staffId ?? "", documentId)
-      .then((blob) => {
-        if (!tab) return;
-        const url = URL.createObjectURL(blob);
-        tab.location.href = url;
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    getStaffDocumentDownloadUrl(staffId ?? "", documentId)
+      .then((url) => {
+        if (tab) tab.location.href = url;
       })
       .catch(() => {
         tab?.close();

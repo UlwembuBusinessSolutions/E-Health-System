@@ -1,12 +1,17 @@
 import { useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { getQueueToken } from "@/shared/api/queue";
 import { getFacilities } from "@/shared/api/facilities";
+import { getVisit, SERVICE_STREAM_DETAILS, type ServiceStream } from "@/shared/api/visits";
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function isServiceStream(value: string | null): value is ServiceStream {
+  return value !== null && Object.prototype.hasOwnProperty.call(SERVICE_STREAM_DETAILS, value);
 }
 
 // RECQ-US-003 — a standalone route (no AppShell chrome, see router.tsx's
@@ -18,11 +23,20 @@ function formatDateTime(iso: string): string {
 // that called it.
 export function TicketPrintPage() {
   const { tokenId } = useParams<{ tokenId: string }>();
+  const [searchParams] = useSearchParams();
+  const requestedStreamValue = searchParams.get("serviceStream");
+  const requestedStream = isServiceStream(requestedStreamValue) ? requestedStreamValue : undefined;
 
   const tokenQuery = useQuery({
     queryKey: ["queue-token", tokenId],
     queryFn: () => getQueueToken(tokenId as string),
     enabled: !!tokenId,
+  });
+  const visitId = tokenQuery.data?.token.visitId;
+  const visitQuery = useQuery({
+    queryKey: ["visit", visitId],
+    queryFn: () => getVisit(visitId!),
+    enabled: !!visitId && !requestedStream,
   });
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
 
@@ -33,22 +47,31 @@ export function TicketPrintPage() {
   // misfed ticket, RECQ-US-003's own acceptance note on why reprint has to
   // be a real, repeatable action, not one-shot.
   useEffect(() => {
-    if (!tokenQuery.data) return;
+    if (!tokenQuery.data || (!requestedStream && !visitQuery.data)) return;
     const timeout = setTimeout(() => window.print(), 200);
     return () => clearTimeout(timeout);
-  }, [tokenQuery.data]);
+  }, [tokenQuery.data, requestedStream, visitQuery.data]);
 
   if (!tokenId) {
     return <p className="p-6 text-center text-[14px] text-text-secondary">No ticket specified.</p>;
   }
-  if (tokenQuery.isLoading || facilitiesQuery.isLoading) {
+  if (tokenQuery.isLoading || (!requestedStream && visitQuery.isLoading) || facilitiesQuery.isLoading) {
     return <p className="p-6 text-center text-[14px] text-text-secondary">Loading ticket…</p>;
   }
-  if (tokenQuery.isError || !tokenQuery.data) {
+  if (
+    tokenQuery.isError ||
+    (!requestedStream && (visitQuery.isError || !visitQuery.data)) ||
+    !tokenQuery.data
+  ) {
     return <p className="p-6 text-center text-[14px] text-danger-600">Couldn't load this ticket.</p>;
   }
 
   const entry = tokenQuery.data;
+  const streamValue = requestedStream ?? visitQuery.data?.serviceStream;
+  if (!streamValue) {
+    return <p className="p-6 text-center text-[14px] text-danger-600">Couldn't load this ticket's care stream.</p>;
+  }
+  const stream = SERVICE_STREAM_DETAILS[streamValue];
   const facility = (facilitiesQuery.data ?? []).find((f) => f.id === entry.token.facilityId);
 
   return (
@@ -73,7 +96,10 @@ export function TicketPrintPage() {
           <p className="text-[11px] font-semibold uppercase tracking-wide text-black/70">
             {facility?.name ?? "Queue Ticket"}
           </p>
-          <p className="font-mono text-[46px] font-bold leading-none tabular-nums">#{entry.token.tokenNumber}</p>
+          <p className="font-mono text-[46px] font-bold leading-none tabular-nums">
+            {stream.code}-#{entry.token.tokenNumber}
+          </p>
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-black/70">{stream.label}</p>
           {entry.token.priority === "PRIORITY" && (
             <p className="mt-1 rounded-full bg-black px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-white">
               Priority
@@ -87,7 +113,7 @@ export function TicketPrintPage() {
           </div>
           <div className="flex items-baseline justify-between gap-3">
             <dt className="text-black/60">MPI</dt>
-            <dd className="font-mono">{entry.patientMpi}</dd>
+            <dd className="font-mono">{entry.patientMpi ?? "Not registered"}</dd>
           </div>
           <div className="flex items-baseline justify-between gap-3">
             <dt className="text-black/60">Issued</dt>

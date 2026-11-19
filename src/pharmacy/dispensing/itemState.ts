@@ -1,4 +1,4 @@
-import type { DispenseLot, Prescription, PrescriptionItem, ProductRef } from "@/shared/api/pharmacy";
+import type { DispenseLot, Prescription, PrescriptionItem } from "@/shared/api/pharmacy";
 import { daysUntil, formatDate, pluralise } from "../lib/format";
 
 // Tighter than the shelf-wide 90-day "expires soon" colour: at the counter the
@@ -24,15 +24,9 @@ export function returnableQuantity(item: PrescriptionItem): number {
   return item.dispensedQuantity - item.returnedQuantity;
 }
 
-/** Stock is only deducted from a product a pharmacist has confirmed, not from a remembered guess. */
+/** Stock is only deducted from the product the prescriber chose; a free-text legacy line cannot be dispensed. */
 export function isMapped(item: PrescriptionItem): boolean {
   return item.mappingStatus === "CONFIRMED";
-}
-
-/** The product remembered from an earlier script with the same drug name, awaiting confirmation. */
-export function suggestedProductOf(item: PrescriptionItem): ProductRef | null {
-  if (item.mappingStatus !== "SUGGESTED" || item.productId === null) return null;
-  return { id: item.productId, name: item.mappedProductName ?? item.drugName };
 }
 
 /** True when the chosen lot covers everything still owed. */

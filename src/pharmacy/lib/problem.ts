@@ -14,10 +14,6 @@ export function isWitnessRequired(error: unknown): boolean {
   return error instanceof ApiError && error.status === 422 && error.message === WITNESS_REQUIRED_MESSAGE;
 }
 
-export function isPbpaClinicScheduleRequired(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 409 && error.message.includes("PBPA");
-}
-
 function describeDuplicateSupplier(error: ApiError): string {
   return error.existing
     ? `A supplier called "${error.existing.name}" already exists. Use it, or choose a different name.`
@@ -28,7 +24,7 @@ function describeDuplicateSupplier(error: ApiError): string {
 export function describeError(error: unknown, fallback = FALLBACK_MESSAGE): string {
   if (error instanceof ApiError) {
     if (error.code === DUPLICATE_SUPPLIER_CODE) return describeDuplicateSupplier(error);
-    if (error.status === 403) return "You don't have permission to do that.";
+    if (error.status === 403) return error.message || "You don't have permission to do that.";
     if (error.status >= 500) return fallback;
     return error.message || fallback;
   }

@@ -1,4 +1,4 @@
-import { Blocks, Building2, Fingerprint, Mail, MapPin, Search, Settings2, ChevronRight, type LucideIcon } from "lucide-react";
+import { Blocks, Building2, Fingerprint, Mail, MapPin, Search, Settings2, ChevronRight, Palette, ShieldCheck, ListChecks, type LucideIcon } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FacilitiesSettingsSection } from "./FacilitiesSettingsSection";
@@ -8,6 +8,9 @@ import { ModulesSettingsSection } from "./ModulesSettingsSection";
 import { SsoSettingsSection } from "./SsoSettingsSection";
 import { AppointmentsSettingsSection } from "./AppointmentsSettingsSection";
 import { CalendarDays } from "lucide-react";
+import { BrandingSettingsSection } from "./BrandingSettingsSection";
+import { MfaPolicySettingsSection } from "./MfaPolicySettingsSection";
+import { ClassificationReasonsSettingsSection } from "./ClassificationReasonsSettingsSection";
 
 type OrganizationSettingsSection = {
   id: string;
@@ -21,6 +24,10 @@ type OrganizationSettingsSection = {
 
 // Register future sections here. Each section owns its form and persistence.
 const sections: OrganizationSettingsSection[] = [{
+  id: "branding", title: "Branding", group: "Organization",
+  description: "Set the logo, primary color and name shown across your organization workspace.",
+  keywords: "logo brand color theme identity", icon: Palette, component: BrandingSettingsSection,
+}, {
   id: "email", title: "Email", group: "Communication",
   description: "Manage the outgoing email used for your organization's notifications.",
   keywords: "smtp server sender password notifications mail", icon: Mail, component: EmailSettingsSection,
@@ -28,6 +35,11 @@ const sections: OrganizationSettingsSection[] = [{
   id: "appointments", title: "Appointments", group: "Organization",
   description: "Set daily appointment limits for each facility.",
   keywords: "appointments booking daily visit count capacity limit reception", icon: CalendarDays, component: AppointmentsSettingsSection,
+}, {
+  id: "classification-reasons", title: "Classification reasons", group: "Clinical", 
+  description: "Maintain the consultation reasons clinicians can select for each care stream.",
+  keywords: "patient care classification reasons care stream consultation chronic acute ART diabetes hypertension", icon: ListChecks,
+  component: ClassificationReasonsSettingsSection,
 }, { id: "facilities", title: "Facilities", group: "Organization", description: "Add and maintain your organization's clinics, hospitals, stores and pharmacies.", keywords: "clinic hospital pharmacy store location address create edit", icon: Building2, component: FacilitiesSettingsSection }, {
   id: "contact-info", title: "Contact info", group: "Organization",
   description: "Manage your organization's contact details, location and online presence.",
@@ -43,13 +55,17 @@ const sections: OrganizationSettingsSection[] = [{
   description: "Let staff sign in with their organization's Microsoft account.",
   keywords: "sso single sign on microsoft azure ad entra oauth login staff", icon: Fingerprint,
   component: SsoSettingsSection,
+}, {
+  id: "mfa", title: "Multi-factor authentication", group: "Security",
+  description: "Configure the sign-in MFA requirement independently for each staff role.",
+  keywords: "mfa multi factor authentication two step verification security role policy", icon: ShieldCheck,
+  component: MfaPolicySettingsSection,
 }];
 
 export function OrganizationSettingsPage() {
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState("");
-  const requestedSection = params.get("section")?.replace(/[.,;:!?]+$/, "");
-  const selected = sections.find(section => section.id === requestedSection) ?? sections[0];
+  const selected = sections.find(section => section.id === params.get("section")) ?? sections[0];
   const [visited, setVisited] = useState<string[]>([selected.id]);
   const visible = sections.filter(section =>
     `${section.title} ${section.group} ${section.description} ${section.keywords}`.toLowerCase().includes(search.trim().toLowerCase()),

@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Building2, Camera, Check, Copy, Hospital, KeyRound, Mail, Pencil, Pill, Plus, Store, Trash2, UserPlus, X } from "lucide-react";
+import { ArrowLeft, Building2, Camera, Check, Copy, Hospital, KeyRound, Mail, Pencil, Pill, Plus, ShieldCheck, Store, Trash2, UserPlus, X } from "lucide-react";
 import {
   getOrganization,
   listOrganizationAdmins,
@@ -584,6 +584,26 @@ export function OrganizationDetailPage() {
                 .
               </p>
             )}
+          </Card>
+
+          <Card className="mb-6 flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                <ShieldCheck className="size-[18px]" aria-hidden />
+              </span>
+              <div>
+                <h2 className="text-[14.5px] font-semibold text-text-primary">Role permissions</h2>
+                <p className="text-[12.5px] text-text-secondary">
+                  Customise the permissions assigned to this organization's roles.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              onClick={() => navigate(`/platform/organizations/${organizationId}/roles`)}
+            >
+              Manage permissions
+            </Button>
           </Card>
 
           <Card className="overflow-hidden p-0">

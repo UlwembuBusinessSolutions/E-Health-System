@@ -43,11 +43,7 @@ export function PlatformLoginScreen() {
       navigate("/platform", { replace: true });
     },
     onError: (error) => {
-      if (error instanceof ApiError && error.status >= 500) {
-        setFormError("The sign-in service is unavailable. Start the backend and try again.");
-        return;
-      }
-      setFormError(error instanceof ApiError ? error.message : "Could not reach the sign-in service. Check that the backend is running and try again.");
+      setFormError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
     },
   });
 

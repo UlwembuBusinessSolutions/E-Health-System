@@ -3,10 +3,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
-import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Hash, Mail, MailCheck, MapPin, Phone, User } from "lucide-react";
 import { AuthLayout } from "@/auth/AuthLayout";
-import { registerPatientAccount, resendPatientRegistrationCode, verifyPatientRegistrationEmail } from "@/shared/api/patientAuth";
+import { registerPatientAccount, verifyPatientRegistrationEmail } from "@/shared/api/patientAuth";
 import { ApiError } from "@/shared/api/client";
 import { usePatientAuth } from "./PatientAuthContext";
 import { Input } from "@/shared/components/Input";
@@ -15,19 +15,31 @@ import { Button } from "@/shared/components/Button";
 import { FormRow } from "@/shared/components/FormRow";
 import "@/auth/auth-fields.css";
 
-// Mirrors PatientAuthController.RegisterRequest's own validation exactly
-// (13-digit SA ID, 9-15 digit phone, 8+ char password) so a form error
-// surfaces before the request round-trips at all.
+// Mirrors PatientAuthController.RegisterRequest's own validation so a form
+// error surfaces before the request round-trips at all.
 const registerSchema = z
   .object({
     firstName: z.string().trim().min(1, "First name is required").max(100),
     lastName: z.string().trim().min(1, "Last name is required").max(100),
-    idNumber: z.string().trim().refine(isValidSouthAfricanId, "Enter a valid 13-digit SA ID with a real birth date and checksum"),
+    idNumber: z.string().trim().refine(
+      (value) => value === "" || isValidSouthAfricanId(value),
+      "Enter a valid 13-digit SA ID with a real birth date and checksum",
+    ),
+    dateOfBirth: z.string().trim(),
     address: z.string().trim().min(1, "Address is required").max(300),
     contactNumber: z.string().trim().regex(/^\+?[0-9]{9,15}$/, "Enter a valid contact number, e.g. +27821234567"),
     email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
     password: z.string().min(8, "At least 8 characters"),
     confirmPassword: z.string().min(1, "Confirm your password"),
+  })
+  .superRefine((values, context) => {
+    if (!values.idNumber && !values.dateOfBirth) {
+      context.addIssue({
+        code: "custom",
+        path: ["dateOfBirth"],
+        message: "Date of birth is required when ID number is not provided",
+      });
+    }
   })
   .refine((values) => values.password === values.confirmPassword, {
     message: "Passwords don't match",
@@ -57,7 +69,6 @@ function isValidSouthAfricanId(value: string): boolean {
 type RegisterValues = z.infer<typeof registerSchema>;
 
 const PATIENT_SETUP_STEPS = ["Your details", "Verify email", "Book care"];
-
 function PatientSetupSteps({ currentStep }: { currentStep: number }) {
   return (
     <ol aria-label="Patient account progress" className="mb-5 grid grid-cols-3 gap-2">
@@ -91,28 +102,18 @@ function PatientSetupSteps({ currentStep }: { currentStep: number }) {
 export function PatientRegisterScreen() {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const { setAccount } = usePatientAuth();
   const [formError, setFormError] = useState<string | null>(null);
-  const [verificationEmail, setVerificationEmail] = useState<string | null>(() => (location.state as { verificationEmail?: string } | null)?.verificationEmail ?? null);
-  const [verificationExpiresInMinutes, setVerificationExpiresInMinutes] = useState(() => (location.state as { verificationExpiresInMinutes?: number } | null)?.verificationExpiresInMinutes ?? 10);
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
+  const [verificationExpiresInMinutes, setVerificationExpiresInMinutes] = useState(10);
   const [verificationCode, setVerificationCode] = useState("");
   const [resendNotice, setResendNotice] = useState<string | null>(null);
-  const [deliveryWarning, setDeliveryWarning] = useState<string | null>(null);
-
-  const showVerificationStep = (email: string, expiresInMinutes = 10) => {
-    setVerificationEmail(email);
-    setVerificationExpiresInMinutes(expiresInMinutes);
-    navigate(`/org/${tenantSlug}/patient/register?step=verify`, {
-      replace: true,
-      state: { verificationEmail: email, verificationExpiresInMinutes: expiresInMinutes },
-    });
-  };
 
   const {
     register,
     handleSubmit,
     getValues,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
@@ -121,6 +122,7 @@ export function PatientRegisterScreen() {
       firstName: "",
       lastName: "",
       idNumber: "",
+      dateOfBirth: "",
       address: "",
       contactNumber: "",
       email: "",
@@ -129,6 +131,8 @@ export function PatientRegisterScreen() {
     },
   });
 
+  const idNumber = watch("idNumber");
+
   const mutation = useMutation({
     mutationFn: registerPatientAccount,
     onSuccess: (result) => {
@@ -136,43 +140,30 @@ export function PatientRegisterScreen() {
         setFormError("The server did not start email verification. Reload the registration page and try again.");
         return;
       }
-      showVerificationStep(result.email, result.expiresInMinutes);
+      setVerificationEmail(result.email);
+      setVerificationExpiresInMinutes(result.expiresInMinutes);
       setResendNotice(null);
-      setDeliveryWarning(null);
       setFormError(null);
     },
     onError: (error) => {
-      // Registration is committed before synchronous SMTP delivery. If delivery
-      // fails, the pending code still exists, so keep the user on verification
-      // and let them retry delivery from there.
-      if (error instanceof ApiError && error.message.toLowerCase().includes("couldn't deliver the verification email")) {
-        const email = getValues("email").trim();
-        if (email) {
-          showVerificationStep(email);
-          setDeliveryWarning(error.message);
-          setFormError(null);
-          return;
-        }
-      }
       setFormError(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
     },
   });
 
   const resendMutation = useMutation({
-    mutationFn: resendPatientRegistrationCode,
-    onSuccess: () => {
-      setVerificationExpiresInMinutes(10);
+    mutationFn: registerPatientAccount,
+    onSuccess: (result) => {
+      if (!result?.verificationRequired || !result.email) {
+        setFormError("The server did not resend the verification code. Please try again.");
+        return;
+      }
+      setVerificationEmail(result.email);
+      setVerificationExpiresInMinutes(result.expiresInMinutes);
       setVerificationCode("");
-      setResendNotice(`A new code was sent to ${verificationEmail}. Use the newest code.`);
-      setDeliveryWarning(null);
+      setResendNotice(`A new code was sent to ${result.email}. Use the newest code.`);
       setFormError(null);
     },
     onError: (error) => {
-      if (error instanceof ApiError && error.message.toLowerCase().includes("couldn't deliver the verification email")) {
-        setDeliveryWarning(error.message);
-        setFormError(null);
-        return;
-      }
       setResendNotice(null);
       setFormError(error instanceof ApiError ? error.message : "We couldn't resend the code. Please try again.");
     },
@@ -203,10 +194,18 @@ export function PatientRegisterScreen() {
   };
 
   const onResendCode = () => {
-    if (!tenantSlug || !verificationEmail) return;
+    if (!tenantSlug) return;
+    const values = registerSchema.safeParse(getValues());
+    if (!values.success) {
+      setFormError("Your registration details are no longer available. Start account creation again to request a code.");
+      return;
+    }
+    const { firstName, lastName, idNumber, dateOfBirth, address, contactNumber, email, password } = values.data;
     setFormError(null);
     setResendNotice(null);
-    resendMutation.mutate({ tenantSlug, email: verificationEmail });
+    resendMutation.mutate({
+      tenantSlug, firstName, lastName, idNumber, dateOfBirth, address, contactNumber, email, password,
+    });
   };
 
   if (!tenantSlug) return <Navigate to="/login" replace />;
@@ -234,18 +233,12 @@ export function PatientRegisterScreen() {
             <MailCheck className="size-5" aria-hidden />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-800">{deliveryWarning ? "Verification is ready" : "Check your inbox"}</p>
+            <p className="text-sm font-semibold text-slate-800">Check your inbox</p>
             <p className="mt-1 break-words text-xs leading-relaxed text-slate-600">
-              {deliveryWarning ? "A six-digit code was created for " : "We sent a six-digit code to "}
-              <strong className="font-semibold text-slate-800">{verificationEmail}</strong>.
+              We sent a six-digit code to <strong className="font-semibold text-slate-800">{verificationEmail}</strong>.
               It expires in {verificationExpiresInMinutes} minutes. Check Spam or Junk if it isn’t there.
             </p>
           </div>
-        </div>
-      )}
-      {verificationEmail && deliveryWarning && (
-        <div role="status" className="mb-5 rounded-lg border border-amber-500/30 bg-amber-50 px-3.5 py-2.5 text-[13.5px] text-amber-800">
-          The registration is saved, but the email could not be delivered. Check the clinic email settings or try Resend code.
         </div>
       )}
       {verificationEmail ? (
@@ -269,7 +262,7 @@ export function PatientRegisterScreen() {
           <button type="button" className="text-sm font-medium text-brand-600 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60" onClick={onResendCode} disabled={resendMutation.isPending}>
             {resendMutation.isPending ? "Sending a new code…" : "Resend code"}
           </button>
-          <button type="button" className="text-sm text-slate-600 hover:text-slate-800" onClick={() => { setVerificationEmail(null); setVerificationCode(""); setResendNotice(null); setFormError(null); navigate(`/org/${tenantSlug}/patient/register`, { replace: true, state: null }); }}>
+          <button type="button" className="text-sm text-slate-600 hover:text-slate-800" onClick={() => { setVerificationEmail(null); setVerificationCode(""); setResendNotice(null); setFormError(null); }}>
             Change registration details
           </button>
         </form>
@@ -302,13 +295,21 @@ export function PatientRegisterScreen() {
         </FormRow>
 
         <Input
-          label="SA ID number"
-          required
+          label="SA ID number (optional)"
           icon={<Hash className="size-4" aria-hidden />}
           placeholder="13-digit ID number"
-          hint="If you've already been seen at this clinic, this links your new account to your existing record."
+          hint="If you've already been seen at this clinic, this links your new account to your existing record. If you don't have an ID number, enter your date of birth below."
           error={errors.idNumber?.message}
           {...register("idNumber")}
+        />
+
+        <Input
+          label="Date of birth"
+          type="date"
+          required={!idNumber.trim()}
+          hint={idNumber.trim() ? "Your date of birth will be taken from your ID number." : undefined}
+          error={errors.dateOfBirth?.message}
+          {...register("dateOfBirth")}
         />
 
         <Input

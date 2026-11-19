@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { InProgressConsultations } from "./InProgressConsultations";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   ArrowUpDown,
   ChevronDown,
@@ -49,7 +51,6 @@ const CITIZENSHIP_FILTER_OPTIONS: { value: CitizenshipStatus | ""; label: string
   { value: "", label: "All citizenship" },
   { value: "SA_CITIZEN", label: "SA citizen" },
   { value: "PERMANENT_RESIDENT", label: "Permanent resident" },
-  { value: "UNKNOWN", label: "Not recorded" },
 ];
 
 // One combined dropdown value per sortBy+sortDir pair, phrased for a
@@ -108,8 +109,7 @@ function initials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
 
-function calculateAge(dateOfBirth: string | null): number | null {
-  if (!dateOfBirth) return null;
+function calculateAge(dateOfBirth: string): number {
   const dob = new Date(dateOfBirth);
   const now = new Date();
   let age = now.getFullYear() - dob.getFullYear();
@@ -124,9 +124,10 @@ function calculateAge(dateOfBirth: string | null): number | null {
 // own search is (350ms) rather than firing a request per keystroke; the
 // empty-state below is that "registration path."
 export function PatientSearchPage() {
+  const location = useLocation();
+  const fromReception = (location.state as { fromReception?: boolean } | null)?.fromReception === true;
   const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
-  const [dateOfBirthFilter, setDateOfBirthFilter] = useState("");
   const [page, setPage] = useState(0);
   const [sortBy, setSortBy] = useState<PatientSortBy>("registered");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
@@ -157,9 +158,9 @@ export function PatientSearchPage() {
   // top rather than risk stranding them on an out-of-range page.
   useEffect(() => {
     setPage(0);
-  }, [query, dateOfBirthFilter, sortBy, sortDir, genderFilter, medicalAidFilter, citizenshipFilter, mpiFilter, createdFrom, createdTo]);
+  }, [query, sortBy, sortDir, genderFilter, medicalAidFilter, citizenshipFilter, mpiFilter, createdFrom, createdTo]);
 
-  const isBrowsing = query.length === 0 && dateOfBirthFilter === "";
+  const isBrowsing = query.length === 0;
   const hasActiveFilters =
     sortBy !== "name" ||
     sortDir !== "asc" ||
@@ -288,8 +289,8 @@ export function PatientSearchPage() {
   });
 
   const searchQuery = useQuery({
-    queryKey: ["patients", "search", query, dateOfBirthFilter],
-    queryFn: () => searchPatients(query, dateOfBirthFilter || undefined),
+    queryKey: ["patients", "search", query],
+    queryFn: () => searchPatients(query),
     enabled: !isBrowsing,
   });
 
@@ -301,33 +302,40 @@ export function PatientSearchPage() {
   return (
     <div>
       <PageHeader
-        title="Patient registration & visit check-in"
-        description="Search existing records first, then open a patient to register today’s visit and route their queue token."
+        title="Patients"
+        description="Browse the roster, or search by name, MPI number, or ID number."
         action={
-          <Link
-            to="/app/patients/new"
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 text-[14px] font-semibold text-white shadow-sm transition-colors duration-150 hover:bg-brand-600"
-          >
-            <Plus className="size-4" aria-hidden />
-            Register patient
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {fromReception && (
+              <Link
+                to="/app/reception"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface-raised px-4 text-[14px] font-semibold text-text-primary transition-colors hover:bg-surface-sunken"
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+                Return to reception
+              </Link>
+            )}
+            <Link
+              to="/app/patients/new"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 text-[14px] font-semibold text-white shadow-sm transition-colors duration-150 hover:bg-brand-600"
+            >
+              <Plus className="size-4" aria-hidden />
+              Register patient
+            </Link>
+          </div>
         }
       />
 
-      <div className="mb-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+      <InProgressConsultations />
+
+      <div className="mb-4">
         <Input
           label="Search"
-          placeholder="Search name, MPI, SA ID, or passport number…"
+          placeholder="Search by name, MPI, or ID number…"
           icon={<Search className="size-4" aria-hidden />}
           value={queryInput}
           onChange={(e) => setQueryInput(e.target.value)}
           autoFocus
-        />
-        <Input
-          label="Date of birth"
-          type="date"
-          value={dateOfBirthFilter}
-          onChange={(e) => setDateOfBirthFilter(e.target.value)}
         />
       </div>
 
@@ -432,11 +440,7 @@ export function PatientSearchPage() {
                 ? hasActiveFilters
                   ? "No patients match these filters."
                   : "No patients registered yet."
-                : query && dateOfBirthFilter
-                  ? `No patient matches “${query}” with that date of birth.`
-                  : dateOfBirthFilter
-                    ? `No patient has a date of birth of ${formatDate(dateOfBirthFilter)}.`
-                    : `No patient matches “${query}”.`}
+                : `No patient matches “${query}”.`}
             </p>
             {isBrowsing && hasActiveFilters && (
               <button
@@ -537,7 +541,11 @@ export function PatientSearchPage() {
                 {patients.map((p) => (
                   <tr key={p.id} className="transition-colors duration-150 hover:bg-surface-sunken">
                     <td className="px-5 py-3.5">
-                      <Link to={`/app/patients/${p.id}`} className="flex items-center gap-3">
+                      <Link
+                        to={`/app/patients/${p.id}`}
+                        state={fromReception ? { fromReception: true } : undefined}
+                        className="flex items-center gap-3"
+                      >
                         <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-brand-500/25 bg-brand-50 text-[12px] font-semibold text-brand-600">
                           {initials(p.firstName, p.lastName)}
                         </span>
@@ -545,9 +553,7 @@ export function PatientSearchPage() {
                           <p className="truncate text-[14px] font-semibold text-text-primary">
                             {p.firstName} {p.lastName}
                           </p>
-                          <p className="truncate text-[12.5px] text-text-secondary">
-                            {p.idNumber ?? p.passportNumber ?? "No identity document on file"}
-                          </p>
+                          <p className="truncate text-[12.5px] text-text-secondary">{p.idNumber ?? "No ID number"}</p>
                         </div>
                       </Link>
                     </td>
@@ -555,7 +561,9 @@ export function PatientSearchPage() {
                       {p.mpiNumber}
                     </td>
                     <td className="px-5 py-3.5 text-[13.5px] text-text-primary">
-                      {calculateAge(p.dateOfBirth) ?? "Age unavailable"} · {p.gender ? p.gender.charAt(0) + p.gender.slice(1).toLowerCase() : "Gender not recorded"}
+                      {calculateAge(p.dateOfBirth)} · {p.gender
+                        ? p.gender.charAt(0) + p.gender.slice(1).toLowerCase()
+                        : "Gender not recorded"}
                     </td>
                     <td className="px-5 py-3.5 text-[13.5px] text-text-primary">{p.contactNumber}</td>
                     <td className="px-5 py-3.5 font-mono text-[13px] text-text-secondary tabular-nums">

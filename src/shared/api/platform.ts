@@ -272,6 +272,42 @@ export async function toggleOrganizationModule(
   );
 }
 
+export interface RoleWithPermissions {
+  id: string;
+  name: string;
+  permissionCodes: string[];
+}
+
+export interface RolePermissionCatalogue {
+  roles: RoleWithPermissions[];
+  availablePermissions: string[];
+}
+
+export interface RolePermissionChange {
+  roleName: string;
+  before: string[];
+  after: string[];
+  changed: boolean;
+}
+
+export async function listOrganizationRolePermissions(organizationId: string): Promise<RolePermissionCatalogue> {
+  return apiClient.get<RolePermissionCatalogue>(`/platform/organizations/${organizationId}/roles`, {
+    headers: authHeaders(),
+  });
+}
+
+export async function updateOrganizationRolePermissions(
+  organizationId: string,
+  roleId: string,
+  permissionCodes: string[],
+): Promise<RolePermissionChange> {
+  return apiClient.put<RolePermissionChange>(
+    `/platform/organizations/${organizationId}/roles/${roleId}/permissions`,
+    { permissionCodes },
+    { headers: authHeaders() },
+  );
+}
+
 // SADM-US-006. Matches PlatformController.FacilityResponse field-for-field.
 export type FacilityType = "CLINIC" | "HOSPITAL" | "STORE" | "PHARMACY";
 

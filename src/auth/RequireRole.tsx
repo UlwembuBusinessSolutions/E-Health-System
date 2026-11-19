@@ -11,10 +11,7 @@ export function RequireRole({ role, roles, children }: {
   children: ReactNode;
 }) {
   const { user } = useAuth();
-  const assignedRoles = user?.roles ?? (user ? [user.role] : []);
-  const allowed = roles
-    ? roles.some((requiredRole) => assignedRoles.includes(requiredRole))
-    : assignedRoles.includes(role ?? "");
+  const allowed = roles ? roles.includes(user?.role ?? "") : user?.role === role;
   if (!allowed) return <Navigate to="/app" replace />;
   return <>{children}</>;
 }

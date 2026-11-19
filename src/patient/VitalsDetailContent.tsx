@@ -1,15 +1,13 @@
-import { AdditionalVitalsSummary } from "./AdditionalVitals";
+﻿import { AdditionalVitalsSummary } from "./AdditionalVitals";
 import type { ComponentType, ReactNode } from "react";
 import {
   Activity,
   Clock,
   Eye,
-  Footprints,
   Gauge,
   HeartPulse,
   History,
   ShieldAlert,
-  Stethoscope,
   Thermometer,
   TriangleAlert,
   User,
@@ -17,8 +15,6 @@ import {
 } from "lucide-react";
 import type {
   Avpu,
-  Mobility,
-  OxygenSupport,
   ScoringProfile,
   TriageAssessment,
   TriageColour,
@@ -26,7 +22,7 @@ import type {
 } from "@/shared/api/triage";
 import { TriageColourBadge } from "@/shared/components/TriageColourBadge";
 
-// Shared label vocabulary for a captured vitals/triage reading — used by
+// Shared label vocabulary for a captured vitals/triage reading â€” used by
 // both the capture form (PatientDetailPage) and this read-only detail view,
 // so a value picked in the form and a value shown back here never drift
 // into two different wordings for the same thing.
@@ -38,19 +34,8 @@ export const AVPU_OPTIONS: { value: Avpu; label: string }[] = [
   { value: "UNRESPONSIVE", label: "Unresponsive" },
 ];
 
-export const MOBILITY_OPTIONS: { value: Mobility; label: string }[] = [
-  { value: "WALKING", label: "Walking" },
-  { value: "MOBILE_WITH_ASSISTANCE", label: "Mobile with assistance" },
-  { value: "IMMOBILE", label: "Immobile" },
-];
-
-export const OXYGEN_SUPPORT_OPTIONS: { value: OxygenSupport; label: string }[] = [
-  { value: "ROOM_AIR", label: "Room air" },
-  { value: "SUPPLEMENTAL", label: "Supplemental oxygen" },
-];
-
 // Blank first option lets the nurse leave this to the automatic
-// age-derived profile (TriageService.deriveScoringProfile()) — only sent
+// age-derived profile (TriageService.deriveScoringProfile()) â€” only sent
 // to the backend when explicitly chosen.
 export const SCORING_PROFILE_OPTIONS: { value: ScoringProfile | ""; label: string }[] = [
   { value: "", label: "Auto-detect from date of birth" },
@@ -68,7 +53,7 @@ export const TRIAGE_COLOUR_OPTIONS: { value: TriageColour | ""; label: string }[
 ];
 
 // A small, representative starter set, not the exhaustive licensed SATS
-// discriminator list — TriageDiscriminator.java's own why-note.
+// discriminator list â€” TriageDiscriminator.java's own why-note.
 export const DISCRIMINATOR_OPTIONS: { value: TriageDiscriminator; label: string }[] = [
   { value: "CHEST_PAIN", label: "Chest pain" },
   { value: "DIFFICULTY_BREATHING", label: "Difficulty breathing" },
@@ -114,11 +99,11 @@ export function VitalField({
   );
 }
 
-// The full record behind one captured vitals/triage reading — shared by
+// The full record behind one captured vitals/triage reading â€” shared by
 // VitalsDetailModal (an on-screen dialog) and VitalsPrintPage (a standalone
 // printable page), so what a nurse sees on screen and what ends up on paper
 // never drift apart. `headerAction` is the one thing that differs between
-// those two hosts — a close button for the modal, nothing for print — so it
+// those two hosts â€” a close button for the modal, nothing for print â€” so it
 // stays a slot the caller fills rather than something this component knows
 // about.
 export function VitalsDetailContent({
@@ -139,12 +124,6 @@ export function VitalsDetailContent({
     SCORING_PROFILE_OPTIONS.find((o) => o.value === assessment.scoringProfile)?.label ?? assessment.scoringProfile;
   const calculatedColourLabel =
     TRIAGE_COLOUR_OPTIONS.find((o) => o.value === assessment.calculatedColour)?.label ?? assessment.calculatedColour;
-  const oxygenCaption =
-    assessment.oxygenSupport === "SUPPLEMENTAL"
-      ? [assessment.oxygenDevice, assessment.oxygenFlowLpm != null ? `${assessment.oxygenFlowLpm} L/min` : null]
-          .filter(Boolean)
-          .join(" · ") || undefined
-      : undefined;
 
   return (
     <div className="flex flex-col gap-5">
@@ -173,12 +152,15 @@ export function VitalsDetailContent({
             {!assessment.emergencySign && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-ink-100 px-2.5 py-1 text-[12px] font-semibold text-ink-600">
                 <Activity className="size-3" aria-hidden />
-                TEWS {assessment.tewsScore ?? "—"} &middot; {scoringProfileLabel}
+                TEWS {assessment.tewsScore ?? "â€”"} &middot; {scoringProfileLabel}
               </span>
             )}
           </div>
           <div>
-            <h2 className="text-[19px] font-semibold text-text-primary">{formatDateTime(assessment.observedAt)}</h2>
+            <h2 className="text-[19px] font-semibold text-text-primary">{formatDateTime(assessment.recordedAt || assessment.observedAt)}</h2>
+            {assessment.observedAt !== assessment.recordedAt && (
+              <p className="mt-1 text-[12px] text-text-secondary">Observed {formatDateTime(assessment.observedAt)}</p>
+            )}
             {capturedByName && (
               <div className="mt-1 flex items-center gap-1.5 text-text-secondary">
                 <User className="size-3.5" aria-hidden />
@@ -264,7 +246,7 @@ export function VitalsDetailContent({
               />
             )}
             {assessment.temperatureCelsius != null && (
-              <VitalField icon={Thermometer} label="Temp" value={String(assessment.temperatureCelsius)} unit="°C" />
+              <VitalField icon={Thermometer} label="Temp" value={String(assessment.temperatureCelsius)} unit="Â°C" />
             )}
             {assessment.spo2Percent != null && (
               <VitalField icon={Activity} label="SpO2" value={String(assessment.spo2Percent)} unit="%" />
@@ -276,45 +258,15 @@ export function VitalsDetailContent({
                 value={AVPU_OPTIONS.find((o) => o.value === assessment.avpu)?.label ?? assessment.avpu}
               />
             )}
-            {assessment.mobility && (
-              <VitalField
-                icon={Footprints}
-                label="Mobility"
-                value={MOBILITY_OPTIONS.find((o) => o.value === assessment.mobility)?.label ?? assessment.mobility}
-              />
-            )}
-            <VitalField
-              icon={Wind}
-              label="Oxygen"
-              value={assessment.oxygenSupport === "SUPPLEMENTAL" ? "Supplemental" : "Room air"}
-              caption={oxygenCaption}
-            />
-            {assessment.painScore != null && (
-              <VitalField
-                icon={Gauge}
-                label="Pain"
-                value={String(assessment.painScore)}
-                unit=" / 10"
-                caption={assessment.painScale ?? undefined}
-              />
-            )}
+
           </div>
         </div>
       )}
 
       <AdditionalVitalsSummary value={assessment.additionalObservations} />
-      {assessment.presentingComplaint && (
-        <div className="border-t border-border-subtle pt-4">
-          <div className="mb-2 flex items-center gap-2 text-text-accent">
-            <Stethoscope className="size-4" aria-hidden />
-            <span className="text-[13.5px] font-semibold text-text-primary">Presenting complaint</span>
-          </div>
-          <p className="text-[13.5px] leading-relaxed text-text-primary">{assessment.presentingComplaint}</p>
-        </div>
-      )}
 
       {assessment.discriminators.length > 0 && (
-        <div className={assessment.presentingComplaint ? "" : "border-t border-border-subtle pt-4"}>
+        <div className={"border-t border-border-subtle pt-4"}>
           <div className="flex flex-wrap gap-2">
             {assessment.discriminators.map((d) => (
               <span key={d} className="rounded-full bg-ink-100 px-3 py-1.5 text-[12.5px] font-medium text-ink-600">
@@ -332,3 +284,7 @@ export function VitalsDetailContent({
     </div>
   );
 }
+
+
+
+

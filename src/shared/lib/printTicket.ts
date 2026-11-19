@@ -1,3 +1,5 @@
+import type { ServiceStream } from "@/shared/api/visits";
+
 // RECQ-US-003 — opens a queue ticket's print-friendly page (TicketPrintPage)
 // in its own small window. Shared by the queue page's "Print" action and
 // the "Visit started" success screen, both of which need the exact same
@@ -17,7 +19,8 @@
 // success, never back to the ticket (found by testing: nothing printed).
 // Severing tab.opener by hand right after achieves the same tabnabbing
 // protection without losing that one-time storage clone.
-export function printQueueTicket(tokenId: string): void {
-  const tab = window.open(`/print/ticket/${tokenId}`, "ticket-print", "width=380,height=640");
+export function printQueueTicket(tokenId: string, serviceStream?: ServiceStream): void {
+  const query = serviceStream ? `?serviceStream=${encodeURIComponent(serviceStream)}` : "";
+  const tab = window.open(`/print/ticket/${tokenId}${query}`, "ticket-print", "width=380,height=640");
   if (tab) tab.opener = null;
 }

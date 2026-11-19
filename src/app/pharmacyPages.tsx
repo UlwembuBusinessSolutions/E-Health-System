@@ -9,6 +9,7 @@ function lazyPage<Name extends string>(load: () => Promise<Record<Name, Componen
 }
 
 export const PharmacyLayout = lazyPage(() => import("@/pharmacy/PharmacyLayout"), "PharmacyLayout");
+export const PharmacyOverviewPage = lazyPage(() => import("@/pharmacy/overview/OverviewPage"), "OverviewPage");
 export const DispensingQueuePage = lazyPage(() => import("@/pharmacy/dispensing/DispensingQueuePage"), "DispensingQueuePage");
 export const PrescriptionPrintPage = lazyPage(() => import("@/pharmacy/PrescriptionPrintPage"), "PrescriptionPrintPage");
 export const StockPage = lazyPage(() => import("@/pharmacy/stock/StockPage"), "StockPage");
@@ -21,7 +22,6 @@ export const StockCountPage = lazyPage(() => import("@/pharmacy/counts/StockCoun
 export const ScheduleRegisterPage = lazyPage(() => import("@/pharmacy/register/ScheduleRegisterPage"), "ScheduleRegisterPage");
 export const ImportPage = lazyPage(() => import("@/pharmacy/import/ImportPage"), "ImportPage");
 export const OpeningStockPage = lazyPage(() => import("@/pharmacy/opening-stock/OpeningStockPage"), "OpeningStockPage");
-export const PbpaClinicSchedulesPage = lazyPage(() => import("@/pharmacy/PbpaClinicSchedulesPage"), "PbpaClinicSchedulesPage");
 
 /** Shown while a page's chunk loads; announced to screen readers, and quiet for people who avoid motion. */
 export function PageLoading() {

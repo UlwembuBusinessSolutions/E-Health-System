@@ -121,11 +121,7 @@ export function ProvisionOrganizationScreen() {
       {
         ...values,
         sector: values.sector as OrganizationSector,
-        admins: values.admins.map((admin) => ({
-          ...admin,
-          contactNumber: admin.contactNumber.replace(/[ ()-]/g, ""),
-          gender: admin.gender as Gender,
-        })),
+        admins: values.admins.map((admin) => ({ ...admin, gender: admin.gender as Gender })),
       },
       {
         onSuccess: (organization: ProvisionedOrganization) => {
@@ -208,12 +204,6 @@ export function ProvisionOrganizationScreen() {
               >
                 Provision another organization
               </Button>
-              <Link
-                to="/platform/organizations"
-                className="inline-flex h-12 w-full items-center justify-center rounded-lg bg-brand-500 px-5 text-[15px] font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
-              >
-                View organizations
-              </Link>
             </motion.div>
           </Card>
         ) : (
@@ -225,14 +215,7 @@ export function ProvisionOrganizationScreen() {
               </p>
             </div>
 
-            <form
-              onSubmit={handleSubmit(onSubmit, () => {
-                setFormError("Please fix the highlighted fields before creating the organization.");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              })}
-              noValidate
-              className="flex flex-col gap-4"
-            >
+            <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
               {formError && (
                 <div
                   role="alert"

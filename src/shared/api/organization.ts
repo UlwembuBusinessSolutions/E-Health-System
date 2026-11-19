@@ -91,6 +91,19 @@ export async function toggleOrganizationModule(moduleCode: string, enabled: bool
   );
 }
 
+export interface UpdateOrganizationBrandingPayload {
+  primaryColor: string | null;
+  shortName: string | null;
+}
+
+export async function updateOrganizationBranding(
+  payload: UpdateOrganizationBrandingPayload,
+): Promise<Pick<OrganizationSelf, "logoUrl" | "primaryColor" | "shortName">> {
+  return apiClient.patch<Pick<OrganizationSelf, "logoUrl" | "primaryColor" | "shortName">>(
+    "/api/v1/admin/organization/branding", payload, { headers: tenantAuthHeaders() },
+  );
+}
+
 export interface LogoUploadResponse {
   logoUrl: string;
 }
@@ -139,12 +152,6 @@ export async function updateOrganizationMailSettings(
   payload: UpdateOrganizationMailSettingsPayload,
 ): Promise<OrganizationMailSettings> {
   return apiClient.patch<OrganizationMailSettings>("/api/v1/admin/organization/mail-settings", payload, {
-    headers: tenantAuthHeaders(),
-  });
-}
-
-export async function testOrganizationMailSettings(): Promise<void> {
-  return apiClient.post<void>("/api/v1/admin/organization/mail-settings/test", undefined, {
     headers: tenantAuthHeaders(),
   });
 }

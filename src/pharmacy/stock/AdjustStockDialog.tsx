@@ -1,4 +1,5 @@
 import { useId, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import type { AdjustmentMode, BatchRow, StockRow } from "@/shared/api/pharmacyStock";
 import { Button } from "@/shared/components/Button";
 import { ErrorState } from "../components/ErrorState";
@@ -73,11 +74,12 @@ function AdjustStockForm({
   });
 
   const removing = form.mode === "REMOVE";
+  const noLotsToAdjust = lots.length === 0;
   const nothingToRemove = removing && (product.serialTracked ? form.serialsInStock.length === 0 : product.available === 0);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (form.payload) submission.submit(form.payload);
+    if (form.payload && !noLotsToAdjust) submission.submit(form.payload);
   }
 
   return (
@@ -96,7 +98,7 @@ function AdjustStockForm({
             type="submit"
             form={formId}
             variant={removing ? "danger" : "primary"}
-            disabled={!form.payload}
+            disabled={!form.payload || noLotsToAdjust}
             loading={submission.isSubmitting}
           >
             {confirmLabel(form.mode, form.payload?.quantity, product.baseUnit)}
@@ -107,7 +109,14 @@ function AdjustStockForm({
       <form id={formId} onSubmit={handleSubmit} className="flex flex-col gap-5">
         <AdjustModeToggle mode={form.mode} onChange={form.setMode} />
 
-        {nothingToRemove ? (
+        {noLotsToAdjust ? (
+          <div role="status" className="rounded-lg bg-surface-sunken px-3.5 py-3 text-[13.5px] text-text-secondary">
+            <p>No lots are available to adjust for this product. Receive stock with its lot and expiry details before adding a quantity.</p>
+            <Link to="/app/pharmacy/receive" onClick={onClose} className="mt-2 inline-block font-medium text-brand-600 hover:text-brand-700">
+              Receive stock
+            </Link>
+          </div>
+        ) : nothingToRemove ? (
           <p className="rounded-lg bg-surface-sunken px-3.5 py-3 text-[13.5px] text-text-secondary">
             There is nothing on the shelf to remove. Use &ldquo;Add stock found&rdquo; if you have found some.
           </p>
@@ -125,7 +134,7 @@ function AdjustStockForm({
           </>
         )}
 
-        {!nothingToRemove && (
+        {!noLotsToAdjust && !nothingToRemove && (
           <p role="status" className="rounded-lg bg-surface-sunken px-3.5 py-3 text-[13.5px] text-text-secondary">
             {form.payload ? form.preview : `Still needed: ${form.missingStep}.`}
           </p>

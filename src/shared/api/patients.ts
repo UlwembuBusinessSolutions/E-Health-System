@@ -10,15 +10,16 @@ import { tenantAuthHeaders } from "./auth";
 // user.
 
 // Matches identity.CitizenshipStatus field-for-field.
-export type CitizenshipStatus = "SA_CITIZEN" | "PERMANENT_RESIDENT" | "UNKNOWN";
+export type CitizenshipStatus = "SA_CITIZEN" | "PERMANENT_RESIDENT";
+export type ParentRelationship = "MOTHER" | "FATHER";
 
 export interface RegisterPatientPayload {
   firstName: string;
   lastName: string;
-  idNumber?: string;
-  dateOfBirth?: string;
-  gender?: Gender;
-  citizenshipStatus?: CitizenshipStatus;
+  idNumber: string;
+  dateOfBirth: string;
+  parentRelationship?: ParentRelationship;
+  patientFileNumber?: string;
   address: string;
   contactNumber: string;
   // Optional — cross-tenant patient migration's own notification email is
@@ -32,14 +33,16 @@ export interface RegisterPatientPayload {
   passportExpiry?: string; // "yyyy-MM-dd"
 }
 
-// Demographics are derived from a valid SA ID, or supplied by reception
-// when the patient has no identity document.
+// gender/citizenshipStatus are derived from idNumber when one is provided.
+// dateOfBirth is supplied explicitly on registration.
 export interface Patient {
   id: string;
   mpiNumber: string;
   firstName: string;
   lastName: string;
-  dateOfBirth: string | null;
+  dateOfBirth: string;
+  parentRelationship: ParentRelationship | null;
+  patientFileNumber: string | null;
   gender: Gender | null;
   citizenshipStatus: CitizenshipStatus | null;
   idNumber: string | null;
@@ -73,10 +76,9 @@ export async function registerPatient(payload: RegisterPatientPayload): Promise<
 // roster, matching PatientService.search()'s own behavior; callers debounce
 // on their end (same pattern OrganizationsPage's own search already uses)
 // rather than sending a request per keystroke.
-export async function searchPatients(query: string, dateOfBirth?: string): Promise<Patient[]> {
+export async function searchPatients(query: string): Promise<Patient[]> {
   const search = new URLSearchParams();
   if (query) search.set("q", query);
-  if (dateOfBirth) search.set("dateOfBirth", dateOfBirth);
   const response = await apiClient.get<{ items: Patient[] }>(`/api/v1/patients/search?${search.toString()}`, {
     headers: tenantAuthHeaders(),
   });

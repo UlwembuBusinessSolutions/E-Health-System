@@ -1,6 +1,6 @@
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
-import type { QueueToken, TokenPriority } from "./queue";
+import type { QueueToken } from "./queue";
 
 // PREG-US-019 + RECQ-US-001. Matches VisitController field-for-field.
 export type VisitType = "NEW" | "FOLLOW_UP";
@@ -8,15 +8,21 @@ export type VisitType = "NEW" | "FOLLOW_UP";
 // PREG-US-019's "visit type to service stream mapping" — borrows the app's
 // own existing clinical-module names (ServiceStream.java's own why-note),
 // not an invented taxonomy.
-export type ServiceStream = "GENERAL" | "CHRONIC_CARE" | "MATERNAL_CHILD" | "OCCUPATIONAL_HEALTH" | "PHARMACY";
+export type ServiceStream = "GENERAL" | "CHRONIC_CARE" | "MATERNAL_CHILD" | "OCCUPATIONAL_HEALTH";
+
+export const SERVICE_STREAM_DETAILS: Record<ServiceStream, { label: string; code: string }> = {
+  GENERAL: { label: "Acute Episodic Care", code: "A" },
+  CHRONIC_CARE: { label: "Chronic Care", code: "C" },
+  OCCUPATIONAL_HEALTH: { label: "Occupational Health", code: "O" },
+  MATERNAL_CHILD: { label: "Maternal & Child Health", code: "N" },
+};
 
 export interface Visit {
   id: string;
-  patientId: string;
+  patientId: string | null;
   facilityId: string;
   visitType: VisitType;
   serviceStream: ServiceStream;
-  visitReason: string | null;
   visitDateTime: string;
 }
 
@@ -25,8 +31,12 @@ export interface CreateVisitPayload {
   facilityId: string;
   visitType: VisitType;
   serviceStream: ServiceStream;
-  priority: TokenPriority;
-  visitReason: string;
+}
+
+export interface CreateWalkInVisitPayload {
+  facilityId: string;
+  visitType: VisitType;
+  serviceStream: ServiceStream;
 }
 
 // Creates the visit and, in the same call, issues its queue token —
@@ -41,6 +51,16 @@ export async function createVisit(payload: CreateVisitPayload): Promise<VisitWit
   return apiClient.post<VisitWithToken>("/api/v1/visits", payload, { headers: tenantAuthHeaders() });
 }
 
+// Creates a walk-in visit and queue token without creating an unverified
+// patient record.
+export async function createWalkInVisit(payload: CreateWalkInVisitPayload): Promise<VisitWithToken> {
+  return apiClient.post<VisitWithToken>("/api/v1/visits/walk-in", payload, { headers: tenantAuthHeaders() });
+}
+
+export async function getVisit(visitId: string): Promise<Visit> {
+  return apiClient.get<Visit>(`/api/v1/visits/${visitId}`, { headers: tenantAuthHeaders() });
+}
+
 // The patient record's Visits tab — every visit this patient has ever had,
 // across every facility, newest first. facilityName travels with each row
 // (resolved server-side) so the page never has to look it up itself.
@@ -50,7 +70,6 @@ export interface PatientVisit {
   facilityName: string | null;
   visitType: VisitType;
   serviceStream: ServiceStream;
-  visitReason: string | null;
   visitDateTime: string;
   transferredFromVisitId: string | null;
 }
