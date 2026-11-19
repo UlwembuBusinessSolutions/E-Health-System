@@ -71,8 +71,6 @@ import { printPrescription } from "@/shared/lib/printPrescription";
 import {
   AVPU_OPTIONS,
   DISCRIMINATOR_OPTIONS,
-  MOBILITY_OPTIONS,
-  OXYGEN_SUPPORT_OPTIONS,
   SCORING_PROFILE_OPTIONS,
   TRIAGE_COLOUR_OPTIONS,
   VitalsDetailContent,
@@ -83,8 +81,6 @@ import {
   getTriageHistory,
   type Avpu,
   type CaptureTriagePayload,
-  type Mobility,
-  type OxygenSupport,
   type ScoringProfile,
   type TriageAssessment,
   type TriageColour,
@@ -113,6 +109,15 @@ function isPaediatric(dateOfBirth?: string): boolean {
   return age < 13;
 }
 
+function ageInYears(dateOfBirth?: string): string {
+  if (!dateOfBirth) return "Not available";
+  const birth = new Date(`${dateOfBirth}T00:00:00`);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  if (today < new Date(today.getFullYear(), birth.getMonth(), birth.getDate())) age -= 1;
+  return `${age} years`;
+}
+
 interface VitalsFormState {
   additional: AdditionalVitalsState;
   emergencySign: boolean;
@@ -123,14 +128,7 @@ interface VitalsFormState {
   diastolicBp: string;
   temperatureCelsius: string;
   spo2Percent: string;
-  oxygenSupport: OxygenSupport;
-  oxygenDevice: string;
-  oxygenFlowLpm: string;
   avpu: Avpu | "";
-  mobility: Mobility | "";
-  painScore: string;
-  painScale: string;
-  presentingComplaint: string;
   discriminators: TriageDiscriminator[];
   scoringProfileOverride: ScoringProfile | "";
   confirmOutOfRange: boolean;
@@ -149,14 +147,7 @@ const EMPTY_VITALS_FORM: VitalsFormState = {
   diastolicBp: "",
   temperatureCelsius: "",
   spo2Percent: "",
-  oxygenSupport: "ROOM_AIR",
-  oxygenDevice: "",
-  oxygenFlowLpm: "",
   avpu: "",
-  mobility: "",
-  painScore: "",
-  painScale: "",
-  presentingComplaint: "",
   discriminators: [],
   scoringProfileOverride: "",
   confirmOutOfRange: false,
@@ -165,7 +156,7 @@ const EMPTY_VITALS_FORM: VitalsFormState = {
   dateOfBirth: "",
 };
 
-// "" means not entered — distinct from 0, which is a real (if extreme)
+// "" means not entered â€” distinct from 0, which is a real (if extreme)
 // reading. Sending undefined for a blank field is what lets the backend's
 // own required-vitals validation (TriageService.requireVitalsForScoring())
 // tell "not measured" apart from "measured as zero," rather than this page
@@ -244,7 +235,7 @@ const RELATIONSHIP_LABEL: Record<GuardianRelationship, string> = {
   OTHER: "Other",
 };
 
-// Matches PatientController.UpdatePatientRequest's own field set — the
+// Matches PatientController.UpdatePatientRequest's own field set â€” the
 // history table's field_name values are these same identifiers verbatim
 // (PatientService.update()'s own diff() calls), so this doubles as the
 // display label for PatientFieldHistoryEntry.fieldName below.
@@ -267,7 +258,7 @@ function formatFileSize(bytes: number): string {
 }
 
 // "Today"/"Yesterday"/"N days ago" reads faster than a date at a glance for
-// something uploaded minutes or hours ago — the exact date is still one
+// something uploaded minutes or hours ago â€” the exact date is still one
 // click away on the full record, so this doesn't need to carry it too.
 function formatRelativeDate(iso: string): string {
   const date = new Date(iso);
@@ -292,13 +283,72 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-// One condensed row per earlier reading — the same fields latestVitals
+// One condensed row per earlier reading â€” the same fields latestVitals
 // shows in full, folded into a single line since these are here for
 // context/trend, not as the active reading someone's acting on right now.
 // Clicking it (or the Eye affordance) opens VitalsDetailModal for the full
-// captured record — every reading here is a real clinical observation, not
+// captured record â€” every reading here is a real clinical observation, not
 // just a line of trend data, so it needs to stay fully inspectable, not
 // just summarised.
+function VitalsComparison({ current, previous }: { current: TriageAssessment; previous: TriageAssessment }) {
+  const value = (assessment: TriageAssessment, key: "bp" | "heartRate" | "respirations" | "temperature" | "spo2" | "glucose" | "weight" | "height" | "bmi" | "peakFlow") => {
+    switch (key) {
+      case "bp": return assessment.systolicBp == null ? "Not recorded" : `${assessment.systolicBp}/${assessment.diastolicBp ?? "-"} mmHg`;
+      case "heartRate": return assessment.heartRate == null ? "Not recorded" : `${assessment.heartRate} bpm`;
+      case "respirations": return assessment.respiratoryRate == null ? "Not recorded" : `${assessment.respiratoryRate} /min`;
+      case "temperature": return assessment.temperatureCelsius == null ? "Not recorded" : `${assessment.temperatureCelsius} C`;
+      case "spo2": return assessment.spo2Percent == null ? "Not recorded" : `${assessment.spo2Percent}%`;
+      case "glucose": return assessment.additionalObservations?.glucoseMmolL == null ? "Not recorded" : `${assessment.additionalObservations.glucoseMmolL} mmol/L`;
+      case "weight": return assessment.additionalObservations?.weightKg == null ? "Not recorded" : `${assessment.additionalObservations.weightKg} kg`;
+      case "height": return assessment.additionalObservations?.heightCm == null ? "Not recorded" : `${assessment.additionalObservations.heightCm} cm`;
+      case "bmi": return assessment.additionalObservations?.bmi == null ? "Not recorded" : `${assessment.additionalObservations.bmi} kg/mÂ²`;
+      case "peakFlow": return assessment.additionalObservations?.peakFlowLpm == null ? "Not recorded" : `${assessment.additionalObservations.peakFlowLpm} L/min`;
+    }
+  };
+  const rows = [
+    ["Blood pressure", "bp"], ["Heart rate", "heartRate"], ["Respirations", "respirations"],
+    ["Temperature", "temperature"], ["SpO2", "spo2"], ["Glucose", "glucose"],
+    ["Weight", "weight"], ["Height", "height"], ["BMI", "bmi"], ["Peak flow", "peakFlow"],
+  ] as const;
+  const recordedTime = (assessment: TriageAssessment) => assessment.recordedAt || assessment.observedAt;
+  const person = (assessment: TriageAssessment) => assessment.capturedByName || "Staff member not identified";
+
+  return (
+    <section aria-label="Compare current and previous vital signs" className="overflow-hidden rounded-xl border border-border-subtle">
+      <div className="border-b border-border-subtle bg-surface-sunken/50 px-3 py-2.5">
+        <h3 className="text-[12px] font-semibold text-text-primary">Compare with previous reading</h3>
+        <p className="mt-0.5 text-[11px] text-text-secondary">Both recordings remain in the patient history.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-left text-[12px]">
+          <thead className="bg-surface-raised text-text-secondary">
+            <tr>
+              <th scope="col" className="px-3 py-2 font-medium">Measurement</th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                <span className="block text-text-primary">Current</span>
+                <span className="block font-normal">{formatDateTime(recordedTime(current))} - {person(current)}</span>
+              </th>
+              <th scope="col" className="px-3 py-2 font-medium">
+                <span className="block text-text-primary">Previous</span>
+                <span className="block font-normal">{formatDateTime(recordedTime(previous))} - {person(previous)}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([label, key]) => (
+              <tr key={key} className="border-t border-border-subtle">
+                <th scope="row" className="px-3 py-2 font-medium text-text-secondary">{label}</th>
+                <td className="px-3 py-2 font-semibold tabular-nums text-text-primary">{value(current, key)}</td>
+                <td className="px-3 py-2 tabular-nums text-text-secondary">{value(previous, key)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function VitalsHistoryRow({
   assessment,
   capturedByName,
@@ -319,7 +369,7 @@ function VitalsHistoryRow({
         className="w-full rounded-xl border border-border-subtle bg-surface-raised p-4 text-left transition-colors duration-150 hover:border-brand-300 hover:bg-brand-50/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="flex items-center gap-2 text-sm font-semibold text-text-primary"><HeartPulse className="size-4 text-brand-600" aria-hidden />{formatDateTime(assessment.observedAt)}</p>
+          <p className="flex items-center gap-2 text-sm font-semibold text-text-primary"><HeartPulse className="size-4 text-brand-600" aria-hidden />{formatDateTime(assessment.recordedAt || assessment.observedAt)}</p>
           <div className="flex items-center gap-2">
             {assessment.tewsScore != null && <span className="text-xs font-medium text-text-secondary">TEWS {assessment.tewsScore}</span>}
             <TriageColourBadge colour={assessment.finalColour} />
@@ -328,11 +378,11 @@ function VitalsHistoryRow({
         </div>
         <div className="my-3"><VitalsOverview assessment={assessment} /></div>
         <p className="mt-0.5 text-[12px] text-text-secondary">
-          Captured {formatDateTime(assessment.observedAt)}
-          {capturedByName && ` · by ${capturedByName}`}
-          {assessment.status === "SUPERSEDED" && " · superseded"}
-          {assessment.status === "ENTERED_IN_ERROR" && " · entered in error"}
-          {assessment.overrideReason && " · colour manually overridden"}
+          Captured {formatDateTime(assessment.recordedAt || assessment.observedAt)}
+          {capturedByName && ` Â· by ${capturedByName}`}
+          {assessment.status === "SUPERSEDED" && " Â· superseded"}
+          {assessment.status === "ENTERED_IN_ERROR" && " Â· entered in error"}
+          {assessment.overrideReason && " Â· colour manually overridden"}
         </p>
       </button>
       {isOpen && (
@@ -348,7 +398,7 @@ function VitalsHistoryRow({
   );
 }
 
-// The full record behind one VitalsHistoryRow, in a dialog — the same
+// The full record behind one VitalsHistoryRow, in a dialog â€” the same
 // content VitalsPrintPage renders on paper (VitalsDetailContent is shared
 // between the two), just with a close button instead of nothing in the
 // header's trailing slot. Portal to the body so animated ancestors cannot
@@ -434,7 +484,7 @@ function VitalsDetailModal({
   );
 }
 
-// The patient-level Medication tab — every prescription this patient has
+// The patient-level Medication tab â€” every prescription this patient has
 // ever had, PENDING and DISPENSED alike, newest first. Distinct from the
 // pharmacy-facility dispensing queue (PharmacyQueuePage, which only ever
 // shows PENDING ones for whichever facility is selected): this is "what
@@ -456,7 +506,7 @@ function PatientPrescriptionsTab({ patientId }: { patientId: string }) {
       </p>
 
       {prescriptionsQuery.isLoading ? (
-        <p className="text-[13.5px] text-text-secondary">Loading…</p>
+        <p className="text-[13.5px] text-text-secondary">Loadingâ€¦</p>
       ) : prescriptions.length === 0 ? (
         <p className="text-[13.5px] text-text-secondary">No prescriptions recorded for this patient yet.</p>
       ) : (
@@ -469,7 +519,7 @@ function PatientPrescriptionsTab({ patientId }: { patientId: string }) {
                   <p className="mt-0.5 text-[12.5px] text-text-secondary">
                     Prescribed by {rx.prescriberName ?? "Unknown"}
                     {rx.prescriberRegistrationNumber && (
-                      <span className="font-mono"> · Reg. {rx.prescriberRegistrationNumber}</span>
+                      <span className="font-mono"> Â· Reg. {rx.prescriberRegistrationNumber}</span>
                     )}{" "}
                     &middot; {formatDateTime(rx.createdAt)}
                   </p>
@@ -480,7 +530,7 @@ function PatientPrescriptionsTab({ patientId }: { patientId: string }) {
                   ) : rx.status === "PARTIALLY_DISPENSED" ? (
                     <StatusPill tone="warning">Partially collected</StatusPill>
                   ) : rx.status === "OUT_OF_STOCK" ? (
-                    <StatusPill tone="danger">Not collected — out of stock</StatusPill>
+                    <StatusPill tone="danger">Not collected â€” out of stock</StatusPill>
                   ) : (
                     <StatusPill tone="warning">Not yet taken</StatusPill>
                   )}
@@ -499,12 +549,12 @@ function PatientPrescriptionsTab({ patientId }: { patientId: string }) {
                   <li key={item.id} className="text-[13px] text-text-primary">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>
-                        {item.drugName} — {item.dosage} <span className="text-text-secondary">× {item.quantity}</span>
+                        {item.drugName} â€” {item.dosage} <span className="text-text-secondary">Ã— {item.quantity}</span>
                       </span>
                       {item.status === "DISPENSED" ? (
                         <StatusPill tone="success">Taken</StatusPill>
                       ) : item.status === "OUT_OF_STOCK" ? (
-                        <StatusPill tone="danger">Not collected — out of stock</StatusPill>
+                        <StatusPill tone="danger">Not collected â€” out of stock</StatusPill>
                       ) : (
                         <StatusPill tone="warning">Not yet taken</StatusPill>
                       )}
@@ -537,7 +587,7 @@ function PatientPrescriptionsTab({ patientId }: { patientId: string }) {
 // clinician can see the trend over time, not just "what did the current
 // visit record." Filtered by observed date (server-side, TriageService.
 // getPatientVitalsHistory()) since a long-standing patient's history can
-// span years — unlike the per-visit list above, which never needs a date
+// span years â€” unlike the per-visit list above, which never needs a date
 // filter because a visit's own vitals are already a small, bounded set.
 function PatientVitalsHistoryTab({
   patientId,
@@ -563,7 +613,7 @@ function PatientVitalsHistoryTab({
   const totalElements = vitalsQuery.data?.totalElements ?? 0;
   const totalPages = vitalsQuery.data?.totalPages ?? 0;
 
-  // Every filter/order change invalidates whatever page someone was on —
+  // Every filter/order change invalidates whatever page someone was on â€”
   // page 3 of "last month" almost never lines up with page 3 of "this
   // year," so landing back on page 0 avoids a silently-empty page.
   const updateFrom = (value: string) => {
@@ -631,7 +681,7 @@ function PatientVitalsHistoryTab({
       </div>
 
       {vitalsQuery.isLoading ? (
-        <p className="text-[13.5px] text-text-secondary">Loading…</p>
+        <p className="text-[13.5px] text-text-secondary">Loadingâ€¦</p>
       ) : vitalsQuery.isError ? (
         <div role="alert" className="text-sm text-danger-600">Could not load vitals. <button type="button" className="underline" onClick={() => vitalsQuery.refetch()}>Try again</button></div>
       ) : entries.length === 0 ? (
@@ -653,7 +703,7 @@ function PatientVitalsHistoryTab({
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle pt-3">
             <p className="text-[12.5px] text-text-secondary">
-              {totalElements} {totalElements === 1 ? "reading" : "readings"} · Page {page + 1} of{" "}
+              {totalElements} {totalElements === 1 ? "reading" : "readings"} Â· Page {page + 1} of{" "}
               {Math.max(totalPages, 1)}
             </p>
             <div className="flex items-center gap-2">
@@ -694,7 +744,7 @@ function PatientVitalsHistoryTab({
   );
 }
 
-// The read half of PREG-US-001/015 — "view longitudinal record" is a later
+// The read half of PREG-US-001/015 â€” "view longitudinal record" is a later
 // story (visits/consultations don't exist yet), so this is the demographic
 // record on its own: everything PatientController.PatientSummary returns,
 // laid out the same "profile card" shape OrganizationDetailPage's own
@@ -737,7 +787,7 @@ export function PatientDetailPage() {
     enabled: !!patientId,
   });
 
-  // PREG-US-017 AC2 / PREG-US-018 — one-way (no unarchive endpoint exists),
+  // PREG-US-017 AC2 / PREG-US-018 â€” one-way (no unarchive endpoint exists),
   // so the confirmation form below is the only guard against a misclick;
   // the button itself never fires this directly.
   const archive = useMutation({
@@ -763,7 +813,7 @@ export function PatientDetailPage() {
     archive.mutate();
   };
 
-  // Destination-picker queries — organizations load once the panel opens,
+  // Destination-picker queries â€” organizations load once the panel opens,
   // facilities are a dependent query keyed on the chosen organization.
   const migrationOrgsQuery = useQuery({
     queryKey: ["migration-destination-organizations"],
@@ -776,7 +826,7 @@ export function PatientDetailPage() {
     enabled: isMigrating && !!migrateOrgId,
   });
 
-  // One-way, same as archiving — the confirmation form below is the only
+  // One-way, same as archiving â€” the confirmation form below is the only
   // guard against a misclick; there's no way to undo this from here once it
   // succeeds (PatientMigrationService.migrate()'s own one-way guarantee).
   const migrate = useMutation({
@@ -831,7 +881,7 @@ export function PatientDetailPage() {
       vitalsErrorRef.current?.scrollIntoView({ block: "nearest" });
     }
   }, [vitalsError]);
-  // One key per open of the form, not one per keystroke — a genuine new
+  // One key per open of the form, not one per keystroke â€” a genuine new
   // capture (form dismissed and reopened) gets a fresh key, while retrying
   // the same submission (the mutation firing again for the same click)
   // reuses it, which is the whole point of idempotencyKey server-side.
@@ -849,7 +899,7 @@ export function PatientDetailPage() {
     .at(-1);
   // Every reading stays its own row (TriageService.capture() never
   // overwrites), so anything other than the single latest one shown above
-  // needs its own place to display — otherwise a second or third capture
+  // needs its own place to display â€” otherwise a second or third capture
   // just makes the earlier ones vanish from view even though they're still
   // in the database. Newest-of-the-rest first, mirroring latestVitals sitting
   // above it.
@@ -869,6 +919,7 @@ export function PatientDetailPage() {
       //setVitalsIdempotencyKey(generateUUID());
       setVitalsIdempotencyKey(generateUUID());
       queryClient.invalidateQueries({ queryKey: ["triage-history", activeVisitId] });
+      queryClient.invalidateQueries({ queryKey: ["triage-latest", activeVisitId] });
       queryClient.invalidateQueries({ queryKey: ["patient-vitals-history"] });
     },
     onError: (error) => {
@@ -888,11 +939,10 @@ export function PatientDetailPage() {
         !vitalsForm.heartRate ||
         !vitalsForm.systolicBp ||
         !vitalsForm.temperatureCelsius ||
-        !vitalsForm.avpu ||
-        !vitalsForm.mobility;
+        !vitalsForm.avpu;
       if (missing) {
         setVitalsError(
-          "Respiratory rate, heart rate, systolic BP, temperature, AVPU, and mobility are all required " +
+          "Respiratory rate, heart rate, systolic BP, temperature, and AVPU are required " +
             "(unless this is an emergency-sign capture).",
         );
         return;
@@ -938,14 +988,7 @@ export function PatientDetailPage() {
       diastolicBp: numberOrUndefined(vitalsForm.diastolicBp),
       temperatureCelsius: numberOrUndefined(vitalsForm.temperatureCelsius),
       spo2Percent: numberOrUndefined(vitalsForm.spo2Percent),
-      oxygenSupport: vitalsForm.oxygenSupport,
-      oxygenDevice: vitalsForm.oxygenSupport === "SUPPLEMENTAL" ? vitalsForm.oxygenDevice.trim() || undefined : undefined,
-      oxygenFlowLpm: vitalsForm.oxygenSupport === "SUPPLEMENTAL" ? numberOrUndefined(vitalsForm.oxygenFlowLpm) : undefined,
       avpu: vitalsForm.avpu || undefined,
-      mobility: vitalsForm.mobility || undefined,
-      painScore: numberOrUndefined(vitalsForm.painScore),
-      painScale: vitalsForm.painScale.trim() || undefined,
-      presentingComplaint: vitalsForm.presentingComplaint.trim() || undefined,
       discriminators: vitalsForm.discriminators,
       idempotencyKey: vitalsIdempotencyKey,
       confirmOutOfRange: vitalsForm.confirmOutOfRange,
@@ -966,11 +1009,11 @@ export function PatientDetailPage() {
   const patient = patientQuery.data;
 
   // Same query key PatientDocumentsCard's own documents list uses further
-  // down this page — React Query dedupes identical keys across components,
+  // down this page â€” React Query dedupes identical keys across components,
   // so this doesn't add a second network round trip, just a second reader
   // of the one already-fetched list. Only the presigned download URL for
   // the PATIENT_PHOTO row (if one exists) is fetched here specifically, so
-  // the header avatar can show the real photo instead of initials —
+  // the header avatar can show the real photo instead of initials â€”
   // fetched once per page view, not per patient in a list, which is what
   // makes doing this here fine despite PatientDocumentService's private,
   // presigned-URL-only design (getDownloadUrl()'s own why-note).
@@ -986,7 +1029,7 @@ export function PatientDetailPage() {
     enabled: !!photoDocument,
   });
 
-  // Clicking the header avatar is the one entry point for a patient photo —
+  // Clicking the header avatar is the one entry point for a patient photo â€”
   // there's deliberately no separate "Patient photo" box in the Documents
   // card below (that section is for supporting paperwork someone opens to
   // review; a photo is an identity cue people expect right where the
@@ -1019,11 +1062,36 @@ export function PatientDetailPage() {
   // The vitals / triage card: shows the latest reading with a Take vitals button, and the capture
   // form. It is shown on both the Overview and the Vitals tab, so vitals can be taken from either.
   const vitalsCard = (isWalkIn || (patient && !patient.archived)) ? (
-    <Card className="mb-6 p-6">
+    <Card className="mb-6 border border-[#dce2e8] bg-white p-6 shadow-sm">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="text-[14.5px] font-semibold text-text-primary">Vitals / triage</h2>
-                  {latestVitals && !isCapturingVitals && <TriageColourBadge colour={latestVitals.finalColour} />}
+                  <h2 className="text-[14.5px] font-semibold text-text-primary">{isCapturingVitals ? "Vitals" : "Vitals / triage"}</h2>
+                  {isCapturingVitals ? (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <Link to="/app/queue" className="inline-flex h-9 items-center rounded-md bg-[#343a40] px-3 text-[12px] font-semibold text-white hover:bg-[#23272b]">Waiting Patients List</Link>
+                      <button type="button" onClick={() => setIsCapturingVitals(false)} className="inline-flex h-9 items-center rounded-md bg-[#343a40] px-3 text-[12px] font-semibold text-white hover:bg-[#23272b]">Vital List</button>
+                      <p className="ml-1 text-right text-[11px] text-text-secondary">
+                        Recorded by <span className="font-semibold text-text-primary">{[user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Signed-in clinician"}</span>
+                        {user?.role && <span className="block">{user.role.replaceAll("_", " ")}</span>}
+                      </p>
+                    </div>
+                  ) : latestVitals && <TriageColourBadge colour={latestVitals.finalColour} />}
                 </div>
+
+                {isCapturingVitals && (
+                  <div className="mb-5 grid grid-cols-1 gap-3 rounded-lg border border-[#dce2e8] bg-[#f5f7f9] p-4 sm:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      { label: "Visit No", value: walkInTokenNumber ? `Token ${walkInTokenNumber}` : activeVisitId ? activeVisitId.slice(0, 8).toUpperCase() : "Not selected" },
+                      { label: "Master Patient Index", value: patient?.mpiNumber ?? "Walk-in" },
+                      { label: "Patient Name", value: isWalkIn ? "Unregistered walk-in" : `${patient?.firstName ?? ""} ${patient?.lastName ?? ""}`.trim() || "Loading patient" },
+                      { label: "Age", value: ageInYears(isWalkIn ? vitalsForm.dateOfBirth : patient?.dateOfBirth) },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="min-w-0">
+                        <p className="mb-1.5 text-[12px] font-medium text-[#344054]">{label} <span className="text-danger-500">*</span></p>
+                        <div className="flex h-10 items-center truncate rounded-md border border-[#d0d5dd] bg-[#e9edf1] px-3 text-[13px] text-[#667085]" title={value}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
   
                 {!activeVisitId ? (
                   <div className="rounded-lg border border-border-default bg-surface-sunken p-4">
@@ -1050,7 +1118,7 @@ export function PatientDetailPage() {
                         label="Emergency sign present"
                       />
                       <span className="text-[13.5px] font-medium text-danger-600">
-                        Emergency sign present — assigns Red immediately, skips the vitals below
+                        Emergency sign present â€” assigns Red immediately, skips the vitals below
                       </span>
                     </label>
   
@@ -1063,7 +1131,7 @@ export function PatientDetailPage() {
                           className="min-h-[70px] rounded-lg border border-border-default bg-surface-base px-3 py-2 text-[13.5px] text-text-primary outline-none focus:border-brand-500"
                           value={vitalsForm.emergencySignNote}
                           onChange={(e) => setVitalsForm((f) => ({ ...f, emergencySignNote: e.target.value }))}
-                          placeholder="e.g. Airway obstruction, unresponsive, active seizure…"
+                          placeholder="e.g. Airway obstruction, unresponsive, active seizureâ€¦"
                         />
                       </label>
                     ) : (
@@ -1078,7 +1146,8 @@ export function PatientDetailPage() {
                             onChange={(e) => setVitalsForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
                           />
                         )}
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <h3 className="text-[13px] font-semibold text-text-primary">Primary vital signs</h3>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                           <Input
                             label="Respiratory rate (breaths/min)"
                             icon={<Wind className="size-4" aria-hidden />}
@@ -1096,7 +1165,7 @@ export function PatientDetailPage() {
                             onChange={(e) => setVitalsForm((f) => ({ ...f, heartRate: e.target.value }))}
                           />
                           <Input
-                            label="Temperature (°C)"
+                            label="Temperature (Â°C)"
                             required
                             type="number"
                             step="0.1"
@@ -1155,50 +1224,6 @@ export function PatientDetailPage() {
                             </>
                           )}
                           <Select
-                            label="Mobility"
-                            required
-                            options={MOBILITY_OPTIONS}
-                            value={vitalsForm.mobility}
-                            onChange={(e) => setVitalsForm((f) => ({ ...f, mobility: e.target.value as Mobility }))}
-                          />
-                          <Select
-                            label="Oxygen"
-                            options={OXYGEN_SUPPORT_OPTIONS}
-                            value={vitalsForm.oxygenSupport}
-                            onChange={(e) =>
-                              setVitalsForm((f) => ({ ...f, oxygenSupport: e.target.value as OxygenSupport }))
-                            }
-                          />
-                          {vitalsForm.oxygenSupport === "SUPPLEMENTAL" && (
-                            <>
-                              <Input
-                                label="Oxygen device"
-                                placeholder="Nasal cannula, face mask…"
-                                value={vitalsForm.oxygenDevice}
-                                onChange={(e) => setVitalsForm((f) => ({ ...f, oxygenDevice: e.target.value }))}
-                              />
-                              <Input
-                                label="Flow rate (L/min)"
-                                type="number"
-                                step="0.1"
-                                value={vitalsForm.oxygenFlowLpm}
-                                onChange={(e) => setVitalsForm((f) => ({ ...f, oxygenFlowLpm: e.target.value }))}
-                              />
-                            </>
-                          )}
-                          <Input
-                            label="Pain score"
-                            type="number"
-                            value={vitalsForm.painScore}
-                            onChange={(e) => setVitalsForm((f) => ({ ...f, painScore: e.target.value }))}
-                          />
-                          <Input
-                            label="Pain scale used"
-                            placeholder="Numeric 0-10, Wong-Baker…"
-                            value={vitalsForm.painScale}
-                            onChange={(e) => setVitalsForm((f) => ({ ...f, painScale: e.target.value }))}
-                          />
-                          <Select
                             label="Scoring profile"
                             options={SCORING_PROFILE_OPTIONS}
                             value={vitalsForm.scoringProfileOverride}
@@ -1237,15 +1262,6 @@ export function PatientDetailPage() {
                     )}
   
                     <AdditionalVitalsForm value={vitalsForm.additional} traumaRequired={!vitalsForm.emergencySign} onChange={additional => setVitalsForm(f => ({ ...f, additional }))} />
-                    <label className="mt-4 flex flex-col gap-1.5">
-                      <span className="text-[13px] font-medium text-text-primary">Presenting complaint</span>
-                      <textarea
-                        className="min-h-[60px] rounded-lg border border-border-default bg-surface-base px-3 py-2 text-[13.5px] text-text-primary outline-none focus:border-brand-500"
-                        value={vitalsForm.presentingComplaint}
-                        onChange={(e) => setVitalsForm((f) => ({ ...f, presentingComplaint: e.target.value }))}
-                        placeholder="Why is the patient here today?"
-                      />
-                    </label>
   
                     {unusualVitals(vitalsForm).length > 0 && (
                       <label className="mt-4 flex items-start gap-2 rounded-lg border border-warning-500/30 bg-warning-50 p-3">
@@ -1274,9 +1290,9 @@ export function PatientDetailPage() {
                         <p>{vitalsError}</p>
                       </div>
                     )}
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button type="button" loading={captureVitals.isPending} onClick={handleCaptureVitals}>
-                        {captureVitals.isPending ? "Saving vitals…" : "Save vitals"}
+                    <div className="mt-5 flex flex-row-reverse flex-wrap justify-end gap-2 border-t border-border-subtle pt-4">
+                      <Button type="button" loading={captureVitals.isPending} onClick={handleCaptureVitals} className="bg-[#16ad3c] hover:bg-[#159636]">
+                        {captureVitals.isPending ? "Saving vitalsâ€¦" : "Save vitals"}
                       </Button>
                       <Button
                         type="button"
@@ -1287,7 +1303,7 @@ export function PatientDetailPage() {
                           setVitalsError(null);
                         }}
                       >
-                        Cancel
+                        Close
                       </Button>
                     </div>
                   </>
@@ -1295,24 +1311,27 @@ export function PatientDetailPage() {
                   <>
                     {latestVitals ? (
                       <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-text-secondary">Latest reading</p>
+                          <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-700">Most recent</span>
+                        </div>
                         <VitalsOverview assessment={latestVitals} />
+                        {earlierVitals[0] && <VitalsComparison current={latestVitals} previous={earlierVitals[0]} />}
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                           <Field label="TEWS score" value={latestVitals.tewsScore == null ? "Not calculated" : String(latestVitals.tewsScore)} />
                           <Field label="Consciousness" value={AVPU_OPTIONS.find(o => o.value === latestVitals.avpu)?.label ?? "Not recorded"} />
-                          <Field label="Mobility" value={MOBILITY_OPTIONS.find(o => o.value === latestVitals.mobility)?.label ?? "Not recorded"} />
                         </div>
                         <AdditionalVitalsSummary value={latestVitals.additionalObservations} />
-                        {latestVitals.presentingComplaint && (
-                          <Field label="Presenting complaint" value={latestVitals.presentingComplaint} />
-                        )}
                         {latestVitals.outOfRangeConfirmed && latestVitals.validationWarnings && (
                           <div className="rounded-lg border border-warning-500/30 bg-warning-50 px-3 py-2 text-[12.5px] text-text-primary">
                             Confirmed unusual measurements: {latestVitals.validationWarnings}
                           </div>
                         )}
                         <p className="text-[12.5px] text-text-secondary">
-                          Captured {formatDateTime(latestVitals.observedAt)}
-                          {latestVitals.overrideReason && " · colour manually overridden"}
+                          Captured {formatDateTime(latestVitals.recordedAt || latestVitals.observedAt)}
+                          {latestVitals.capturedByName && ` | by ${latestVitals.capturedByName}`}
+                          {latestVitals.consultationId && " | recorded during a consultation"}
+                          {latestVitals.overrideReason && " Â· colour manually overridden"}
                         </p>
                       </div>
                     ) : (
@@ -1348,6 +1367,7 @@ export function PatientDetailPage() {
                           <VitalsHistoryRow
                             key={assessment.id}
                             assessment={assessment}
+                            capturedByName={assessment.capturedByName}
                             patientName={isWalkIn ? "Unregistered walk-in" : `${patient?.firstName} ${patient?.lastName}`}
                             patientMpi={isWalkIn ? undefined : patient?.mpiNumber}
                           />
@@ -1377,7 +1397,7 @@ export function PatientDetailPage() {
             <div>
               <h1 className="text-[19px] font-semibold text-text-primary">Unregistered walk-in</h1>
               <p className="font-mono text-[13px] text-text-secondary">
-                {walkInTokenNumber ? `Token #${walkInTokenNumber}` : "Reception-issued visit"} · not registered
+                {walkInTokenNumber ? `Token #${walkInTokenNumber}` : "Reception-issued visit"} Â· not registered
               </p>
             </div>
           </div>
@@ -1419,7 +1439,7 @@ export function PatientDetailPage() {
       </Link>
 
       {patientQuery.isLoading ? (
-        <p className="text-[14px] text-text-secondary">Loading…</p>
+        <p className="text-[14px] text-text-secondary">Loadingâ€¦</p>
       ) : !patient ? (
         <p className="text-[14px] text-text-secondary">This patient couldn't be found.</p>
       ) : (
@@ -1432,7 +1452,7 @@ export function PatientDetailPage() {
                   <p className="font-medium">Migrated to another organization</p>
                   <p className="text-brand-600">
                     {patient.archivedReason}
-                    {patient.archivedAt && <> · {formatDate(patient.archivedAt)}</>}
+                    {patient.archivedAt && <> Â· {formatDate(patient.archivedAt)}</>}
                   </p>
                   <button
                     type="button"
@@ -1451,8 +1471,8 @@ export function PatientDetailPage() {
                     <p className="font-medium">Archived record</p>
                     <p className="text-amber-600">
                       {patient.archivedReason}
-                      {patient.archivedAt && <> · {formatDate(patient.archivedAt)}</>}
-                      {patient.deceasedDate && <> · Date of death: {formatDate(patient.deceasedDate)}</>}
+                      {patient.archivedAt && <> Â· {formatDate(patient.archivedAt)}</>}
+                      {patient.deceasedDate && <> Â· Date of death: {formatDate(patient.deceasedDate)}</>}
                     </p>
                   </div>
                 </div>
@@ -1498,7 +1518,7 @@ export function PatientDetailPage() {
                     {patient.firstName} {patient.lastName}
                   </h1>
                   <p className="font-mono text-[13px] text-text-secondary">
-                    {patient.mpiNumber} · registered {formatDate(patient.createdAt)}
+                    {patient.mpiNumber} Â· registered {formatDate(patient.createdAt)}
                   </p>
                 </div>
               </div>
@@ -1543,7 +1563,7 @@ export function PatientDetailPage() {
               <h2 className="text-[16px] font-semibold text-text-primary">Migrate this patient</h2>
               <p className="mt-1 text-[13.5px] text-text-secondary">
                 Moves this patient's demographics, MPI, and documents to a new organization and facility. Visits,
-                vitals, and prescriptions stay here — the destination starts a fresh clinical history. This record
+                vitals, and prescriptions stay here â€” the destination starts a fresh clinical history. This record
                 stays viewable but locked from further edits once the migration completes.
               </p>
               <div className="mt-4 flex flex-col gap-3.5">
@@ -1573,7 +1593,7 @@ export function PatientDetailPage() {
                     className="min-h-[80px] rounded-lg border border-border-default bg-surface-base px-3 py-2 text-[13.5px] text-text-primary outline-none focus:border-brand-500"
                     value={migrateReason}
                     onChange={(event) => setMigrateReason(event.target.value)}
-                    placeholder="e.g. Patient relocated, requested transfer to a closer facility…"
+                    placeholder="e.g. Patient relocated, requested transfer to a closer facilityâ€¦"
                   />
                 </label>
                 {migrateError && <p role="alert" className="text-[13px] text-danger-600">{migrateError}</p>}
@@ -1603,7 +1623,7 @@ export function PatientDetailPage() {
             <Card className="mb-6 p-6">
               <h2 className="text-[16px] font-semibold text-text-primary">Archive this patient</h2>
               <p className="mt-1 text-[13.5px] text-text-secondary">
-                The record is kept, not deleted — it stays viewable but locked from further edits, documents,
+                The record is kept, not deleted â€” it stays viewable but locked from further edits, documents,
                 guardians, and new visits. This can't be undone from here.
               </p>
               <div className="mt-4 flex flex-col gap-3.5">
@@ -1613,7 +1633,7 @@ export function PatientDetailPage() {
                     className="min-h-[80px] rounded-lg border border-border-default bg-surface-base px-3 py-2 text-[13.5px] text-text-primary outline-none focus:border-brand-500"
                     value={archiveReason}
                     onChange={(event) => setArchiveReason(event.target.value)}
-                    placeholder="e.g. Deceased, transferred to another facility, duplicate record…"
+                    placeholder="e.g. Deceased, transferred to another facility, duplicate recordâ€¦"
                   />
                 </label>
                 <Input
@@ -1740,13 +1760,13 @@ function draftFromPatient(patient: Patient): PatientDraft {
   };
 }
 
-// PREG-US-016 — the Demographics card doubles as the edit form: isOrgAdmin
+// PREG-US-016 â€” the Demographics card doubles as the edit form: isOrgAdmin
 // (checked by the caller against user.role, RequireRole's own pattern)
 // gates both the Edit button and the change-history toggle, but the real
 // enforcement is server-side (SecurityConfig's /api/v1/admin/** matcher on
-// PatientController.update()/getHistory() — see those methods' own
+// PatientController.update()/getHistory() â€” see those methods' own
 // why-notes). idNumber/dateOfBirth/gender/citizenshipStatus/mpiNumber stay
-// plain Field rows even while editing — there's no input for them because
+// plain Field rows even while editing â€” there's no input for them because
 // there's nothing on UpdatePatientPayload for them to send.
 function DemographicsCard({ patient, isOrgAdmin }: { patient: Patient; isOrgAdmin: boolean }) {
   const queryClient = useQueryClient();
@@ -1835,7 +1855,7 @@ function DemographicsCard({ patient, isOrgAdmin }: { patient: Patient; isOrgAdmi
       {showHistory && !isEditing && (
         <div className="mb-4 rounded-lg border border-border-subtle p-3">
           {historyQuery.isLoading ? (
-            <p className="text-[13px] text-text-secondary">Loading history…</p>
+            <p className="text-[13px] text-text-secondary">Loading historyâ€¦</p>
           ) : history.length === 0 ? (
             <p className="text-[13px] text-text-secondary">No changes recorded yet.</p>
           ) : (
@@ -1843,10 +1863,10 @@ function DemographicsCard({ patient, isOrgAdmin }: { patient: Patient; isOrgAdmi
               {history.map((h) => (
                 <li key={h.id} className="text-[12.5px] text-text-secondary">
                   <span className="font-medium text-text-primary">{FIELD_LABEL[h.fieldName] ?? h.fieldName}</span>{" "}
-                  changed from <span className="font-mono text-text-primary">{h.oldValue || "—"}</span> to{" "}
-                  <span className="font-mono text-text-primary">{h.newValue || "—"}</span>
+                  changed from <span className="font-mono text-text-primary">{h.oldValue || "â€”"}</span> to{" "}
+                  <span className="font-mono text-text-primary">{h.newValue || "â€”"}</span>
                   <br />
-                  &ldquo;{h.reason}&rdquo; · {formatDateTime(h.changedAt)}
+                  &ldquo;{h.reason}&rdquo; Â· {formatDateTime(h.changedAt)}
                 </li>
               ))}
             </ul>
@@ -1954,14 +1974,14 @@ function DemographicsCard({ patient, isOrgAdmin }: { patient: Patient; isOrgAdmi
           />
           <Field label="ID number" value={patient.idNumber ?? "Not provided"} />
           <Field label="Contact number" value={patient.contactNumber} />
-          <Field label="Email" value={patient.email ?? "—"} />
+          <Field label="Email" value={patient.email ?? "â€”"} />
           <Field label="Address" value={patient.address} />
-          <Field label="Medical aid provider" value={patient.medicalAidProvider ?? "—"} />
-          <Field label="Medical aid number" value={patient.medicalAidNumber ?? "—"} />
-          <Field label="Passport number" value={patient.passportNumber ?? "—"} />
+          <Field label="Medical aid provider" value={patient.medicalAidProvider ?? "â€”"} />
+          <Field label="Medical aid number" value={patient.medicalAidNumber ?? "â€”"} />
+          <Field label="Passport number" value={patient.passportNumber ?? "â€”"} />
           <Field
             label="Passport expiry"
-            value={patient.passportExpiry ? formatDate(patient.passportExpiry) : "—"}
+            value={patient.passportExpiry ? formatDate(patient.passportExpiry) : "â€”"}
           />
           <Field label="Registered" value={formatDateTime(patient.createdAt)} />
         </div>
@@ -1970,12 +1990,12 @@ function DemographicsCard({ patient, isOrgAdmin }: { patient: Patient; isOrgAdmi
   );
 }
 
-// The origin tenant's "full ongoing access" view (decision #3) — a LIVE
+// The origin tenant's "full ongoing access" view (decision #3) â€” a LIVE
 // read of the destination record, fetched fresh on every expand, not a
 // snapshot frozen at migration time. Reuses DocumentRow for each document
 // (its onView prop doesn't care what it fetches, just that it resolves to a
 // URL), but with its own handleView pointed at the destination-scoped
-// download endpoint rather than the normal patient one — this record's
+// download endpoint rather than the normal patient one â€” this record's
 // documents live in a different tenant's schema, so the normal
 // getPatientDocumentDownloadUrl() would 404 against this tenant's own data.
 function DestinationRecordCard({ patientId }: { patientId: string }) {
@@ -2006,7 +2026,7 @@ function DestinationRecordCard({ patientId }: { patientId: string }) {
   if (viewQuery.isLoading) {
     return (
       <Card className="mb-6 p-6">
-        <p className="text-[13.5px] text-text-secondary">Loading current record…</p>
+        <p className="text-[13.5px] text-text-secondary">Loading current recordâ€¦</p>
       </Card>
     );
   }
@@ -2030,16 +2050,16 @@ function DestinationRecordCard({ patientId }: { patientId: string }) {
         Current record at {view.destinationOrganizationDisplayName}
       </h2>
       <p className="mb-4 mt-0.5 text-[12.5px] text-text-secondary">
-        {view.destinationFacilityName} · demographics and documents only — visits, vitals, and prescriptions
+        {view.destinationFacilityName} Â· demographics and documents only â€” visits, vitals, and prescriptions
         recorded there stay private to that organization.
       </p>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="MPI" value={view.patient.mpiNumber} />
         <Field label="Contact number" value={view.patient.contactNumber} />
-        <Field label="Email" value={view.patient.email ?? "—"} />
+        <Field label="Email" value={view.patient.email ?? "â€”"} />
         <Field label="Address" value={view.patient.address} />
-        <Field label="Medical aid provider" value={view.patient.medicalAidProvider ?? "—"} />
-        <Field label="Medical aid number" value={view.patient.medicalAidNumber ?? "—"} />
+        <Field label="Medical aid provider" value={view.patient.medicalAidProvider ?? "â€”"} />
+        <Field label="Medical aid number" value={view.patient.medicalAidNumber ?? "â€”"} />
       </div>
 
       {view.documents.length > 0 && (
@@ -2061,7 +2081,7 @@ function DestinationRecordCard({ patientId }: { patientId: string }) {
   );
 }
 
-// Wraps a hidden file input and hands the caller just an `open()` trigger —
+// Wraps a hidden file input and hands the caller just an `open()` trigger â€”
 // used twice per DocumentTypeSection (the small header "Add" affordance,
 // the empty-state dropzone) rather than duplicating the input each time.
 function FileTrigger({
@@ -2116,7 +2136,7 @@ function DocumentRow({
         <div className="min-w-0">
           <p className="truncate text-[13px] font-medium text-text-primary">{doc.originalFilename}</p>
           <p className="text-[12px] text-text-secondary">
-            {formatFileSize(doc.fileSize)} · {formatRelativeDate(doc.uploadedAt)}
+            {formatFileSize(doc.fileSize)} Â· {formatRelativeDate(doc.uploadedAt)}
           </p>
         </div>
       </div>
@@ -2134,7 +2154,7 @@ function DocumentRow({
   );
 }
 
-// One panel per document type rather than a single flat list — "do we have
+// One panel per document type rather than a single flat list â€” "do we have
 // an ID copy on file" should be answerable at a glance, and a rescanned ID
 // or renewed medical aid card is a new row, not an overwrite
 // (PatientDocumentService.upload()'s own why-note), so each type can grow
@@ -2231,7 +2251,7 @@ function DocumentTypeSection({
               )}
               <p className="text-[12.5px] text-text-secondary">
                 {uploading ? (
-                  "Uploading…"
+                  "Uploadingâ€¦"
                 ) : (
                   <>
                     Drop a file, or <span className="font-medium text-brand-600">browse</span>
@@ -2282,13 +2302,13 @@ function DocumentTypeSection({
   );
 }
 
-// PREG-US-... document attachments — an ID copy and/or medical aid card
+// PREG-US-... document attachments â€” an ID copy and/or medical aid card
 // filed against the patient record. Uploads are server-proxied (same shape
 // as StaffPhotoService's own why-note) so PatientDocumentService can
 // validate content type before anything reaches S3; downloads go straight
 // from the browser to a short-lived presigned URL instead, fetched fresh
 // right before use rather than cached (getPatientDocumentDownloadUrl()'s own
-// why-note) — this card never holds a link longer than the one click that
+// why-note) â€” this card never holds a link longer than the one click that
 // asked for it.
 function PatientDocumentsCard({ patientId, archived }: { patientId: string; archived: boolean }) {
   const queryClient = useQueryClient();
@@ -2312,7 +2332,7 @@ function PatientDocumentsCard({ patientId, archived }: { patientId: string; arch
   });
 
   // Same checks PatientDocumentService.upload() and the global multipart
-  // limit enforce server-side — validateDocumentFile()'s own why-note on
+  // limit enforce server-side â€” validateDocumentFile()'s own why-note on
   // why this doesn't replace that, just catches the same rejection before
   // a round trip. Covers both trigger paths (the header "Add" link and the
   // empty-state dropzone's drag-and-drop) since DocumentTypeSection funnels
@@ -2330,11 +2350,11 @@ function PatientDocumentsCard({ patientId, archived }: { patientId: string; arch
     setViewError(null);
     setViewingId(doc.id);
     // Opened synchronously, inside the click handler's own call stack, then
-    // navigated once the presigned URL comes back — a window.open() called
+    // navigated once the presigned URL comes back â€” a window.open() called
     // only after the await below (the URL is asynchronous, fetched fresh
     // per PatientDocumentService.getDownloadUrl()'s own why-note) loses the
     // browser's "direct user gesture" context and gets silently treated as
-    // a popup. No "noopener" in the feature string, deliberately — that
+    // a popup. No "noopener" in the feature string, deliberately â€” that
     // flag makes window.open() itself return null, which would defeat
     // navigating this tab below; severing tab.opener by hand achieves the
     // same tabnabbing protection without losing the reference.
@@ -2358,7 +2378,7 @@ function PatientDocumentsCard({ patientId, archived }: { patientId: string; arch
     <Card className="mt-6 p-6">
       <h2 className="text-[14.5px] font-semibold text-text-primary">Documents</h2>
       <p className="mb-4 mt-0.5 text-[12.5px] text-text-secondary">
-        PDF, JPEG, or PNG. Stored privately — each "View" link expires a few minutes after you open it.
+        PDF, JPEG, or PNG. Stored privately â€” each "View" link expires a few minutes after you open it.
       </p>
 
       {uploadError && (
@@ -2433,8 +2453,8 @@ const EMPTY_GUARDIAN_DRAFT: GuardianDraft = {
   signature: null,
 };
 
-// Anyone travelling with the patient who may need to be reached, or —
-// once they've signed — act on the patient's behalf. Unlike documents
+// Anyone travelling with the patient who may need to be reached, or â€”
+// once they've signed â€” act on the patient's behalf. Unlike documents
 // (deliberately append-only), a guardian is editable-by-deletion: a wrong
 // entry gets removed and re-added rather than amended in place, matching
 // PatientGuardianService.remove()'s own why-note.
@@ -2499,7 +2519,7 @@ function GuardiansCard({ patientId, archived }: { patientId: string; archived: b
   });
 
   // Same "open blank, navigate once the URL resolves" shape as
-  // PatientDetailPage's own handleView() for documents — see that
+  // PatientDetailPage's own handleView() for documents â€” see that
   // function's why-note on the popup-blocking bug this avoids.
   const handleViewSignature = async (guardian: Guardian) => {
     setSignatureError(null);
@@ -2644,8 +2664,8 @@ function GuardiansCard({ patientId, archived }: { patientId: string; archived: b
                 </p>
                 <p className="truncate text-[12.5px] text-text-secondary">
                   {g.contactNumber}
-                  {g.email ? ` · ${g.email}` : ""}
-                  {g.idNumber ? ` · ${g.idNumber}` : ""}
+                  {g.email ? ` Â· ${g.email}` : ""}
+                  {g.idNumber ? ` Â· ${g.idNumber}` : ""}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">

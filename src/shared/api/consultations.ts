@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import { tenantAuthHeaders } from "./auth";
+import type { ServiceStream } from './visits';
 
 // The "Consultation MVP" slice of
 // Docs/vitals-to-consultation-pharmacy-closure-brainstorm.md §5/§13.5/§13.7.
@@ -76,6 +77,48 @@ export interface Consultation {
   prescriptionDraft: string | null;
   /** Set when this consultation carries on from an earlier one. */
   continuedFrom: EarlierConsultation | null;
+  classificationReasonIds: string[];
+}
+
+export interface ClassificationReason {
+  id: string;
+  serviceStream: ServiceStream;
+  serviceStreamLabel: string;
+  reasonCode: string;
+  label: string;
+  active: boolean;
+}
+
+export interface ClassificationReasonCatalog {
+  title: string;
+  instruction: string;
+  acceptanceCriteria: string;
+  items: ClassificationReason[];
+}
+
+export async function getClassificationReasons(serviceStream: ServiceStream): Promise<ClassificationReasonCatalog> {
+  return apiClient.get<ClassificationReasonCatalog>(
+    `/api/v1/classification-reasons?serviceStream=${encodeURIComponent(serviceStream)}`,
+    { headers: tenantAuthHeaders() },
+  );
+}
+
+export interface ManagedClassificationReason extends ClassificationReason {
+  active: boolean;
+  sortOrder: number;
+}
+
+export async function getManagedClassificationReasons(): Promise<ManagedClassificationReason[]> {
+  const response = await apiClient.get<{ items: ManagedClassificationReason[] }>("/api/v1/admin/classification-reasons", { headers: tenantAuthHeaders() });
+  return response.items;
+}
+
+export async function createClassificationReason(payload: { serviceStream: string; reasonCode: string; label: string; sortOrder: number }): Promise<ManagedClassificationReason> {
+  return apiClient.post<ManagedClassificationReason>("/api/v1/admin/classification-reasons", payload, { headers: tenantAuthHeaders() });
+}
+
+export async function updateClassificationReason(id: string, payload: { label: string; active: boolean; sortOrder: number }): Promise<ManagedClassificationReason> {
+  return apiClient.patch<ManagedClassificationReason>(`/api/v1/admin/classification-reasons/${id}`, payload, { headers: tenantAuthHeaders() });
 }
 
 // Get-or-create — a second call against a visit that already has a draft
@@ -181,6 +224,7 @@ export interface UpdateConsultationPayload {
   treatmentPlan?: string;
   // The unsigned prescription as JSON, saved with the draft. Leave out to keep what is saved.
   prescriptionDraft?: string;
+  classificationReasonIds: string[];
 }
 
 // DRAFT only — a 409 (ApiError) means the consultation was signed since it
@@ -264,6 +308,7 @@ export interface SignConsultationPayload {
   // SEND_TO_PHARMACY (always the one org-wide pharmacy), a referral has no
   // single sensible default.
   destinationFacilityId?: string;
+  classificationReasonIds: string[];
 }
 
 // Does not require a diagnosis first — a symptom-based assessment is
@@ -287,6 +332,7 @@ export interface AmendConsultationPayload {
   pharmacyItems?: PharmacyItemPayload[];
   purchaseItems?: PurchaseItemPayload[];
   destinationFacilityId?: string;
+  classificationReasonIds: string[];
 }
 
 // A correction to a signed consultation never edits it in place — this

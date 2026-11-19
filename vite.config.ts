@@ -29,5 +29,21 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    strictPort: false,
+    proxy: {
+      '/api': { target: process.env.BACKEND_PROXY_TARGET ?? 'http://localhost:8082', changeOrigin: true },
+      '/platform': {
+        target: process.env.BACKEND_PROXY_TARGET ?? 'http://localhost:8082',
+        changeOrigin: true,
+        // `/platform/login` is a frontend route too. Serve the SPA for browser
+        // navigations while proxying fetch/API requests to the backend.
+        bypass: (req) => {
+          if (req.method === 'GET' && req.headers.accept?.includes('text/html')) {
+            return '/index.html'
+          }
+        },
+      },
+      '/actuator': { target: process.env.BACKEND_PROXY_TARGET ?? 'http://localhost:8082', changeOrigin: true },
+    },
   },
 })

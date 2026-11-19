@@ -11,10 +11,10 @@ export type VisitType = "NEW" | "FOLLOW_UP";
 export type ServiceStream = "GENERAL" | "CHRONIC_CARE" | "MATERNAL_CHILD" | "OCCUPATIONAL_HEALTH";
 
 export const SERVICE_STREAM_DETAILS: Record<ServiceStream, { label: string; code: string }> = {
-  GENERAL: { label: "General / acute care", code: "A" },
-  CHRONIC_CARE: { label: "Chronic care", code: "C" },
-  OCCUPATIONAL_HEALTH: { label: "Occupational health", code: "O" },
-  MATERNAL_CHILD: { label: "Maternal & child health", code: "N" },
+  GENERAL: { label: "Acute Episodic Care", code: "A" },
+  CHRONIC_CARE: { label: "Chronic Care", code: "C" },
+  OCCUPATIONAL_HEALTH: { label: "Occupational Health", code: "O" },
+  MATERNAL_CHILD: { label: "Maternal & Child Health", code: "N" },
 };
 
 export interface Visit {

@@ -3,7 +3,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ChevronDown, ClipboardCheck, FlaskConical, Pill, Plus, Stethoscope, Trash2, TriangleAlert } from "lucide-react";
+import { ChevronDown, ClipboardCheck, FlaskConical, HeartPulse, Pill, Plus, Stethoscope, Trash2, TriangleAlert } from "lucide-react";
+import { TriageColourBadge } from "@/shared/components/TriageColourBadge";
+import { VitalsOverview } from "./VitalsOverview";
 import { Button } from "@/shared/components/Button";
 import { Card } from "@/shared/components/Card";
 import { Input } from "@/shared/components/Input";
@@ -32,7 +34,9 @@ import {
   type PharmacyItemPayload,
   type PurchaseItemPayload,
   type VitalsBypass,
+  getClassificationReasons,
 } from "@/shared/api/consultations";
+import { getVisit, SERVICE_STREAM_DETAILS, type ServiceStream } from "@/shared/api/visits";
 import { PatientConsultationList } from "./PatientConsultationList";
 import { ContinuedFromNote, ContinueConsultation } from "./ContinueConsultation";
 import { DiagnosisSearchInput, type DiagnosisChoice } from "./DiagnosisSearchInput";
@@ -85,7 +89,7 @@ const OUTCOME_CHOICES: { value: ConsultationOutcome; label: string; description:
 ];
 
 function outcomeLabel(outcome: ConsultationOutcome | null): string {
-  return OUTCOME_CHOICES.find((o) => o.value === outcome)?.label ?? "—";
+  return OUTCOME_CHOICES.find((o) => o.value === outcome)?.label ?? "â€”";
 }
 
 // The Consultation tab: the consultation of the visit being worked on, and the patient's consultations
@@ -163,6 +167,8 @@ function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeV
     queryKey: ["triage-latest", visitId],
     queryFn: () => getLatestTriage(visitId),
   });
+  const visitQuery = useQuery({ queryKey: ["visit", visitId], queryFn: () => getVisit(visitId) });
+  const serviceStream = visitQuery.data?.serviceStream;
 
   const noConsultationYet = currentQuery.isSuccess && currentQuery.data === null;
   const continuableQuery = useQuery({
@@ -213,14 +219,28 @@ function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeV
           <h2 className="text-[14.5px] font-semibold text-text-primary">Consultation</h2>
         </div>
         {current?.status === "SIGNED" && <StatusPill tone="success">Signed</StatusPill>}
-        {current?.status === "DRAFT" && <StatusPill tone="warning">Draft</StatusPill>}
+        {current?.status === "DRAFT" && (
+          <div className="flex items-center gap-2">
+            <StatusPill tone="warning">Draft</StatusPill>
+            {onTakeVitals && (
+              <Button
+                variant="secondary"
+                size="md"
+                icon={<HeartPulse className="size-3.5" aria-hidden />}
+                onClick={onTakeVitals}
+              >
+                Record new vitals
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {currentQuery.isLoading ? (
-        <p className="text-[13.5px] text-text-secondary">Loading…</p>
+        <p className="text-[13.5px] text-text-secondary">Loadingâ€¦</p>
       ) : !current ? (
         continuableQuery.isLoading ? (
-          <p className="text-[13.5px] text-text-secondary">Loading…</p>
+          <p className="text-[13.5px] text-text-secondary">Loadingâ€¦</p>
         ) : (
           <ConsultationStart
             earlier={continuableQuery.data ?? null}
@@ -240,6 +260,31 @@ function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeV
         )
       ) : (
         <>
+          {current.status === "DRAFT" && triageQuery.data && (
+            <section aria-label="Latest visit vitals" className="mb-4 rounded-xl border border-border-subtle bg-surface-raised p-4">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+                    <HeartPulse className="size-4" aria-hidden />
+                  </span>
+                  <div>
+                    <h3 className="text-[13.5px] font-semibold text-text-primary">Latest vitals for this visit</h3>
+                    <p className="mt-0.5 text-[12px] text-text-secondary">
+                      {new Date(triageQuery.data.recordedAt || triageQuery.data.observedAt).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" })}
+                      {triageQuery.data.capturedByName && ` | recorded by ${triageQuery.data.capturedByName}`}
+                    </p>
+                  </div>
+                </div>
+                <TriageColourBadge colour={triageQuery.data.finalColour} />
+              </div>
+              <VitalsOverview assessment={triageQuery.data} />
+              <p className="mt-3 text-[12px] text-text-secondary">
+                {triageQuery.data.consultationId === current.id
+                  ? "Recorded during this consultation"
+                  : "Most recent reading before this consultation"}
+              </p>
+            </section>
+          )}
           {current.vitalsBypassReason && <VitalsSkippedNote consultation={current} />}
           {current.continuedFrom && (
             <ContinuedFromNote earlier={current.continuedFrom} vitals={carriedVitalsQuery.data ?? triageQuery.data ?? null} />
@@ -247,8 +292,8 @@ function VisitConsultation({ visitId, onTakeVitals }: { visitId: string; onTakeV
           <ConsultationRecord
             key={current.id}
             consultation={current}
-            presentingComplaint={triageQuery.data?.presentingComplaint ?? carriedVitalsQuery.data?.presentingComplaint ?? null}
             onChanged={invalidate}
+            serviceStream={serviceStream}
           />
         </>
       )}
@@ -279,17 +324,17 @@ function ConsultationStart({
 
 function ConsultationRecord({
   consultation,
-  presentingComplaint,
   onChanged,
+  serviceStream,
 }: {
   consultation: Consultation;
-  presentingComplaint: string | null;
   onChanged: () => void;
+  serviceStream?: ServiceStream;
 }) {
   if (consultation.status === "DRAFT") {
-    return <DraftView consultation={consultation} presentingComplaint={presentingComplaint} onChanged={onChanged} />;
+    return <DraftView consultation={consultation} onChanged={onChanged} serviceStream={serviceStream} />;
   }
-  return <SignedView consultation={consultation} presentingComplaint={presentingComplaint} onChanged={onChanged} />;
+  return <SignedView consultation={consultation} onChanged={onChanged} serviceStream={serviceStream} />;
 }
 
 const BYPASS_LABELS: Record<NonNullable<Consultation["vitalsBypassReason"]>, string> = {
@@ -312,15 +357,6 @@ function VitalsSkippedNote({ consultation }: { consultation: Consultation }) {
   );
 }
 
-function PresentingComplaint({ value }: { value: string | null }) {
-  if (!value) return null;
-  return (
-    <div className="mb-4 rounded-lg border border-border-subtle bg-surface-sunken/40 px-3.5 py-2.5">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">Presenting complaint</p>
-      <p className="mt-0.5 text-[13.5px] text-text-primary">{value}</p>
-    </div>
-  );
-}
 
 function TextAreaField({
   label,
@@ -396,7 +432,7 @@ function AllergyStatusPicker({
       </div>
       {value === "UNKNOWN" && (
         <p className="text-[12px] text-text-secondary">
-          Distinct from "No known allergies" — this patient hasn't been asked yet.
+          Distinct from "No known allergies" â€” this patient hasn't been asked yet.
         </p>
       )}
       {value === "KNOWN" && (
@@ -482,7 +518,7 @@ function OutcomePicker({
   /** The prescription written in the Prescription section above; it travels with "Send to pharmacy". */
   prescription: PrescriptionState;
 }) {
-  // Send to pharmacy needs a real prescription — that is what shows up in the pharmacy's dispensing
+  // Send to pharmacy needs a real prescription â€” that is what shows up in the pharmacy's dispensing
   // queue; the queue-token transfer alone moves the patient's ticket but leaves nothing to dispense.
   const prescribed = prescription.prescribe && prescription.entries.length > 0;
   const prescriptionProblems = problemsOf(prescription);
@@ -493,11 +529,11 @@ function OutcomePicker({
       ? "Add at least one medicine in the Prescription section above."
       : prescriptionProblems[0] ?? null;
 
-  // Refer/transfer is the other outcome that needs more than a click — a
+  // Refer/transfer is the other outcome that needs more than a click â€” a
   // real destination facility, picked from whatever this org has actually
   // set up (Facility management), not hardcoded to pharmacy the way
   // SEND_TO_PHARMACY is. The facility list only loads once this section
-  // expands — no reason to fetch it for every consultation sign-off.
+  // expands â€” no reason to fetch it for every consultation sign-off.
   const [expandTransfer, setExpandTransfer] = useState(false);
   const [destinationFacilityId, setDestinationFacilityId] = useState("");
   const facilitiesQuery = useQuery({
@@ -544,7 +580,7 @@ function OutcomePicker({
                     value={destinationFacilityId}
                     onChange={(e) => setDestinationFacilityId(e.target.value)}
                     disabled={facilitiesQuery.isLoading}
-                    hint={facilitiesQuery.isLoading ? "Loading facilities…" : undefined}
+                    hint={facilitiesQuery.isLoading ? "Loading facilitiesâ€¦" : undefined}
                   />
                   <div className="mt-1 flex gap-2">
                     <Button
@@ -610,6 +646,7 @@ interface ConsultationFieldsState {
   examinationNotes: string;
   investigationsNotes: string;
   treatmentPlan: string;
+  classificationReasonIds: string[];
 }
 
 function toFieldsState(consultation: Consultation): ConsultationFieldsState {
@@ -621,20 +658,26 @@ function toFieldsState(consultation: Consultation): ConsultationFieldsState {
     examinationNotes: consultation.examinationNotes ?? "",
     investigationsNotes: consultation.investigationsNotes ?? "",
     treatmentPlan: consultation.treatmentPlan ?? "",
+    classificationReasonIds: consultation.classificationReasonIds ?? [],
   };
 }
 
 function DraftView({
   consultation,
-  presentingComplaint,
   onChanged,
+  serviceStream,
 }: {
   consultation: Consultation;
-  presentingComplaint: string | null;
   onChanged: () => void;
+  serviceStream?: ServiceStream;
 }) {
   const navigate = useNavigate();
   const [fields, setFields] = useState<ConsultationFieldsState>(() => toFieldsState(consultation));
+  const reasonsQuery = useQuery({
+    queryKey: ["classification-reasons", serviceStream],
+    queryFn: () => getClassificationReasons(serviceStream!),
+    enabled: !!serviceStream,
+  });
   const [prescription, setPrescription] = useState<PrescriptionState>(() => parsePrescription(consultation.prescriptionDraft));
   const [showOutcomePicker, setShowOutcomePicker] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState("");
@@ -646,7 +689,7 @@ function DraftView({
 
   // The error banner renders at the top of a long form, but a sign failure
   // (e.g. "no pharmacy facility configured yet") happens while the doctor
-  // is looking at the outcome picker at the bottom — without this, nothing
+  // is looking at the outcome picker at the bottom â€” without this, nothing
   // visibly happens and it looks like the button just didn't work.
   useEffect(() => {
     if (saveError) saveErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -671,6 +714,7 @@ function DraftView({
     examinationNotes: fields.examinationNotes || undefined,
     investigationsNotes: fields.investigationsNotes || undefined,
     treatmentPlan: fields.treatmentPlan || undefined,
+    classificationReasonIds: fields.classificationReasonIds,
     prescriptionDraft: serialisePrescription(prescription),
   });
 
@@ -696,7 +740,7 @@ function DraftView({
   }, [fields, prescription]);
 
   const sign = useMutation({
-    // Signing must not silently drop whatever's currently in the form —
+    // Signing must not silently drop whatever's currently in the form â€”
     // going straight from typing into these fields to "Sign & choose next
     // step" (without a separate "Save draft" click first) is the natural
     // path, and this backend's sign() only finalizes whatever is already
@@ -727,6 +771,7 @@ function DraftView({
         pharmacyItems: medicines?.pharmacyItems,
         purchaseItems: medicines?.purchaseItems,
         destinationFacilityId,
+        classificationReasonIds: fields.classificationReasonIds,
       });
     },
     onSuccess: () => {
@@ -770,7 +815,28 @@ function DraftView({
 
   return (
     <div className="flex flex-col gap-4">
-      <PresentingComplaint value={presentingComplaint} />
+
+      <section className="rounded-xl border border-border-subtle bg-surface-raised p-4" aria-labelledby="classification-reasons-heading">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 id="classification-reasons-heading" className="text-[13.5px] font-semibold text-text-primary">{reasonsQuery.data?.title ?? "Patient care classification"}</h3>
+            <p className="mt-0.5 text-[12px] text-text-secondary">{reasonsQuery.data?.instruction ?? "Select every reason that applies to this consultation."}</p>
+          </div>
+          {serviceStream && <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-medium text-brand-700">{reasonsQuery.data?.items[0]?.serviceStreamLabel ?? SERVICE_STREAM_DETAILS[serviceStream as ServiceStream].label}</span>}
+        </div>
+        {reasonsQuery.isLoading ? <p className="text-[12.5px] text-text-secondary">Loading classification reasonsâ€¦</p> :
+          reasonsQuery.isError ? <p className="text-[12.5px] text-danger-600" role="alert">Classification reasons couldnâ€™t be loaded.</p> :
+          reasonsQuery.data?.items.length ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {reasonsQuery.data.items.filter((reason) => reason.active || fields.classificationReasonIds.includes(reason.id)).map((reason) => {
+              const checked = fields.classificationReasonIds.includes(reason.id);
+              return <label key={reason.id} className={clsx("flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 text-[13px] transition-colors", checked ? "border-brand-500 bg-brand-50 text-text-primary" : "border-border-subtle bg-surface hover:border-brand-500/50", !reason.active && "opacity-75")}>
+                <input type="checkbox" className="size-4 accent-brand-600" checked={checked} disabled={!reason.active && !checked} onChange={(event) => set("classificationReasonIds", event.target.checked ? [...fields.classificationReasonIds, reason.id] : fields.classificationReasonIds.filter((id) => id !== reason.id))} />
+                <span>{reason.label}{!reason.active && <span className="ml-1.5 text-[11px] text-text-secondary">(inactive, selected previously)</span>}</span>
+              </label>;
+            })}
+          </div> : <p className="text-[12.5px] text-text-secondary">No reasons are configured for this care stream.</p>}
+        {reasonsQuery.data?.acceptanceCriteria && <p className="mt-3 text-[11.5px] text-text-secondary">{reasonsQuery.data.acceptanceCriteria}</p>}
+      </section>
 
       {saveError && (
         <p ref={saveErrorRef} role="alert" className="text-[13.5px] text-danger-600">
@@ -809,7 +875,7 @@ function DraftView({
         <div className="flex flex-col gap-2">
           {consultation.diagnoses.length === 0 ? (
             <p className="text-[13px] text-text-secondary">
-              No diagnosis recorded yet — a symptom-based assessment is fine if nothing definitive is available.
+              No diagnosis recorded yet â€” a symptom-based assessment is fine if nothing definitive is available.
             </p>
           ) : (
             consultation.diagnoses.map((d) => (
@@ -897,7 +963,7 @@ function DraftView({
             Close and continue later
           </Button>
           <span role="status" className="text-[12.5px] text-text-secondary">
-            {saveDraft.isPending ? "Saving…" : savedAt ? `Draft saved at ${savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. It saves as you type.` : "It saves as you type."}
+            {saveDraft.isPending ? "Savingâ€¦" : savedAt ? `Draft saved at ${savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. It saves as you type.` : "It saves as you type."}
           </span>
           <div className="ml-auto">
             <EnteredInErrorAction consultationId={consultation.id} onChanged={onChanged} />
@@ -948,38 +1014,45 @@ function DiagnosisRow({ diagnosis, onRemove }: { diagnosis: ConsultationDiagnosi
 
 function SignedView({
   consultation,
-  presentingComplaint,
   onChanged,
+  serviceStream,
 }: {
   consultation: Consultation;
-  presentingComplaint: string | null;
   onChanged: () => void;
+  serviceStream?: ServiceStream;
 }) {
   const [amending, setAmending] = useState(false);
+  const reasonsQuery = useQuery({ queryKey: ["classification-reasons", serviceStream], queryFn: () => getClassificationReasons(serviceStream!), enabled: !!serviceStream });
 
   if (amending) {
     return (
-      <AmendForm consultation={consultation} onCancel={() => setAmending(false)} onChanged={onChanged} />
+      <AmendForm consultation={consultation} onCancel={() => setAmending(false)} onChanged={onChanged} serviceStream={serviceStream} />
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <PresentingComplaint value={presentingComplaint} />
+
+      {consultation.classificationReasonIds?.length > 0 && <section className="rounded-xl border border-border-subtle bg-surface-raised p-4">
+        <h3 className="mb-2 text-[13px] font-semibold text-text-primary">{reasonsQuery.data?.title ?? "Patient care classification"}</h3>
+        <div className="flex flex-wrap gap-2">
+          {consultation.classificationReasonIds.map((id) => <span key={id} className="rounded-full bg-brand-50 px-3 py-1 text-[12px] font-medium text-brand-700">{reasonsQuery.data?.items.find((reason) => reason.id === id)?.label ?? "Classification reason"}</span>)}
+        </div>
+      </section>}
 
       <div className="rounded-lg border border-success-500/25 bg-success-50 px-3.5 py-3">
         <p className="text-[13.5px] font-medium text-success-700">
-          Signed — {outcomeLabel(consultation.outcome)}
+          Signed â€” {outcomeLabel(consultation.outcome)}
         </p>
         {consultation.outcomeNotes && <p className="mt-1 text-[13px] text-success-700">{consultation.outcomeNotes}</p>}
         <p className="mt-1.5 text-[12.5px] text-success-700/80">
           {consultation.authorName ?? "Unknown staff"}
           {consultation.signedByName && consultation.signedByName !== consultation.authorName
-            ? ` · signed by ${consultation.signedByName}`
+            ? ` Â· signed by ${consultation.signedByName}`
             : ""}
-          {" · "}
+          {" Â· "}
           Started {new Date(consultation.createdAt).toLocaleString()}
-          {consultation.signedAt && ` · Signed off ${new Date(consultation.signedAt).toLocaleString()}`}
+          {consultation.signedAt && ` Â· Signed off ${new Date(consultation.signedAt).toLocaleString()}`}
         </p>
       </div>
 
@@ -1018,12 +1091,15 @@ function AmendForm({
   consultation,
   onCancel,
   onChanged,
+  serviceStream,
 }: {
   consultation: Consultation;
   onCancel: () => void;
   onChanged: () => void;
+  serviceStream?: ServiceStream;
 }) {
   const [fields, setFields] = useState<ConsultationFieldsState>(() => toFieldsState(consultation));
+  const reasonsQuery = useQuery({ queryKey: ["classification-reasons", serviceStream], queryFn: () => getClassificationReasons(serviceStream!), enabled: !!serviceStream });
   const [diagnoses, setDiagnoses] = useState(
     () => consultation.diagnoses.map((d) => ({
       diagnosisText: d.diagnosisText,
@@ -1039,7 +1115,7 @@ function AmendForm({
   const [error, setError] = useState<string | null>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
 
-  // Same reasoning as DraftConsultationForm's saveErrorRef — an amend
+  // Same reasoning as DraftConsultationForm's saveErrorRef â€” an amend
   // failure happens while the doctor is at the outcome picker, well below
   // where this error renders.
   useEffect(() => {
@@ -1075,6 +1151,7 @@ function AmendForm({
         pharmacyItems: medicines?.pharmacyItems,
         purchaseItems: medicines?.purchaseItems,
         destinationFacilityId,
+        classificationReasonIds: fields.classificationReasonIds,
       }),
     onSuccess: onChanged,
     onError: (err) => {
@@ -1090,7 +1167,7 @@ function AmendForm({
     <div className="flex flex-col gap-4">
       <div className="rounded-lg border border-amber-500/25 bg-amber-50 px-3.5 py-3">
         <p className="text-[13.5px] font-medium text-amber-700">
-          Amending a signed consultation creates a new, linked record — the original stays in history, unchanged.
+          Amending a signed consultation creates a new, linked record â€” the original stays in history, unchanged.
         </p>
       </div>
 
@@ -1176,6 +1253,18 @@ function AmendForm({
       <TextAreaField label="Investigations" value={fields.investigationsNotes} onChange={(v) => set("investigationsNotes", v)} />
       <TextAreaField label="Treatment plan & patient instructions" value={fields.treatmentPlan} onChange={(v) => set("treatmentPlan", v)} />
 
+      <section className="rounded-xl border border-border-subtle bg-surface-raised p-4">
+        <h3 className="mb-1 text-[13.5px] font-semibold text-text-primary">{reasonsQuery.data?.title ?? "Patient care classification"}</h3>
+        <p className="mb-3 text-[12px] text-text-secondary">{reasonsQuery.data?.instruction ?? "Select every reason that applies to this consultation."}</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {(reasonsQuery.data?.items ?? []).filter((reason) => reason.active || fields.classificationReasonIds.includes(reason.id)).map((reason) => <label key={reason.id} className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border-subtle px-3 py-2.5 text-[13px]">
+            <input type="checkbox" className="size-4 accent-brand-600" checked={fields.classificationReasonIds.includes(reason.id)} disabled={!reason.active && !fields.classificationReasonIds.includes(reason.id)} onChange={(event) => set("classificationReasonIds", event.target.checked ? [...fields.classificationReasonIds, reason.id] : fields.classificationReasonIds.filter((id) => id !== reason.id))} />
+            {reason.label}{!reason.active && <span className="text-[11px] text-text-secondary">(inactive, previously selected)</span>}
+          </label>)}
+        </div>
+        {reasonsQuery.data?.acceptanceCriteria && <p className="mt-3 text-[11.5px] text-text-secondary">{reasonsQuery.data.acceptanceCriteria}</p>}
+      </section>
+
       <PrescriptionWorkspace
         state={prescription}
         onChange={setPrescription}
@@ -1230,17 +1319,17 @@ function ConsultationHistorySection({ entries }: { entries: Consultation[] }) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[12.5px] font-medium text-text-primary">
                     {entry.status === "ENTERED_IN_ERROR" ? "Entered in error" : "Superseded"}
-                    {entry.outcome && ` — ${outcomeLabel(entry.outcome)}`}
+                    {entry.outcome && ` â€” ${outcomeLabel(entry.outcome)}`}
                   </span>
                   <span className="text-[12px] text-text-secondary">
                     Started {new Date(entry.createdAt).toLocaleString()}
-                    {entry.signedAt && ` · Signed off ${new Date(entry.signedAt).toLocaleString()}`}
+                    {entry.signedAt && ` Â· Signed off ${new Date(entry.signedAt).toLocaleString()}`}
                   </span>
                 </div>
                 <p className="mt-1 text-[12.5px] text-text-secondary">
                   {entry.authorName ?? "Unknown staff"}
                   {entry.signedByName && entry.signedByName !== entry.authorName
-                    ? ` · signed by ${entry.signedByName}`
+                    ? ` Â· signed by ${entry.signedByName}`
                     : ""}
                 </p>
                 {entry.diagnoses.length > 0 && (

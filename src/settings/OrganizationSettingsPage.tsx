@@ -1,4 +1,4 @@
-import { Blocks, Building2, Fingerprint, Mail, MapPin, Search, Settings2, ChevronRight, Palette, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Blocks, Building2, Fingerprint, Mail, MapPin, Search, Settings2, ChevronRight, Palette, ShieldCheck, ListChecks, type LucideIcon } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FacilitiesSettingsSection } from "./FacilitiesSettingsSection";
@@ -10,6 +10,7 @@ import { AppointmentsSettingsSection } from "./AppointmentsSettingsSection";
 import { CalendarDays } from "lucide-react";
 import { BrandingSettingsSection } from "./BrandingSettingsSection";
 import { MfaPolicySettingsSection } from "./MfaPolicySettingsSection";
+import { ClassificationReasonsSettingsSection } from "./ClassificationReasonsSettingsSection";
 
 type OrganizationSettingsSection = {
   id: string;
@@ -34,6 +35,11 @@ const sections: OrganizationSettingsSection[] = [{
   id: "appointments", title: "Appointments", group: "Organization",
   description: "Set daily appointment limits for each facility.",
   keywords: "appointments booking daily visit count capacity limit reception", icon: CalendarDays, component: AppointmentsSettingsSection,
+}, {
+  id: "classification-reasons", title: "Classification reasons", group: "Clinical",
+  description: "Maintain the consultation reasons clinicians can select for each care stream.",
+  keywords: "patient care classification reasons care stream consultation chronic acute ART diabetes hypertension", icon: ListChecks,
+  component: ClassificationReasonsSettingsSection,
 }, { id: "facilities", title: "Facilities", group: "Organization", description: "Add and maintain your organization's clinics, hospitals, stores and pharmacies.", keywords: "clinic hospital pharmacy store location address create edit", icon: Building2, component: FacilitiesSettingsSection }, {
   id: "contact-info", title: "Contact info", group: "Organization",
   description: "Manage your organization's contact details, location and online presence.",
