@@ -28,8 +28,11 @@ class QueueServiceTest {
     private final PermissionService permissions = mock(PermissionService.class);
     private final FacilityRepository facilities = mock(FacilityRepository.class);
     private final UserRepository users = mock(UserRepository.class);
+    private final QueueApproachNotificationService approachNotifications =
+        mock(QueueApproachNotificationService.class);
     private final QueueService service = new QueueService(tokens, events, visits, patients, audit,
-            Clock.fixed(Instant.parse("2026-11-03T08:00:00Z"), ZoneOffset.UTC), permissions, facilities, users);
+        Clock.fixed(Instant.parse("2026-11-03T08:00:00Z"), ZoneOffset.UTC),
+        permissions, facilities, users, approachNotifications);
 
     @Test
     void linksAnExistingUnregisteredWalkInVisit() {

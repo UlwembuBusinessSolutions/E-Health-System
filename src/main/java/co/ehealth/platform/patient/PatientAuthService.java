@@ -149,7 +149,7 @@ public class PatientAuthService {
                 .orElseGet(() -> patientService.registerSelf(new PatientService.RegisterPatientCommand(
                         pending.getFirstName(), pending.getLastName(), pending.getIdNumber(), pending.getAddress(),
                         pending.getContactNumber(), pending.getEmail(), null, null, null, null,
-                        pending.getDateOfBirth(), null, null)).getId());
+                        pending.getDateOfBirth(), null, null, false)).getId());
         PatientAccount account = new PatientAccount(pending.getIdNumber(), pending.getEmail(), pending.getFirstName(),
                 pending.getLastName(), pending.getPasswordHash(), patientId, now);
         account = patientAccountRepository.save(account);

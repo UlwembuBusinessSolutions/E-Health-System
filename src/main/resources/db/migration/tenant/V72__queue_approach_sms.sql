@@ -1,0 +1,1 @@
+ALTER TABLE queue_tokens ADD COLUMN approach_sms_sent_at TIMESTAMPTZ;

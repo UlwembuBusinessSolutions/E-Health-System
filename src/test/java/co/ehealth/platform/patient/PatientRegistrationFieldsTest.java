@@ -110,7 +110,7 @@ class PatientRegistrationFieldsTest {
 
         Patient patient = service.register(new PatientService.RegisterPatientCommand(
                 "Lindiwe", "Mokoena", "8001015009087", "Street", "+27821234567", null,
-                null, null, null, null, LocalDate.of(1980, 1, 2), ParentRelationship.FATHER, "00A-57"), null);
+                null, null, null, null, LocalDate.of(1980, 1, 2), ParentRelationship.FATHER, "00A-57", false), null);
 
         assertEquals(LocalDate.of(1980, 1, 2), patient.getDateOfBirth());
         assertEquals(ParentRelationship.FATHER, patient.getParentRelationship());
@@ -142,7 +142,7 @@ class PatientRegistrationFieldsTest {
 
         Patient patient = service.register(new PatientService.RegisterPatientCommand(
                 "Lindiwe", "Mokoena", "", "Street", "+27821234567", null,
-                null, null, null, null, LocalDate.of(1980, 1, 2), null, null), null);
+                null, null, null, null, LocalDate.of(1980, 1, 2), null, null, false), null);
 
         assertEquals(LocalDate.of(1980, 1, 2), patient.getDateOfBirth());
         assertNull(patient.getIdNumber());
@@ -191,6 +191,6 @@ class PatientRegistrationFieldsTest {
     private static PatientController.RegisterPatientRequest request(String idNumber, LocalDate dateOfBirth,
             ParentRelationship parentRelationship, String patientFileNumber) {
         return new PatientController.RegisterPatientRequest("Lindiwe", "Mokoena", idNumber, "Street",
-                "+27821234567", null, null, null, null, null, dateOfBirth, parentRelationship, patientFileNumber);
+        	"+27821234567", false, null, null, null, null, null, dateOfBirth, parentRelationship, patientFileNumber);
     }
 }
