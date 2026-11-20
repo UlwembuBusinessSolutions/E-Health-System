@@ -2,6 +2,8 @@ server:
   port: ${SERVER_PORT:8081}
 
 spring:
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: ulwembu-platform-api
   # dev is the only profile this codebase defines right now — it turns on
@@ -86,6 +88,51 @@ app:
     # attempted — see core/notification/EmailService.java. Relative to
     # wherever the app is started from.
     capture-dir: ${NOTIFICATIONS_CAPTURE_DIR:./data/emails}
+    aws:
+      sms-region: ${AWS_SMS_REGION:eu-west-1}
+      sms-enabled: ${AWS_SMS_ENABLED:false}
+    whatsapp:
+      access-token: ${META_WHATSAPP_ACCESS_TOKEN:}
+      phone-number-id: ${META_WHATSAPP_PHONE_NUMBER_ID:}
+      api-version: ${META_WHATSAPP_API_VERSION:v26.0}
+      queue-template-name: ${META_WHATSAPP_QUEUE_TEMPLATE_NAME:}
+      template-language: ${META_WHATSAPP_TEMPLATE_LANGUAGE:en_US}
+      enabled: ${META_WHATSAPP_ENABLED:false}
+      # Override individual names when the approved names in Meta differ from
+      # the catalogue defaults. Keys use the catalogue IDs in kebab-case.
+      template-names:
+        medication-ready: ${META_WHATSAPP_TEMPLATE_MEDICATION_READY:ulwembu_medication_ready}
+        medication-collection-reminder: ${META_WHATSAPP_TEMPLATE_MEDICATION_COLLECTION_REMINDER:ulwembu_medication_collection_reminder}
+        medication-collection-overdue: ${META_WHATSAPP_TEMPLATE_MEDICATION_COLLECTION_OVERDUE:ulwembu_medication_collection_overdue}
+        medication-partially-ready: ${META_WHATSAPP_TEMPLATE_MEDICATION_PARTIALLY_READY:ulwembu_medication_partially_ready}
+        medication-delayed: ${META_WHATSAPP_TEMPLATE_MEDICATION_DELAYED:ulwembu_medication_delayed}
+        medication-collected: ${META_WHATSAPP_TEMPLATE_MEDICATION_COLLECTED:ulwembu_medication_collected}
+        medication-collection-changed: ${META_WHATSAPP_TEMPLATE_MEDICATION_COLLECTION_CHANGED:ulwembu_medication_collection_changed}
+        repeat-prescription-review: ${META_WHATSAPP_TEMPLATE_REPEAT_PRESCRIPTION_REVIEW:ulwembu_repeat_prescription_review}
+        appointment-confirmed: ${META_WHATSAPP_TEMPLATE_APPOINTMENT_CONFIRMED:ulwembu_appointment_confirmed}
+        appointment-reminder: ${META_WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER:ulwembu_appointment_reminder}
+        appointment-today: ${META_WHATSAPP_TEMPLATE_APPOINTMENT_TODAY:ulwembu_appointment_today}
+        appointment-rescheduled: ${META_WHATSAPP_TEMPLATE_APPOINTMENT_RESCHEDULED:ulwembu_appointment_rescheduled}
+        appointment-cancelled: ${META_WHATSAPP_TEMPLATE_APPOINTMENT_CANCELLED:ulwembu_appointment_cancelled}
+        appointment-missed: ${META_WHATSAPP_TEMPLATE_APPOINTMENT_MISSED:ulwembu_appointment_missed}
+        appointment-request-received: ${META_WHATSAPP_TEMPLATE_APPOINTMENT_REQUEST_RECEIVED:ulwembu_appointment_request_received}
+        appointment-waitlist-offer: ${META_WHATSAPP_TEMPLATE_APPOINTMENT_WAITLIST_OFFER:ulwembu_appointment_waitlist_offer}
+        visit-checked-in: ${META_WHATSAPP_TEMPLATE_VISIT_CHECKED_IN:ulwembu_visit_checked_in}
+        queue-called: ${META_WHATSAPP_TEMPLATE_QUEUE_CALLED:ulwembu_queue_called}
+        follow-up-requested: ${META_WHATSAPP_TEMPLATE_FOLLOW_UP_REQUESTED:ulwembu_follow_up_requested}
+        results-available: ${META_WHATSAPP_TEMPLATE_RESULTS_AVAILABLE:ulwembu_results_available}
+        secure-message: ${META_WHATSAPP_TEMPLATE_SECURE_MESSAGE:ulwembu_secure_message}
+        patient-welcome: ${META_WHATSAPP_TEMPLATE_PATIENT_WELCOME:ulwembu_patient_welcome}
+        patient-verification-code: ${META_WHATSAPP_TEMPLATE_PATIENT_VERIFICATION_CODE:ulwembu_patient_verification_code}
+        password-reset-code: ${META_WHATSAPP_TEMPLATE_PASSWORD_RESET_CODE:ulwembu_password_reset_code}
+        password-changed: ${META_WHATSAPP_TEMPLATE_PASSWORD_CHANGED:ulwembu_password_changed}
+        patient-transfer: ${META_WHATSAPP_TEMPLATE_PATIENT_TRANSFER:ulwembu_patient_transfer}
+        staff-account-created: ${META_WHATSAPP_TEMPLATE_STAFF_ACCOUNT_CREATED:ulwembu_staff_account_created}
+        staff-password-reset: ${META_WHATSAPP_TEMPLATE_STAFF_PASSWORD_RESET:ulwembu_staff_password_reset}
+        prescriber-query: ${META_WHATSAPP_TEMPLATE_PRESCRIBER_QUERY:ulwembu_prescriber_query}
+        organisation-admin-welcome: ${META_WHATSAPP_TEMPLATE_ORGANISATION_ADMIN_WELCOME:ulwembu_organisation_admin_welcome}
+        platform-operator-welcome: ${META_WHATSAPP_TEMPLATE_PLATFORM_OPERATOR_WELCOME:ulwembu_platform_operator_welcome}
+        new-sign-in: ${META_WHATSAPP_TEMPLATE_NEW_SIGN_IN:ulwembu_new_sign_in}
   frontend:
     base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
   backend:

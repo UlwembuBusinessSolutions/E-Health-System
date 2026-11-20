@@ -2,6 +2,8 @@ package co.ehealth.platform.appointment;
 
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.notification.EmailService;
+import co.ehealth.platform.core.notification.WhatsAppMessageTemplate;
+import co.ehealth.platform.core.notification.WhatsAppNotificationDispatcher;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.core.tenant.Organization;
 import co.ehealth.platform.core.tenant.OrganizationRepository;
@@ -13,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -47,6 +50,8 @@ public class AppointmentService {
     private final EmailService emailService;
     private final OrganizationRepository organizations;
     private final Clock clock;
+    @Autowired
+    private WhatsAppNotificationDispatcher whatsAppNotifications;
 
     public AppointmentService(AppointmentRepository appointments, FacilityRepository facilities,
             PatientRepository patients, AppointmentStaffRepository staff, PermissionService permissions, AuditLogService audit,
@@ -251,6 +256,7 @@ public class AppointmentService {
         boolean scheduleChanged = !a.appointmentDate.equals(date) || !a.appointmentTime.equals(time)
                 || !Objects.equals(a.assignedStaffId, assignedStaffId);
         String before = scheduleJson(a);
+        if (scheduleChanged) a.clearWhatsAppReminderAttempt();
         a.appointmentDate = date; a.appointmentTime = time; a.startsAt = start;
         a.assignedStaffId = assignedStaffId;
         a.notes = normalizedNotes;
@@ -265,7 +271,7 @@ public class AppointmentService {
     @Transactional
     public Entry cancel(UUID facilityId, UUID id, String reason, long version, UUID actor) {
         permissions.requireAccess(ModuleCode.APPT, PermissionLevel.MANAGE);
-        lock(facilityId);
+        Facility facility = lock(facilityId);
         Appointment a = appointment(facilityId, id);
         if (a.status.equals("CANCELLED")) return view(a, patient(a.patientId));
         checkVersion(a, version);
@@ -274,7 +280,9 @@ public class AppointmentService {
         appointments.flush();
         audit.append(actor, facilityId, "APPOINTMENT_CANCELLED", "Appointment", a.id.toString(), "{\"status\":\"CONFIRMED\"}",
                 com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode().put("status", "CANCELLED").put("reason", a.cancelReason).toString());
-        return view(a, patient(a.patientId));
+        Patient patient = patient(a.patientId);
+        sendWhatsAppAppointmentAfterCommit(a, patient, facility, false, true);
+        return view(a, patient);
     }
 
     // Blank and whitespace-only collapse to null — same "no ambiguous
@@ -302,7 +310,9 @@ public class AppointmentService {
     // Snapshot the details while entities and the request tenant are available.
     private void sendConfirmationAfterCommit(Appointment a, Patient patient, Facility facility, String staffName, boolean updated) {
         String toEmail = patient.getEmail();
-        if (toEmail == null || toEmail.isBlank()) return;
+        boolean sendEmail = toEmail != null && !toEmail.isBlank();
+        boolean sendWhatsApp = whatsAppNotifications != null && patient.isWhatsAppOptedIn();
+        if (!sendEmail && !sendWhatsApp) return;
         UUID appointmentId = a.id;
         String tenant = TenantContext.getCurrentTenant();
         String firstName = patient.getFirstName(), facilityName = facility.getName();
@@ -310,18 +320,22 @@ public class AppointmentService {
         String date = local.format(EMAIL_DATE);
         String offset = local.getOffset().equals(ZoneOffset.UTC) ? "+00:00" : local.getOffset().toString();
         String time = local.format(EMAIL_TIME) + " (" + facility.getTimezone() + ", UTC" + offset + ")";
+        if (sendWhatsApp) sendWhatsAppAppointmentAfterCommit(a, patient, facility, updated, false);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override public void afterCommit() {
                 try {
-                    Organization organization = organizations.findBySchemaName(tenant).orElse(null);
-                    if (organization == null) {
-                        log.warn("Could not queue appointment confirmation for {}: organization unavailable", appointmentId);
-                        return;
+                    if (sendEmail) {
+                        Organization organization = organizations.findBySchemaName(tenant).orElse(null);
+                        if (organization == null) {
+                            log.warn("Could not queue appointment confirmation for {}: organization unavailable", appointmentId);
+                        } else if (updated) {
+                            emailService.sendAppointmentUpdatedEmail(toEmail, firstName, organization.getDisplayName(),
+                                    facilityName, date, time, staffName);
+                        } else {
+                            emailService.sendAppointmentConfirmedEmail(toEmail, firstName, organization.getDisplayName(),
+                                    facilityName, date, time, staffName);
+                        }
                     }
-                    if (updated) emailService.sendAppointmentUpdatedEmail(toEmail, firstName, organization.getDisplayName(),
-                            facilityName, date, time, staffName);
-                    else emailService.sendAppointmentConfirmedEmail(toEmail, firstName, organization.getDisplayName(),
-                            facilityName, date, time, staffName);
                 } catch (RuntimeException e) {
                     // SMTP is asynchronous. Dispatch/configuration failures also must
                     // leave the successfully committed appointment available to staff.
@@ -329,6 +343,24 @@ public class AppointmentService {
                 }
             }
         });
+    }
+
+    private void sendWhatsAppAppointmentAfterCommit(Appointment appointment, Patient patient, Facility facility,
+                                                    boolean updated, boolean cancelled) {
+        if (whatsAppNotifications == null || !patient.isWhatsAppOptedIn()) return;
+        ZonedDateTime local = appointment.startsAt.atZone(ZoneId.of(facility.getTimezone()));
+        WhatsAppMessageTemplate template = cancelled ? WhatsAppMessageTemplate.APPOINTMENT_CANCELLED
+                : updated ? WhatsAppMessageTemplate.APPOINTMENT_RESCHEDULED
+                : WhatsAppMessageTemplate.APPOINTMENT_CONFIRMED;
+        whatsAppNotifications.sendPatientAfterCommit(patient, template, Map.of(
+                "patient_first_name", patient.getFirstName(),
+                "appointment_date", local.format(EMAIL_DATE),
+                "appointment_time", local.format(EMAIL_TIME),
+                "time_zone", facility.getTimezone(),
+                "facility_name", facility.getName(),
+                "facility_address", facility.getAddress() == null || facility.getAddress().isBlank()
+                        ? facility.getName() : facility.getAddress(),
+                "appointment_reference", appointment.id.toString()), appointment.id.toString());
     }
 
     private void requireAdmin() { permissions.requireAnyRole(Set.of("ORG_ADMIN"), "Only organization administrators can change appointment settings."); }
