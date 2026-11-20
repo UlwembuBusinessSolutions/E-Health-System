@@ -4,6 +4,7 @@ import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
+import co.ehealth.platform.identity.UserRepository;
 import co.ehealth.platform.facility.FacilityNotFoundException;
 import co.ehealth.platform.facility.FacilityRepository;
 import co.ehealth.platform.patient.Patient;
@@ -11,6 +12,7 @@ import co.ehealth.platform.patient.PatientService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -30,12 +32,14 @@ public class QueueService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
+    private final UserRepository userRepository;
     private final FacilityRepository facilityRepository;
 
     public QueueService(QueueTokenRepository queueTokenRepository,
                          QueueTokenEventRepository queueTokenEventRepository, VisitRepository visitRepository,
                          PatientService patientService, AuditLogService auditLogService, Clock clock,
-                         PermissionService permissionService, FacilityRepository facilityRepository) {
+                         PermissionService permissionService, FacilityRepository facilityRepository,
+                         UserRepository userRepository) {
         this.queueTokenRepository = queueTokenRepository;
         this.queueTokenEventRepository = queueTokenEventRepository;
         this.visitRepository = visitRepository;
@@ -43,6 +47,7 @@ public class QueueService {
         this.auditLogService = auditLogService;
         this.clock = clock;
         this.permissionService = permissionService;
+        this.userRepository = userRepository;
         this.facilityRepository = facilityRepository;
     }
 
@@ -83,11 +88,14 @@ public class QueueService {
         int tokenNumber = nextTokenNumber(visit.getFacilityId(), now);
         QueueToken token = new QueueToken(visit.getId(), visit.getFacilityId(), tokenNumber, priority, manual,
                 now, issuedByUserId);
+        if (eventType == QueueTokenEventType.TRANSFERRED_IN) {
+            token.awaitTransferAcceptance();
+        }
         queueTokenRepository.save(token);
         auditLogService.append(issuedByUserId, visit.getFacilityId(),
                 manual ? "QUEUE_TOKEN_ISSUED_MANUAL" : "QUEUE_TOKEN_ISSUED", "QueueToken", token.getId().toString(),
                 null, null);
-        recordEvent(token.getId(), eventType, null, TokenStatus.ISSUED, null, null, null, reasonNote,
+        recordEvent(token.getId(), eventType, null, token.getStatus(), null, null, null, reasonNote,
                 issuedByUserId, now);
         return token;
     }
@@ -344,6 +352,25 @@ public class QueueService {
                 token.getId().toString(), null, null);
         recordEvent(token.getId(), QueueTokenEventType.COMPLETED, TokenStatus.CALLED, TokenStatus.COMPLETED, null,
                 null, null, null, staffUserId, now);
+        return toView(token);
+    }
+
+    @Transactional
+    public QueueEntryView acceptTransfer(UUID tokenId, UUID staffUserId) {
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
+        permissionService.requireAnyRole(Set.of("Professional Nurse", "Doctor", "Clinician"),
+                "Only a nurse or doctor may accept a transfer.");
+        QueueToken token = findToken(tokenId);
+        if (!userRepository.isAssignedToFacility(staffUserId, token.getFacilityId())) {
+            throw new AccessDeniedException("Only staff assigned to the receiving facility may accept a transfer.");
+        }
+        token.acceptTransfer();
+        queueTokenRepository.save(token);
+        Instant now = clock.instant();
+        recordEvent(token.getId(), QueueTokenEventType.TRANSFER_ACCEPTED, TokenStatus.PENDING_ACCEPTANCE,
+                TokenStatus.ISSUED, null, null, null, null, staffUserId, now);
+        auditLogService.append(staffUserId, token.getFacilityId(), "QUEUE_TRANSFER_ACCEPTED", "QueueToken",
+                token.getId().toString(), null, null);
         return toView(token);
     }
 
