@@ -32,9 +32,6 @@ public class QueueService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
-<<<<<<< Updated upstream
-    private final FacilityRepository facilityRepository;
-=======
     private final UserRepository userRepository;
         private final FacilityRepository facilityRepository;
         private final QueueApproachNotificationService approachNotificationService;
@@ -42,18 +39,13 @@ public class QueueService {
     private PatientRepository notificationPatients;
     @Autowired
     private WhatsAppNotificationDispatcher whatsAppNotifications;
->>>>>>> Stashed changes
 
     public QueueService(QueueTokenRepository queueTokenRepository,
                          QueueTokenEventRepository queueTokenEventRepository, VisitRepository visitRepository,
                          PatientService patientService, AuditLogService auditLogService, Clock clock,
-<<<<<<< Updated upstream
-                         PermissionService permissionService, FacilityRepository facilityRepository) {
-=======
                          PermissionService permissionService, FacilityRepository facilityRepository,
                          QueueApproachNotificationService approachNotificationService,
                          UserRepository userRepository) {
->>>>>>> Stashed changes
         this.queueTokenRepository = queueTokenRepository;
         this.queueTokenEventRepository = queueTokenEventRepository;
         this.visitRepository = visitRepository;
