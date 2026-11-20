@@ -144,6 +144,12 @@ public class QueueController {
         return ResponseEntity.ok(QueueEntryResponse.from(queueService.complete(id, staff.userId())));
     }
 
+    @PostMapping("/api/v1/queue/tokens/{id}/accept-transfer")
+    public ResponseEntity<QueueEntryResponse> acceptTransfer(@PathVariable UUID id,
+                                                               @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return ResponseEntity.ok(QueueEntryResponse.from(queueService.acceptTransfer(id, staff.userId())));
+    }
+
     @PostMapping("/api/v1/queue/tokens/{id}/cancel")
     public ResponseEntity<QueueEntryResponse> cancel(@PathVariable UUID id,
                                                         @Valid @RequestBody CancelTokenRequest request,

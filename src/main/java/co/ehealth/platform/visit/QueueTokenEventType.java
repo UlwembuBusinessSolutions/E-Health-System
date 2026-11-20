@@ -19,5 +19,6 @@ public enum QueueTokenEventType {
     CANCELLED,
     PRIORITY_CHANGED,
     TRANSFERRED_OUT,
-    TRANSFERRED_IN
+    TRANSFERRED_IN,
+    TRANSFER_ACCEPTED
 }

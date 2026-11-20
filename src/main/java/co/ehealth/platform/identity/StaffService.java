@@ -88,6 +88,13 @@ public class StaffService {
                 .toList();
     }
 
+    public List<RoleSummary> listRoles() {
+        return roleRepository.findAll().stream().map(role -> new RoleSummary(role.getId(), role.getName())).toList();
+    }
+
+    public record RoleSummary(UUID id, String name) {
+    }
+
     // OrganizationProvisioningService.listTenantAuditLog()'s name lookup —
     // audit_log rows only ever store a bare userId (AuditLog.getUserId()),
     // and that module has no business reaching into UserRepository

@@ -110,6 +110,16 @@ public class QueueToken {
         this.calledAt = at;
     }
 
+    public void acceptTransfer() {
+        requireStatus(TokenStatus.PENDING_ACCEPTANCE, TokenStatus.ISSUED);
+        this.status = TokenStatus.ISSUED;
+    }
+
+    public void awaitTransferAcceptance() {
+        requireStatus(TokenStatus.ISSUED, TokenStatus.PENDING_ACCEPTANCE);
+        this.status = TokenStatus.PENDING_ACCEPTANCE;
+    }
+
     // The patient didn't respond to the call — a nurse/marshall flags it
     // rather than the token silently sitting as CALLED forever. Only valid
     // from CALLED: you can't miss a call that never happened.

@@ -38,6 +38,8 @@ public interface OrganizationRepository extends JpaRepository<Organization, UUID
     // TenantCodeGenerator's own collision check at provisioning time.
     boolean existsByTenantCode(String tenantCode);
 
+    List<Organization> findByStatusOrderByDisplayNameAsc(OrganizationStatus status);
+
     // PatientMigrationService's destination-picker read — every other
     // ACTIVE organization a tenant could migrate a patient to, excluding
     // its own (a tenant can't migrate a patient to itself). Deliberately

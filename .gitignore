@@ -16,3 +16,5 @@ data/
 .tools-test/
 .tools-*.zip
 *.log
+.history/
+.env
