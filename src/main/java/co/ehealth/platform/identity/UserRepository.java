@@ -15,6 +15,14 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     // remains a real column but isn't queried for authentication anywhere.
     Optional<User> findByEmail(String email);
 
+    @Query(value = "select exists (select 1 from user_facilities where user_id = :userId and facility_id = :facilityId)",
+           nativeQuery = true)
+    boolean isAssignedToFacility(@Param("userId") UUID userId, @Param("facilityId") UUID facilityId);
+
+    @Query(value = "select facility_id from user_facilities where user_id = :userId order by facility_id",
+           nativeQuery = true)
+    List<UUID> findFacilityIdsByUserId(@Param("userId") UUID userId);
+
     Optional<User> findByEmployeeNumber(String employeeNumber);
 
     boolean existsByEmployeeNumber(String employeeNumber);

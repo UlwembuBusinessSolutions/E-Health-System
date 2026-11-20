@@ -11,12 +11,14 @@ import co.ehealth.platform.facility.Facility;
 import co.ehealth.platform.facility.FacilityType;
 import co.ehealth.platform.identity.Gender;
 import co.ehealth.platform.identity.StaffService;
+import co.ehealth.platform.identity.User;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -322,9 +324,43 @@ public class PlatformController {
         return ResponseEntity.ok(Map.of("items", items));
     }
 
+    @GetMapping("/{id}/staff-roles")
+    public ResponseEntity<Map<String, Object>> listStaffRoles(@PathVariable UUID id) {
+        return ResponseEntity.ok(Map.of("items", provisioningService.listStaffRoles(id)));
+    }
+
+    @PostMapping("/{id}/staff")
+    public ResponseEntity<CreatedStaffResponse> createStaff(
+            @PathVariable UUID id, @Valid @RequestBody CreateStaffRequest request,
+            @AuthenticationPrincipal PlatformOperatorPrincipal operator) {
+        var command = new OrganizationProvisioningService.CreateStaffCommand(
+                request.firstName(), request.lastName(), request.employeeNumber(), request.email(),
+                request.contactNumber(), request.gender(), request.facilityId(), request.roleId(),
+                request.department(), request.designation(), request.temporaryPassword());
+        User user = provisioningService.createStaff(id, command, operator.operatorId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(CreatedStaffResponse.from(user));
+    }
+
     public record AddClinicRequest(
             @NotBlank String name, @NotBlank @Pattern(regexp = "^[A-Za-z0-9-]{1,20}$") String code,
             @NotNull FacilityType type, String address, String phone, String operatingHours) {
+    }
+
+    public record CreateStaffRequest(
+            @NotBlank @Size(max = 60) String firstName, @NotBlank @Size(max = 60) String lastName,
+            @NotBlank @Size(max = 30) String employeeNumber, @NotBlank @Email String email,
+            @NotBlank @Pattern(regexp = "^\\+?[0-9]{9,15}$") String contactNumber,
+            @NotNull Gender gender, @NotNull UUID facilityId, @NotNull UUID roleId,
+            @Size(max = 100) String department, @Size(max = 100) String designation,
+            @NotBlank @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*[0-9]).{8,100}$") String temporaryPassword) {
+    }
+
+    public record CreatedStaffResponse(UUID id, String employeeNumber, String email, String firstName,
+                                       String lastName, UUID facilityId, boolean mustChangePassword) {
+        static CreatedStaffResponse from(User user) {
+            return new CreatedStaffResponse(user.getId(), user.getEmployeeNumber(), user.getEmail(),
+                    user.getFirstName(), user.getLastName(), user.getFacilityId(), user.isMustChangePassword());
+        }
     }
 
     public record FacilityResponse(UUID id, String name, String code, FacilityType type, String address,

@@ -13,6 +13,7 @@ public enum TokenStatus {
     ISSUED,
     CALLED,
     MISSED,
+    PENDING_ACCEPTANCE,
     COMPLETED,
     CANCELLED
 }

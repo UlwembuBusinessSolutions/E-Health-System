@@ -220,6 +220,53 @@ public class OrganizationProvisioningService {
         }
     }
 
+    public List<StaffService.RoleSummary> listStaffRoles(UUID organizationId) {
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(OrganizationNotFoundException::new);
+        TenantContext.setCurrentTenant(organization.getSchemaName());
+        try {
+            return staffService.listRoles();
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    public User createStaff(UUID organizationId, CreateStaffCommand command, UUID actingOperatorId) {
+        Organization organization = organizationRepository.findById(organizationId)
+                .orElseThrow(OrganizationNotFoundException::new);
+        if (organization.getStatus() != OrganizationStatus.ACTIVE) {
+            throw new OrganizationSuspendedException("Cannot add staff to a suspended organization");
+        }
+
+        TenantContext.setCurrentTenant(organization.getSchemaName());
+        User user;
+        try {
+            Facility facility = facilityService.get(command.facilityId());
+            if (!facility.isActive()) {
+                throw new IllegalArgumentException("Select an active clinic.");
+            }
+            boolean roleExists = staffService.listRoles().stream()
+                    .anyMatch(role -> role.id().equals(command.roleId()));
+            if (!roleExists) {
+                throw new IllegalArgumentException("Select a valid role.");
+            }
+            StaffService.CreateStaffCommand staffCommand = new StaffService.CreateStaffCommand(
+                    command.firstName(), command.lastName(), command.employeeNumber(), null, command.email(),
+                    command.contactNumber(), command.gender(), null, null, null, null, command.facilityId(),
+                    List.of(), command.department(), command.designation(), command.roleId(), null, null,
+                    null, null, null, null, null, null, null, command.temporaryPassword());
+            user = staffService.createStaff(staffCommand, null);
+        } finally {
+            TenantContext.clear();
+        }
+
+        String detail = "%s (%s)".formatted(user.getFirstName() + " " + user.getLastName(), user.getEmail());
+        platformAuditLogRepository.save(
+                new PlatformAuditLog(actingOperatorId, "ORGANIZATION_STAFF_CREATED", organizationId, detail,
+                        Instant.now()));
+        return user;
+    }
+
     // AUDT-US-005/006's platform-side entry point — a platform operator
     // viewing one tenant's own audit trail, same TenantContext set/clear-in-
     // finally discipline as listAdmins() above. Deliberately routed through
@@ -667,6 +714,11 @@ public class OrganizationProvisioningService {
     }
 
     public record AddAdminsCommand(List<AdminInput> admins) {
+    }
+
+    public record CreateStaffCommand(String firstName, String lastName, String employeeNumber, String email,
+                                     String contactNumber, Gender gender, UUID facilityId, UUID roleId,
+                                     String department, String designation, String temporaryPassword) {
     }
 
     // SADM-US-006's own field list: "name, physical address, operating
