@@ -3,6 +3,7 @@ package co.ehealth.platform.visit;
 import co.ehealth.platform.core.audit.AuditLogService;
 import co.ehealth.platform.facility.FacilityRepository;
 import co.ehealth.platform.identity.PermissionService;
+import co.ehealth.platform.identity.UserRepository;
 import co.ehealth.platform.patient.PatientService;
 import org.junit.jupiter.api.Test;
 
@@ -26,8 +27,9 @@ class QueueServiceTest {
     private final AuditLogService audit = mock(AuditLogService.class);
     private final PermissionService permissions = mock(PermissionService.class);
     private final FacilityRepository facilities = mock(FacilityRepository.class);
+    private final UserRepository users = mock(UserRepository.class);
     private final QueueService service = new QueueService(tokens, events, visits, patients, audit,
-            Clock.fixed(Instant.parse("2026-11-03T08:00:00Z"), ZoneOffset.UTC), permissions, facilities);
+            Clock.fixed(Instant.parse("2026-11-03T08:00:00Z"), ZoneOffset.UTC), permissions, facilities, users);
 
     @Test
     void linksAnExistingUnregisteredWalkInVisit() {

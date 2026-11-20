@@ -11,7 +11,7 @@ spring:
   profiles:
     active: dev
   datasource:
-    url: ${DB_URL:jdbc:postgresql://127.0.0.1:5433/ulwembu_dev_codex}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/ulwembu}
     username: ${DB_USERNAME:ulwembu}
     password: ${DB_PASSWORD:ulwembu_dev_local}
     hikari:

@@ -58,7 +58,8 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers("/api/v1/auth/login", "/api/v1/auth/password-reset/**",
-                        "/api/v1/auth/sso/**", "/api/v1/public/**", "/actuator/health").permitAll()
+                        "/api/v1/auth/sso/**", "/api/v1/public/**", "/actuator/health",
+                        "/api/v1/auth/mfa/verify", "/api/v1/auth/mfa/enrol/**").permitAll()
                 // Getting a token in the first place can't require one.
                 .requestMatchers("/platform/auth/login").permitAll()
                 // Same reasoning, patient portal's own two pre-auth
@@ -93,7 +94,6 @@ public class SecurityConfig {
             .addFilterBefore(patientJwtFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterAfter(idleLockFilter, JwtAuthenticationFilter.class);
-
         return http.build();
     }
 

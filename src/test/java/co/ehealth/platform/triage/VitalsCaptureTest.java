@@ -23,7 +23,9 @@ class VitalsCaptureTest {
     final VisitRepository visits = mock(VisitRepository.class);
     final PatientService patients = mock(PatientService.class);
     final UUID visitId = UUID.randomUUID(), patientId = UUID.randomUUID(), actor = UUID.randomUUID();
-    final TriageService service = new TriageService(repository, visits, patients, mock(UserRepository.class),
+    final TriageService service = new TriageService(repository,
+            mock(co.ehealth.platform.consultation.ConsultationRepository.class), visits, patients,
+            mock(UserRepository.class),
             mock(AuditLogService.class), mock(PermissionService.class), Clock.fixed(Instant.parse("2026-09-08T12:00:00Z"), ZoneOffset.UTC));
 
     @BeforeEach void setup() {
@@ -41,7 +43,40 @@ class VitalsCaptureTest {
     private TriageService.TriageCaptureCommand command(AdditionalObservations additional, ScoringProfile profile, TriageColour colour) {
         return new TriageService.TriageCaptureCommand(visitId, false, null, profile, 18, 80, 120, 80, 37.0, 98,
                 OxygenSupport.ROOM_AIR, null, null, Avpu.ALERT, Mobility.WALKING, 0, "NRS", "Test", Set.of(),
-                null, null, "test-key", false, colour, colour == null ? null : "Clinician assessment", additional);
+                null, null, "test-key", false, colour, colour == null ? null : "Clinician assessment", additional, null);
+    }
+
+    @Test void unregisteredWalkInUsesProvidedDateOfBirthWithoutCreatingPatient() {
+        Visit walkIn = mock(Visit.class);
+        when(visits.findById(visitId)).thenReturn(Optional.of(walkIn));
+        var additional = new AdditionalObservations();
+        additional.traumaPresent = false;
+        var command = new TriageService.TriageCaptureCommand(visitId, false, null, null, 18, 80, 120, 80,
+                37.0, 98, OxygenSupport.ROOM_AIR, null, null, Avpu.ALERT, Mobility.WALKING, 0, "NRS",
+                "Test", Set.of(), null, null, "walk-in-key", false, TriageColour.RED, "Clinician assessment",
+                additional, LocalDate.of(2024, 1, 1));
+
+        TriageAssessment assessment = service.capture(command, actor);
+
+        assertEquals(ScoringProfile.PAEDIATRIC_YOUNGER_CHILD, assessment.getScoringProfile());
+        assertFalse(assessment.isProfileManuallyConfirmed());
+        verify(patients, never()).get(any());
+        verify(repository).save(assessment);
+    }
+
+    @Test void unregisteredWalkInRequiresDateOfBirth() {
+        Visit walkIn = mock(Visit.class);
+        when(visits.findById(visitId)).thenReturn(Optional.of(walkIn));
+        var command = new TriageService.TriageCaptureCommand(visitId, true, "Emergency sign", null, null, null,
+                null, null, null, null, OxygenSupport.ROOM_AIR, null, null, null, null, null, null, null,
+                Set.of(), null, null, "walk-in-key", false, null, null, null, null);
+
+        InvalidTriageCaptureException error = assertThrows(InvalidTriageCaptureException.class,
+                () -> service.capture(command, actor));
+
+        assertTrue(error.getMessage().contains("Date of birth is required"));
+        verify(patients, never()).get(any());
+        verify(repository, never()).save(any());
     }
 
     @Test void capturePassesAdditionalMeasurementsToRepositoryAndResponse() {

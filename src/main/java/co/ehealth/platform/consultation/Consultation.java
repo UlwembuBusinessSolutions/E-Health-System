@@ -7,9 +7,13 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.JoinColumn;
 
 import java.time.Instant;
 import java.util.UUID;
+import java.util.Set;
 
 // One consultation record for a Visit — deliberately linked to the visit,
 // the same "a clinical fact belongs to the visit, not the queue token"
@@ -114,6 +118,11 @@ public class Consultation {
     // The earlier signed consultation this one carries on from, when the patient came back on a new visit.
     @Column(name = "continued_from_consultation_id")
     private UUID continuedFromConsultationId;
+
+    @ElementCollection
+    @CollectionTable(name = "consultation_classification_reasons", joinColumns = @JoinColumn(name = "consultation_id"))
+    @Column(name = "classification_reason_id")
+    private Set<UUID> classificationReasonIds = new java.util.HashSet<>();
 
     public Consultation(UUID visitId, UUID authorUserId, Instant now) {
         this.visitId = visitId;
@@ -221,6 +230,13 @@ public class Consultation {
     public void recordVitalsBypass(VitalsBypassReason reason, String note) {
         this.vitalsBypassReason = reason;
         this.vitalsBypassNote = note;
+    }
+
+    public Set<UUID> getClassificationReasonIds() { return Set.copyOf(classificationReasonIds); }
+
+    public void setClassificationReasonIds(Set<UUID> ids) {
+        classificationReasonIds.clear();
+        if (ids != null) classificationReasonIds.addAll(ids);
     }
 
     public UUID getAuthorUserId() {
