@@ -1,7 +1,7 @@
 import { useRef, useState, type ComponentType } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate } from "react-router-dom"; // OFFLINE: useLocation
 import { motion } from "framer-motion";
 import clsx from "clsx";
@@ -41,6 +41,7 @@ import {
   type RegisterPatientPayload, // OFFLINE
 } from "@/shared/api/patients";
 import { ApiError } from "@/shared/api/client";
+import { getOrganizationSelf } from "@/shared/api/organization";
 import { Input } from "@/shared/components/Input";
 import { Button } from "@/shared/components/Button";
 import { Card } from "@/shared/components/Card";
@@ -335,6 +336,7 @@ export function RegisterPatientScreen() {
     location.state as { resend?: { clientRecordId: string; values: RegisterPatientPayload } } | null
   )?.resend;
   const [savedOffline, setSavedOffline] = useState<{ name: string; skipped: boolean } | null>(null);
+  const organizationQuery = useQuery({ queryKey: ["organization", "self"], queryFn: getOrganizationSelf });
 
   const [formError, setFormError] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -360,8 +362,9 @@ export function RegisterPatientScreen() {
   const {
     register,
     handleSubmit,
-    reset, // OFFLINE
+    setValue,
     watch,
+    reset, // OFFLINE
     formState: { errors, isSubmitting },
   } = useForm<RegisterPatientValues>({
     resolver: zodResolver(registerPatientSchema),
@@ -373,6 +376,7 @@ export function RegisterPatientScreen() {
       dateOfBirth: resend?.values.dateOfBirth ?? "",
       address: resend?.values.address ?? "",
       contactNumber: resend?.values.contactNumber ?? "",
+      whatsappOptIn: resend?.values.whatsappOptIn ?? false,
       email: resend?.values.email ?? "",
       medicalAidProvider: resend?.values.medicalAidProvider ?? "",
       medicalAidNumber: resend?.values.medicalAidNumber ?? "",
@@ -391,6 +395,7 @@ export function RegisterPatientScreen() {
     citizenshipStatus: v.citizenshipStatus || undefined,
     address: v.address,
     contactNumber: v.contactNumber,
+    whatsappOptIn: v.whatsappOptIn,
     email: v.email || undefined,
     medicalAidProvider: v.medicalAidProvider || undefined,
     medicalAidNumber: v.medicalAidNumber || undefined,
@@ -434,6 +439,7 @@ export function RegisterPatientScreen() {
         citizenshipStatus: values.citizenshipStatus || undefined,
         address: values.address,
         contactNumber: values.contactNumber,
+        whatsappOptIn: values.whatsappOptIn,
         email: values.email || undefined,
         medicalAidProvider: values.medicalAidProvider || undefined,
         medicalAidNumber: values.medicalAidNumber || undefined,
@@ -820,6 +826,21 @@ export function RegisterPatientScreen() {
               error={errors.contactNumber?.message}
               {...register("contactNumber")}
             />
+
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border-subtle px-3.5 py-3">
+              <div>
+                <p className="text-[13.5px] font-medium text-text-primary">WhatsApp queue updates</p>
+                <p className="text-[12.5px] text-text-secondary">
+                  Confirm the patient explicitly agreed to receive queue updates from{" "}
+                  {organizationQuery.data?.displayName ?? "this clinic"} on WhatsApp.
+                </p>
+              </div>
+              <Switch
+                checked={watch("whatsappOptIn")}
+                onChange={(checked) => setValue("whatsappOptIn", checked, { shouldDirty: true })}
+                label="Patient opted in to WhatsApp queue updates"
+              />
+            </div>
 
             <Input
               label="Email"

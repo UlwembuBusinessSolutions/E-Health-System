@@ -6,7 +6,7 @@ import path from 'node:path'
 
 // The README's default Docker Compose setup publishes the API on 8081.
 // Override this for a native backend or a different local API address.
-const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:8082'
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:8081'
 
 // https://vite.dev/config/
 export default defineConfig({

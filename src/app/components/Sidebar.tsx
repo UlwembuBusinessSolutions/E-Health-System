@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ClipboardList, Gauge, HeartPulse, LogOut, Pill, RefreshCw, Settings, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
+import { Bell, ClipboardList, Gauge, HeartPulse, LogOut, Pill, RefreshCw, Settings, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 import { canTakeVitals } from "@/auth/roles";
 import { getTenantSlug } from "@/shared/api/auth";
@@ -48,6 +48,8 @@ export function Sidebar() {
     { to: "/app", label: "Dashboard", icon: Gauge, end: true },
     { to: "/app/patients", label: "Patients", icon: UserRound, end: false },
     { to: "/app/queue", label: "Queue", icon: Ticket, end: false },
+    { to: "/app/notifications", label: "Notifications", icon: Bell, end: false },
+    { to: "/app/referrals", label: "Referrals", icon: ClipboardList, end: false },
     { to: "/app/sync", label: "Sync", icon: RefreshCw, end: false }, // OFFLINE
     ...(user?.role && APPOINTMENT_ROLES.has(user.role)
       ? [{ to: "/app/appointments", label: "Appointments", icon: CalendarDays, end: false }]

@@ -303,6 +303,54 @@ export async function listOrganizationFacilities(organizationId: string): Promis
   return response.items;
 }
 
+export interface OrganizationStaffRole {
+  id: string;
+  name: string;
+}
+
+export async function listOrganizationStaffRoles(organizationId: string): Promise<OrganizationStaffRole[]> {
+  const response = await apiClient.get<{ items: OrganizationStaffRole[] }>(
+    `/platform/organizations/${organizationId}/staff-roles`,
+    { headers: authHeaders() },
+  );
+  return response.items;
+}
+
+export interface CreateOrganizationStaffPayload {
+  firstName: string;
+  lastName: string;
+  employeeNumber: string;
+  email: string;
+  contactNumber: string;
+  gender: Gender;
+  facilityId: string;
+  roleId: string;
+  department?: string;
+  designation?: string;
+  temporaryPassword: string;
+}
+
+export interface CreatedOrganizationStaff {
+  id: string;
+  employeeNumber: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  facilityId: string;
+  mustChangePassword: boolean;
+}
+
+export async function createOrganizationStaff(
+  organizationId: string,
+  payload: CreateOrganizationStaffPayload,
+): Promise<CreatedOrganizationStaff> {
+  return apiClient.post<CreatedOrganizationStaff>(
+    `/platform/organizations/${organizationId}/staff`,
+    payload,
+    { headers: authHeaders() },
+  );
+}
+
 // A platform operator adding a clinic to a tenant it doesn't have a
 // session for — see OrganizationProvisioningService.addClinic()'s own
 // why-note on why this is a separate route from the tenant-side

@@ -14,6 +14,7 @@ export const registerPatientSchema = z.object({
     .string()
     .trim()
     .regex(/^\+?[0-9]{9,15}$/, "Enter a valid contact number, e.g. +27821234567"),
+  whatsappOptIn: z.boolean(),
   // Optional — cross-tenant patient migration's own notification email is
   // the first thing that actually reads this; an empty string is valid
   // (RegisterPatientPayload's own optional field), a non-empty one must

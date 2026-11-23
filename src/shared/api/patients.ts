@@ -21,6 +21,7 @@ export interface RegisterPatientPayload {
   citizenshipStatus?: CitizenshipStatus;
   address: string;
   contactNumber: string;
+  whatsappOptIn?: boolean;
   // Optional — cross-tenant patient migration's own notification email is
   // the first thing that actually reads this; nothing required it before.
   email?: string;
@@ -45,6 +46,8 @@ export interface Patient {
   idNumber: string | null;
   address: string;
   contactNumber: string;
+  whatsappOptIn: boolean;
+  whatsappOptedInAt: string | null;
   email: string | null;
   medicalAidProvider: string | null;
   medicalAidNumber: string | null;
@@ -164,6 +167,15 @@ export interface UpdatePatientPayload {
 
 export async function updatePatient(id: string, payload: UpdatePatientPayload): Promise<Patient> {
   return apiClient.patch<Patient>(`/api/v1/admin/patients/${id}`, payload, { headers: tenantAuthHeaders() });
+}
+
+export async function updatePatientWhatsAppConsent(
+  id: string,
+  payload: { optedIn: boolean; reason: string },
+): Promise<Patient> {
+  return apiClient.patch<Patient>(`/api/v1/admin/patients/${id}/whatsapp-consent`, payload, {
+    headers: tenantAuthHeaders(),
+  });
 }
 
 export interface PatientFieldHistoryEntry {

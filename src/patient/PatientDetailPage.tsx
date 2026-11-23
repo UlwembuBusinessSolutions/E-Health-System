@@ -1,10 +1,10 @@
-import { PrescriptionBuilder } from "@/prescribing/PrescriptionBuilder";
-import { EMPTY_DRAFT, draftProblems, toPayload, type PrescriptionDraft } from "@/prescribing/prescriptionDraft";
+
 import { generateUUID } from "../utils/uuid";
 import { PatientVisitsTab } from "./PatientVisitsTab";
 import { createPortal } from "react-dom";
 import { VitalsOverview } from "./VitalsOverview";
 import { PatientConsultationTab } from "./PatientConsultationTab";
+import { PatientReferralsTab } from "./PatientReferralsTab";
 import { AdditionalVitalsForm, AdditionalVitalsSummary, EMPTY_ADDITIONAL_VITALS, additionalPayload, type AdditionalVitalsState } from "./AdditionalVitals";
 import { useEffect, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -57,6 +57,7 @@ import {
   migratePatient,
   removeGuardian,
   updatePatient,
+  updatePatientWhatsAppConsent,
   uploadGuardianSignature,
   uploadPatientDocument,
   validateDocumentFile,
@@ -75,8 +76,10 @@ import {
 import type { TokenPriority } from "@/shared/api/queue";
 import {
   createPrescription,
+  getCollectionDetails,
   getPatientPrescriptions,
   type Prescription,
+  type PrescriptionItemInput,
 } from "@/shared/api/pharmacy";
 import { getFacilities } from "@/shared/api/facilities";
 import { printQueueTicket } from "@/shared/lib/printTicket";
@@ -117,6 +120,7 @@ import { TriageColourBadge } from "@/shared/components/TriageColourBadge";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { useToast } from "@/shared/components/toast/ToastProvider";
 
+const EMPTY_ITEM: PrescriptionItemInput = { drugName: "", dosage: "", quantity: 1 };
 
 const SERVICE_STREAM_OPTIONS: { value: ServiceStream; label: string }[] = [
   { value: "GENERAL", label: "General / acute care" },
@@ -561,12 +565,67 @@ function PatientPrescriptionsTab({ patientId }: { patientId: string }) {
                   </li>
                 ))}
               </ul>
+              {(rx.status === "DISPENSED" || rx.status === "PARTIALLY_DISPENSED") && (
+                <CollectionDetailsDisclosure prescriptionId={rx.id} />
+              )}
             </div>
           ))}
         </div>
       )}
     </Card>
   );
+}
+
+function CollectionDetailsDisclosure({ prescriptionId }: { prescriptionId: string }) {
+  const [open, setOpen] = useState(false);
+  const detailsQuery = useQuery({
+    queryKey: ["pharmacy", "collection-details", prescriptionId],
+    queryFn: () => getCollectionDetails(prescriptionId),
+    enabled: open,
+    staleTime: 0,
+  });
+  const details = detailsQuery.data;
+  return (
+    <div className="mt-2 rounded-lg bg-surface-sunken p-3">
+      <p className="flex items-center gap-2 text-[12px] text-text-secondary">
+        <Users className="size-3.5" aria-hidden />
+        {details
+          ? details.collectedByPatient
+            ? "Collected by the patient"
+            : `Collected by ${details.collectorName ?? "a representative"}`
+          : "Collection details are available to authorized staff."}
+        {details && !details.collectedByPatient && (
+          <span>({details.relationship ?? "representative"}) ? ID {maskCollectionId(details.collectorIdNumber)}</span>
+        )}
+        {details && !details.collectedByPatient && <StatusPill tone="warning">Third-party collection</StatusPill>}
+      </p>
+      <button type="button" onClick={() => setOpen((value) => !value)} className="mt-2 flex items-center gap-1 text-xs font-medium text-brand-700">
+        <Eye className="size-3.5" aria-hidden />
+        {open ? "Hide full details" : "Full details — pharmacist / org admin access; view is logged"}
+      </button>
+      {open && (detailsQuery.isLoading ? <p className="mt-2 text-xs text-text-secondary">Loading secure collection details…</p>
+        : detailsQuery.isError ? <p role="alert" className="mt-2 text-xs text-danger-600">You don’t have permission to view these details, or they could not be loaded.</p>
+        : details && <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
+          <Detail label="ID number" value={details.collectorIdNumber} />
+          <Detail label="Contact" value={details.phone} />
+          <Detail label="Authorisation" value={details.authorisationType} />
+          <div><p className="uppercase text-text-secondary">Proof</p>{details.proofUrl ? <a className="text-brand-700 underline" href={details.proofUrl} target="_blank" rel="noreferrer">View proof</a> : <span>Not supplied</span>}</div>
+          <Detail label="ID checked" value={details.idVerified ? "Verified" : "Not verified"} />
+          {details.signatureDataUrl && <div><p className="mb-1 uppercase text-text-secondary">Signature</p><img src={details.signatureDataUrl} alt="Collector signature" className="max-h-20 rounded border bg-white p-1" /></div>}
+          <Detail label="Notes" value={details.notes || "—"} />
+          <p className="col-span-full text-text-secondary">Full details — visible to pharmacists and organization admins. This view is logged.</p>
+        </div>)}
+    </div>
+  );
+}
+
+function maskCollectionId(value: string | null) {
+  if (!value) return "not recorded";
+  return `${"*".repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`;
+}
+
+function Detail({ label, value }: { label: string; value: string | null | undefined }) {
+  return <div><p className="uppercase text-text-secondary">{label}</p><p className="mt-0.5 text-text-primary">{value || "—"}</p></div>;
 }
 
 // RECQ-US-008/009/010's read side, at the patient level rather than one
@@ -747,7 +806,7 @@ export function PatientDetailPage() {
   // relevant no matter which tab someone's looking at, not "content" that
   // should hide when the Vitals tab (a different, cross-visit view of the
   // same clinical data) is selected.
-  const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(
+  const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits" | "referrals">(
     "overview",
   );
   const [isStartingVisit, setIsStartingVisit] = useState(searchParams.get("checkIn") === "true");
@@ -760,7 +819,7 @@ export function PatientDetailPage() {
   const [visitError, setVisitError] = useState<string | null>(null);
   const [startedVisit, setStartedVisit] = useState<VisitWithToken | null>(null);
   const [isPrescribing, setIsPrescribing] = useState(false);
-  const [prescriptionDraft, setPrescriptionDraft] = useState<PrescriptionDraft>(EMPTY_DRAFT);
+  const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItemInput[]>([{ ...EMPTY_ITEM }]);
   const [prescriptionError, setPrescriptionError] = useState<string | null>(null);
   const [createdPrescription, setCreatedPrescription] = useState<Prescription | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
@@ -925,7 +984,7 @@ export function PatientDetailPage() {
   const vitalsHistoryQuery = useQuery({
     queryKey: ["triage-history", activeVisitId],
     queryFn: () => getTriageHistory(activeVisitId as string),
-    enabled: !!activeVisitId,
+    enabled: !!activeVisitId && canCaptureVitals,
   });
   const vitalsHistory = vitalsHistoryQuery.data ?? [];
   const latestVitals: TriageAssessment | undefined = vitalsHistory
@@ -1038,10 +1097,7 @@ export function PatientDetailPage() {
   };
 
   const prescribe = useMutation({
-    mutationFn: (visitId: string) => {
-      const { pharmacyItems, purchaseItems } = toPayload(prescriptionDraft);
-      return createPrescription({ visitId, items: pharmacyItems, purchaseItems });
-    },
+    mutationFn: (visitId: string) => createPrescription({ visitId, items: prescriptionItems }),
     onSuccess: (result) => {
       setCreatedPrescription(result);
       setIsPrescribing(false);
@@ -1054,12 +1110,16 @@ export function PatientDetailPage() {
   const handlePrescribe = () => {
     setPrescriptionError(null);
     if (!startedVisit) return;
-    const problems = draftProblems(prescriptionDraft);
-    if (problems.length > 0) {
-      setPrescriptionError(problems.join(" "));
+    const incomplete = prescriptionItems.some((item) => !item.drugName.trim() || !item.dosage.trim());
+    if (incomplete) {
+      setPrescriptionError("Every item needs a drug name and dosage.");
       return;
     }
     prescribe.mutate(startedVisit.visit.id);
+  };
+
+  const updateItem = (index: number, patch: Partial<PrescriptionItemInput>) => {
+    setPrescriptionItems((items) => items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
   };
 
   const patient = patientQuery.data;
@@ -1501,7 +1561,9 @@ export function PatientDetailPage() {
           )}
 
           <div role="tablist" aria-label="Patient record sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-border-subtle">
-            {(["overview", "visits", "vitals", "consultation", "medication"] as const).map((tab) => (
+            {(["overview", "visits", "vitals", "consultation", "medication", "referrals"] as const)
+              .filter((tab) => tab !== "vitals" || canCaptureVitals)
+              .map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -1523,14 +1585,14 @@ export function PatientDetailPage() {
                       ? "Vitals"
                       : tab === "consultation"
                         ? "Consultation"
-                        : "Medication"}
+                        : tab === "referrals" ? "Referrals" : "Medication"}
               </button>
             ))}
           </div>
 
           {activeTab === "visits" && <PatientVisitsTab patientId={patient.id} />}
 
-          {activeTab === "vitals" && (
+          {canCaptureVitals && activeTab === "vitals" && (
             <PatientVitalsHistoryTab
               patientId={patient.id}
               patientName={`${patient.firstName} ${patient.lastName}`}
@@ -1542,9 +1604,11 @@ export function PatientDetailPage() {
 
           {activeTab === "medication" && <PatientPrescriptionsTab patientId={patient.id} />}
 
+          {activeTab === "referrals" && <PatientReferralsTab patientId={patient.id} patientName={`${patient.firstName} ${patient.lastName}`} patientMpi={patient.mpiNumber} patientDateOfBirth={patient.dateOfBirth} patientContactNumber={patient.contactNumber} archived={patient.archived} />}
+
           {activeTab === "overview" && (
             <>
-          {!patient.archived && (
+          {canCaptureVitals && !patient.archived && (
             <Card className="mb-6 p-6">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="text-[14.5px] font-semibold text-text-primary">Vitals / triage</h2>
@@ -1903,9 +1967,56 @@ export function PatientDetailPage() {
                       {prescriptionError}
                     </p>
                   )}
-                  <PrescriptionBuilder draft={prescriptionDraft} onChange={setPrescriptionDraft} />
+                  <div className="flex flex-col gap-3">
+                    {prescriptionItems.map((item, index) => (
+                      <div key={index} className="grid grid-cols-1 gap-3 sm:grid-cols-[2fr_2fr_1fr_auto]">
+                        <Input
+                          label="Drug name"
+                          required={index === 0}
+                          placeholder="Paracetamol"
+                          value={item.drugName}
+                          onChange={(e) => updateItem(index, { drugName: e.target.value })}
+                        />
+                        <Input
+                          label="Dosage"
+                          required={index === 0}
+                          placeholder="500mg twice daily"
+                          value={item.dosage}
+                          onChange={(e) => updateItem(index, { dosage: e.target.value })}
+                        />
+                        <Input
+                          label="Quantity"
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => updateItem(index, { quantity: Number(e.target.value) || 1 })}
+                        />
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            disabled={prescriptionItems.length === 1}
+                            onClick={() =>
+                              setPrescriptionItems((items) => items.filter((_, i) => i !== index))
+                            }
+                            className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary transition-colors duration-150 hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label="Remove item"
+                          >
+                            <Trash2 className="size-4" aria-hidden />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPrescriptionItems((items) => [...items, { ...EMPTY_ITEM }])}
+                    className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-600 hover:text-brand-700"
+                  >
+                    <Plus className="size-3.5" aria-hidden />
+                    Add another item
+                  </button>
                   <div className="mt-4 flex gap-2">
-                    <Button loading={prescribe.isPending} disabled={draftProblems(prescriptionDraft).length > 0} onClick={handlePrescribe}>
+                    <Button loading={prescribe.isPending} onClick={handlePrescribe}>
                       Create prescription
                     </Button>
                     <Button variant="secondary" onClick={() => setIsPrescribing(false)}>
@@ -1972,6 +2083,7 @@ function DemographicsCard({ patient, isOrgAdmin }: { patient: Patient; isOrgAdmi
   const [showHistory, setShowHistory] = useState(false);
   const [draft, setDraft] = useState<PatientDraft>(() => draftFromPatient(patient));
   const [formError, setFormError] = useState<string | null>(null);
+  const [consentError, setConsentError] = useState<string | null>(null);
 
   const historyQuery = useQuery({
     queryKey: ["patients", patient.id, "history"],
@@ -2003,6 +2115,27 @@ function DemographicsCard({ patient, isOrgAdmin }: { patient: Patient; isOrgAdmi
     },
   });
 
+  const changeWhatsAppConsent = useMutation({
+    mutationFn: ({ optedIn, reason }: { optedIn: boolean; reason: string }) =>
+      updatePatientWhatsAppConsent(patient.id, { optedIn, reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["patients", patient.id] });
+      queryClient.invalidateQueries({ queryKey: ["patients", patient.id, "history"] });
+      setConsentError(null);
+    },
+    onError: (error) => {
+      setConsentError(error instanceof ApiError ? error.message : "Couldn't update WhatsApp consent. Try again.");
+    },
+  });
+
+  const handleWhatsAppConsentChange = (optedIn: boolean) => {
+    const reason = window.prompt(
+      optedIn
+        ? "Confirm the patient explicitly agreed to WhatsApp queue updates, then enter why this consent is being recorded:"
+        : "Enter why the patient's WhatsApp queue update consent is being withdrawn:",
+    );
+    if (reason?.trim()) changeWhatsAppConsent.mutate({ optedIn, reason: reason.trim() });
+  };
   const handleSave = () => {
     setFormError(null);
     if (!draft.firstName.trim() || !draft.lastName.trim() || !draft.address.trim() || !draft.contactNumber.trim()) {
@@ -2050,6 +2183,25 @@ function DemographicsCard({ patient, isOrgAdmin }: { patient: Patient; isOrgAdmi
         )}
       </div>
 
+      {!isEditing && isOrgAdmin && !patient.archived && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-border-subtle px-3.5 py-3">
+          <div>
+            <p className="text-[13.5px] font-medium text-text-primary">WhatsApp queue updates</p>
+            <p className="text-[12.5px] text-text-secondary">
+              {patient.whatsappOptIn
+                ? `Patient opted in${patient.whatsappOptedInAt ? ` on ${formatDateTime(patient.whatsappOptedInAt)}` : ""}. Turn this off when they withdraw consent.`
+                : "Patient has not opted in to WhatsApp queue updates."}
+            </p>
+            {consentError && <p role="alert" className="mt-1 text-[12.5px] text-danger-600">{consentError}</p>}
+          </div>
+          <Switch
+            checked={patient.whatsappOptIn}
+            disabled={changeWhatsAppConsent.isPending}
+            onChange={handleWhatsAppConsentChange}
+            label={`Patient opted in to WhatsApp queue updates${changeWhatsAppConsent.isPending ? ", updating" : ""}`}
+          />
+        </div>
+      )}
       {showHistory && !isEditing && (
         <div className="mb-4 rounded-lg border border-border-subtle p-3">
           {historyQuery.isLoading ? (
