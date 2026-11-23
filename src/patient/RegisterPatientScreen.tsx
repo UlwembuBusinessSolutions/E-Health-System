@@ -1,7 +1,7 @@
 import { useRef, useState, type ComponentType } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"; // OFFLINE: useLocation
 import { motion } from "framer-motion";
 import clsx from "clsx";
@@ -44,6 +44,7 @@ import {
   type RegisterPatientPayload, // OFFLINE
 } from "@/shared/api/patients";
 import { ApiError } from "@/shared/api/client";
+import { getOrganizationSelf } from "@/shared/api/organization";
 import { linkQueueTokenToPatient } from "@/shared/api/queue";
 import { Input } from "@/shared/components/Input";
 import { Button } from "@/shared/components/Button";
@@ -347,6 +348,7 @@ export function RegisterPatientScreen() {
   const queueTokenId = UUID_PATTERN.test(requestedQueueTokenId) ? requestedQueueTokenId : undefined;
   const invalidQueueToken = requestedQueueTokenId.length > 0 && !queueTokenId;
   const [savedOffline, setSavedOffline] = useState<{ name: string; skipped: boolean } | null>(null);
+  const organizationQuery = useQuery({ queryKey: ["organization", "self"], queryFn: getOrganizationSelf });
 
   const [formError, setFormError] = useState<string | null>(null);
   const [tokenLinkError, setTokenLinkError] = useState<string | null>(null);
@@ -374,6 +376,7 @@ export function RegisterPatientScreen() {
     register,
     handleSubmit,
     setValue,
+    watch,
     reset, // OFFLINE
     formState: { errors, isSubmitting },
   } = useForm<RegisterPatientValues>({
@@ -391,6 +394,7 @@ export function RegisterPatientScreen() {
       patientFileNumber: resend?.values.patientFileNumber ?? "",
       address: resend?.values.address ?? "",
       contactNumber: resend?.values.contactNumber ?? "",
+      whatsappOptIn: resend?.values.whatsappOptIn ?? false,
       email: resend?.values.email ?? "",
       medicalAidProvider: resend?.values.medicalAidProvider ?? "",
       medicalAidNumber: resend?.values.medicalAidNumber ?? "",
@@ -411,6 +415,7 @@ export function RegisterPatientScreen() {
     patientFileNumber: v.patientFileNumber || undefined,
     address: v.address,
     contactNumber: v.contactNumber,
+    whatsappOptIn: v.whatsappOptIn,
     email: v.email || undefined,
     medicalAidProvider: v.medicalAidProvider || undefined,
     medicalAidNumber: v.medicalAidNumber || undefined,
@@ -895,6 +900,21 @@ export function RegisterPatientScreen() {
               error={errors.contactNumber?.message}
               {...register("contactNumber")}
             />
+
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border-subtle px-3.5 py-3">
+              <div>
+                <p className="text-[13.5px] font-medium text-text-primary">WhatsApp queue updates</p>
+                <p className="text-[12.5px] text-text-secondary">
+                  Confirm the patient explicitly agreed to receive queue updates from{" "}
+                  {organizationQuery.data?.displayName ?? "this clinic"} on WhatsApp.
+                </p>
+              </div>
+              <Switch
+                checked={watch("whatsappOptIn")}
+                onChange={(checked) => setValue("whatsappOptIn", checked, { shouldDirty: true })}
+                label="Patient opted in to WhatsApp queue updates"
+              />
+            </div>
 
             <Input
               label="Email"

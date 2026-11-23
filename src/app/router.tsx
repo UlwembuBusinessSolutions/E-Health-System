@@ -14,6 +14,8 @@ import { RegisterPatientScreen } from "@/patient/RegisterPatientScreen";
 import { PatientDetailPage } from "@/patient/PatientDetailPage";
 import { ReceptionPage } from "@/reception/ReceptionPage";
 import { QueuePage } from "@/queue/QueuePage";
+import { NotificationsPage } from "@/app/NotificationsPage";
+import { ReferralsPage } from "@/app/ReferralsPage";
 import { VitalsIntakePage } from "@/queue/VitalsIntakePage";
 import { TicketPrintPage } from "@/queue/TicketPrintPage";
 import { VitalsPrintPage } from "@/patient/VitalsPrintPage";
@@ -61,6 +63,7 @@ import { UsersPage } from "@/platform/UsersPage";
 import { CreateOperatorScreen } from "@/platform/CreateOperatorScreen";
 import { AuditPage } from "@/platform/AuditPage";
 import { ModuleEntitlementMatrixPage } from "@/platform/ModuleEntitlementMatrixPage";
+import { CreateOrganizationStaffPage } from "@/platform/CreateOrganizationStaffPage";
 import { SyncCenterPage } from "@/offline/SyncCenterPage"; // OFFLINE
 import { SecurityPage } from "@/auth/SecurityPage";
 
@@ -162,6 +165,8 @@ export function AppRouter() {
         <Route path="patients/:id" element={<PatientDetailPage />} />
         <Route path="reception" element={<ReceptionPage />} />
         <Route path="queue" element={<QueuePage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="referrals" element={<ReferralsPage />} />
         {/* OFFLINE: pending records on this device + conflicts needing a decision.
             No RequireRole — resolving a conflict is admin-only on the server. */}
         <Route path="sync" element={<SyncCenterPage />} />
@@ -229,6 +234,7 @@ export function AppRouter() {
           <Route path="organizations/:id/roles" element={<OrganizationRolePermissionsPage />} />
           <Route path="organizations/:id/admins/new" element={<AddOrganizationAdminScreen />} />
           <Route path="organizations/:id/facilities/new" element={<AddClinicScreen />} />
+          <Route path="staff/new" element={<CreateOrganizationStaffPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="users/new" element={<CreateOperatorScreen />} />
           <Route path="audit" element={<AuditPage />} />

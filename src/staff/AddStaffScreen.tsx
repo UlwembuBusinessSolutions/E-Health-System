@@ -16,7 +16,7 @@ import {
   type EmploymentType,
   type StaffSummary,
 } from "@/shared/api/staff";
-import { getFacilities } from "@/shared/api/facilities";
+import { getManagedFacilities } from "@/shared/api/facilities";
 import { getRoles } from "@/shared/api/roles";
 import { ApiError } from "@/shared/api/client";
 import type { Gender } from "@/shared/api/types";
@@ -44,7 +44,11 @@ export function AddStaffScreen() {
   const [checkingField, setCheckingField] = useState<UniqueField | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
 
-  const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities });
+  const facilitiesQuery = useQuery({
+    queryKey: ["organization", "managed-facilities"],
+    queryFn: getManagedFacilities,
+    select: (facilities) => facilities.filter((facility) => facility.active),
+  });
   const rolesQuery = useQuery({ queryKey: ["roles"], queryFn: getRoles });
 
   const {
@@ -377,8 +381,16 @@ export function AddStaffScreen() {
                 <Select
                   label="Clinic"
                   required
-                  placeholder={facilitiesQuery.isLoading ? "Loading clinics…" : "Select clinic"}
-                  disabled={facilitiesQuery.isLoading}
+                  placeholder={
+                    facilitiesQuery.isLoading
+                      ? "Loading clinics…"
+                      : facilitiesQuery.isError
+                        ? "Unable to load clinics"
+                        : facilitiesQuery.data?.length
+                          ? "Select clinic"
+                          : "No clinics available"
+                  }
+                  disabled={facilitiesQuery.isLoading || !facilitiesQuery.data?.length}
                   options={(facilitiesQuery.data ?? []).map((f) => ({ value: f.id, label: f.name }))}
                   error={errors.facilityId?.message}
                   {...register("facilityId")}
@@ -393,6 +405,33 @@ export function AddStaffScreen() {
                   {...register("roleId")}
                 />
               </FormRow>
+              {facilitiesQuery.isError && (
+                <div role="alert" className="flex flex-wrap items-center gap-2 text-[13px] text-danger-600">
+                  <span>
+                    {facilitiesQuery.error instanceof ApiError
+                      ? `Clinics could not be loaded: ${facilitiesQuery.error.message}`
+                      : "Clinics could not be loaded. Please try again."}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="md"
+                    loading={facilitiesQuery.isFetching}
+                    onClick={() => void facilitiesQuery.refetch()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
+              {facilitiesQuery.isSuccess && facilitiesQuery.data.length === 0 && (
+                <p role="status" className="text-[13px] text-text-secondary">
+                  There are no active clinics available. Add one in{" "}
+                  <Link to="/app/settings?section=facilities" className="font-medium text-brand-600 underline">
+                    Settings → Facilities
+                  </Link>{" "}
+                  before creating staff, or contact your platform administrator if you expected an existing clinic.
+                </p>
+              )}
 
               <FormRow>
                 <Input label="Department" placeholder="Outpatients" error={errors.department?.message} {...register("department")} />
