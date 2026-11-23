@@ -61,7 +61,7 @@ public class PatientController {
                 request.idNumber(), request.address(), request.contactNumber(), request.email(),
                 request.medicalAidProvider(), request.medicalAidNumber(), request.passportNumber(),
                 request.passportExpiry(), request.dateOfBirth(), request.parentRelationship(),
-                request.patientFileNumber());
+                request.patientFileNumber(), request.whatsappOptIn());
         Patient patient = patientService.register(command, staff.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(PatientSummary.from(patient, false));
     }
@@ -215,6 +215,14 @@ public class PatientController {
         return ResponseEntity.ok(PatientSummary.from(patient, false));
     }
 
+    @PatchMapping("/api/v1/admin/patients/{id}/whatsapp-consent")
+    public ResponseEntity<PatientSummary> updateWhatsAppConsent(@PathVariable UUID id,
+            @Valid @RequestBody WhatsAppConsentRequest request,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        Patient patient = patientService.updateWhatsAppConsent(id, request.optedIn(), request.reason(), staff.userId());
+        return ResponseEntity.ok(PatientSummary.from(patient, false));
+    }
+
     // The read half of PREG-US-016 AC1 — without this, an append-only
     // history table nobody can see is functionally invisible; admin-only
     // for the same reason update() above is (this is where the "who
@@ -293,6 +301,7 @@ public class PatientController {
             @Pattern(regexp = "^\\s*$|^\\d{13}$", message = "ID number must be 13 digits") String idNumber,
             @NotBlank String address,
             @NotBlank @Pattern(regexp = "^\\+?[0-9]{9,15}$") String contactNumber,
+            boolean whatsappOptIn,
             // Optional — cross-tenant patient migration's own notification
             // email is the first thing that actually reads this; nothing
             // required it at registration before that feature existed.
@@ -320,15 +329,19 @@ public class PatientController {
                                   String medicalAidProvider, String medicalAidNumber, String passportNumber,
                                   LocalDate passportExpiry, Instant createdAt, boolean archived,
                                   String archivedReason, Instant archivedAt, LocalDate deceasedDate,
-                                  boolean migrated) {
+                                  boolean migrated, boolean whatsappOptIn, Instant whatsappOptedInAt) {
         static PatientSummary from(Patient p, boolean migrated) {
             return new PatientSummary(p.getId(), p.getMpiNumber(), p.getFirstName(), p.getLastName(),
                     p.getDateOfBirth(), p.getParentRelationship(), p.getPatientFileNumber(), p.getGender(),
                     p.getCitizenshipStatus(), p.getIdNumber(), p.getAddress(), p.getContactNumber(), p.getEmail(),
                     p.getMedicalAidProvider(), p.getMedicalAidNumber(),
                     p.getPassportNumber(), p.getPassportExpiry(), p.getCreatedAt(), p.isArchived(),
-                    p.getArchivedReason(), p.getArchivedAt(), p.getDeceasedDate(), migrated);
+                    p.getArchivedReason(), p.getArchivedAt(), p.getDeceasedDate(), migrated,
+                    p.isWhatsAppOptedIn(), p.getWhatsAppOptedInAt());
         }
+    }
+
+    public record WhatsAppConsentRequest(boolean optedIn, @NotBlank String reason) {
     }
 
     // s3Key deliberately excluded — PatientDocumentService.getDownloadUrl()

@@ -1,6 +1,8 @@
 package co.ehealth.platform.visit;
 
 import co.ehealth.platform.core.audit.AuditLogService;
+import co.ehealth.platform.core.notification.WhatsAppMessageTemplate;
+import co.ehealth.platform.core.notification.WhatsAppNotificationDispatcher;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.facility.Facility;
 import co.ehealth.platform.facility.FacilityRepository;
@@ -9,9 +11,12 @@ import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.patient.PatientService;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +38,8 @@ public class VisitService {
     private final AuditLogService auditLogService;
     private final Clock clock;
     private final PermissionService permissionService;
+    @Autowired
+    private WhatsAppNotificationDispatcher whatsAppNotifications;
 
     public VisitService(VisitRepository visitRepository, PatientService patientService,
                          FacilityService facilityService, FacilityRepository facilityRepository,
@@ -60,14 +67,24 @@ public class VisitService {
     public VisitWithToken createVisit(CreateVisitCommand cmd, UUID staffUserId) {
         permissionService.requireAccessOrAnyRole(
                 ModuleCode.RECQ, PermissionLevel.MANAGE, PHARMACIST_ROLE, VISIT_START_ACCESS_MESSAGE);
-        patientService.get(cmd.patientId());
-        facilityService.get(cmd.facilityId());
+        var patient = patientService.get(cmd.patientId());
+        Facility facility = facilityService.get(cmd.facilityId());
 
         Visit visit = new Visit(cmd.patientId(), cmd.facilityId(), cmd.visitType(), cmd.serviceStream(),
                 clock.instant(), staffUserId);
         visitRepository.save(visit);
 
         QueueToken token = queueService.issueAutomaticToken(visit, staffUserId);
+
+        if (whatsAppNotifications != null) {
+            String checkInTime = visit.getVisitDateTime().atZone(ZoneId.of(facility.getTimezone()))
+                    .format(DateTimeFormatter.ofPattern("HH:mm"));
+            whatsAppNotifications.sendPatientAfterCommit(patient, WhatsAppMessageTemplate.VISIT_CHECKED_IN,
+                    Map.of("patient_first_name", patient.getFirstName(),
+                            "facility_name", facility.getName(),
+                            "queue_token", Integer.toString(token.getTokenNumber()),
+                            "check_in_time", checkInTime + " " + facility.getTimezone()), token.getId().toString());
+        }
 
         auditLogService.append(staffUserId, cmd.facilityId(), "VISIT_CREATED", "Visit", visit.getId().toString(),
                 null, null);

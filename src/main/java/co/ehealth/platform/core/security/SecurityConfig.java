@@ -106,7 +106,7 @@ public class SecurityConfig {
         // genuinely RESTful "edit this resource" endpoint in the app;
         // without it here, a real browser's preflight for that call would
         // reject PATCH before the request ever reached the filter chain.
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         // X-Platform-Key listed alongside the tenant headers — a header not
         // listed here gets stripped by the browser's CORS preflight before
         // it ever reaches PlatformJwtAuthenticationFilter, which would look

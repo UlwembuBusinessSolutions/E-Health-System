@@ -88,7 +88,7 @@ public class OfflineRegistrationProcessor {
                 new PatientService.RegisterPatientCommand(d.firstName(), d.lastName(), d.idNumber(), d.address(),
                         d.contactNumber(), d.email(), d.medicalAidProvider(), d.medicalAidNumber(),
                         d.passportNumber(), d.passportExpiry(), d.dateOfBirth(), d.parentRelationship(),
-                        d.patientFileNumber()),
+                        d.patientFileNumber(), d.whatsappOptIn()),
                 userId, capturedAt);
         record.markSynced(patient.getId());
         syncRepo.save(record);
@@ -131,7 +131,7 @@ public class OfflineRegistrationProcessor {
             return registration;
         }
         return new PatientController.RegisterPatientRequest(registration.firstName(), registration.lastName(),
-                registration.idNumber(), registration.address(), registration.contactNumber(), registration.email(),
+                registration.idNumber(), registration.address(), registration.contactNumber(), registration.whatsappOptIn(), registration.email(),
                 registration.medicalAidProvider(), registration.medicalAidNumber(), registration.passportNumber(),
                 registration.passportExpiry(), legacyDateOfBirth, registration.parentRelationship(),
                 registration.patientFileNumber());

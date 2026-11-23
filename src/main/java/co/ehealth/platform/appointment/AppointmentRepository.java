@@ -3,9 +3,12 @@ package co.ehealth.platform.appointment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,4 +42,12 @@ public interface AppointmentRepository extends JpaRepository<Appointment, UUID> 
             UUID facilityId, UUID assignedStaffId, LocalDate date, String status);
 
     List<Appointment> findByPatientIdOrderByAppointmentDateAscAppointmentTimeAsc(UUID patientId);
+    List<Appointment> findByFacilityIdAndStatusAndWhatsappReminderAttemptedAtIsNullAndStartsAtBetweenOrderByStartsAtAsc(
+            UUID facilityId, String status, Instant from, Instant to);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE Appointment a SET a.whatsappReminderAttemptedAt = :attemptedAt "
+            + "WHERE a.id = :id AND a.whatsappReminderAttemptedAt IS NULL AND a.status = 'CONFIRMED'")
+    int markWhatsAppReminderAttemptIfPending(@Param("id") UUID id, @Param("attemptedAt") Instant attemptedAt);
 }

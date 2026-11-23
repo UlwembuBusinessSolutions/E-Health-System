@@ -119,7 +119,7 @@ public class PatientMigrationWriter {
                 destinationPatient.getId().toString(), null, null);
 
         return new DestinationWriteResult(destinationPatient.getId(), destinationPatient.getMpiNumber(),
-                destinationFacility.getName());
+                destinationFacility.getName(), destinationFacility.getAddress());
     }
 
     public record DestinationWriteCommand(String tenantCode, UUID destinationFacilityId, String firstName,
@@ -132,6 +132,6 @@ public class PatientMigrationWriter {
     }
 
     public record DestinationWriteResult(UUID destinationPatientId, String destinationMpiNumber,
-                                          String destinationFacilityName) {
+                                          String destinationFacilityName, String destinationFacilityAddress) {
     }
 }
