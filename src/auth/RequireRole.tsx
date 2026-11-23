@@ -5,13 +5,17 @@ import { useAuth } from "./AuthContext";
 // Only checks the role — nest inside RequireAuth, which already guarantees
 // `user` is set. Kept separate rather than folded into RequireAuth so a
 // route can require login without also requiring a specific role.
-export function RequireRole({ role, roles, children }: {
+export function RequireRole({ role, roles, redirectTo = "/app", children }: {
   role?: string;
   roles?: readonly string[];
+  redirectTo?: string;
   children: ReactNode;
 }) {
   const { user } = useAuth();
-  const allowed = roles ? roles.includes(user?.role ?? "") : user?.role === role;
-  if (!allowed) return <Navigate to="/app" replace />;
+  const assignedRoles = user ? [user.role] : [];
+  const allowed = roles
+    ? roles.some((requiredRole) => assignedRoles.includes(requiredRole))
+    : assignedRoles.includes(role ?? "");
+  if (!allowed) return <Navigate to={redirectTo} replace />;
   return <>{children}</>;
 }

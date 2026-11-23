@@ -1,6 +1,7 @@
 import { VisitTimingPanel } from "./VisitTimingPanel";
 import { generateUUID } from "../utils/uuid";
 import { PatientVisitsTab } from "./PatientVisitsTab";
+import { PatientReferralsTab } from "./PatientReferralsTab";
 import { createPortal } from "react-dom";
 import { VitalsOverview } from "./VitalsOverview";
 import { PatientConsultationTab } from "./PatientConsultationTab";
@@ -763,7 +764,7 @@ export function PatientDetailPage() {
   const [searchParams] = useSearchParams();
   const isWalkIn = searchParams.get("walkIn") === "true" || !id;
   const walkInTokenNumber = searchParams.get("tokenNumber");
-  const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits">(() => {
+  const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits" | "referrals">(() => {
     const tab = searchParams.get("tab");
     return tab === "vitals" || tab === "consultation" || tab === "medication" ? tab : "overview";
   });
@@ -1671,7 +1672,7 @@ export function PatientDetailPage() {
           {activeVisitId && <VisitTimingPanel key={activeVisitId} visitId={activeVisitId} />}
 
           <div role="tablist" aria-label="Patient record sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-border-subtle">
-            {(["overview", "visits", "vitals", "consultation", "medication"] as const).map((tab) => (
+            {(["overview", "visits", "vitals", "consultation", "medication", "referrals"] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -1714,6 +1715,8 @@ export function PatientDetailPage() {
           {activeTab === "consultation" && <PatientConsultationTab patientId={patient.id} visitId={activeVisitId} onTakeVitals={() => setActiveTab("vitals")} />}
 
           {activeTab === "medication" && <PatientPrescriptionsTab patientId={patient.id} />}
+
+          {activeTab === "referrals" && <PatientReferralsTab patientId={patient.id} patientName={`${patient.firstName} ${patient.lastName}`} patientMpi={patient.mpiNumber} patientDateOfBirth={patient.dateOfBirth} patientContactNumber={patient.contactNumber} archived={patient.archived} />}
 
           {activeTab === "overview" && (
             <>

@@ -3,6 +3,7 @@ import { Sidebar } from "./components/Sidebar";
 import { MobileTopBar } from "./components/MobileTopBar";
 import { useOrganizationBranding } from "./useOrganizationBranding";
 import { OfflineStatusBar } from "@/offline/OfflineStatusBar"; // OFFLINE
+import { IncomingReferralNotifications } from "@/patient/IncomingReferralNotifications";
 
 // The authenticated frame every real tenant screen renders inside —
 // Dashboard, Staff, and staff creation. Mirrors PlatformShell.tsx exactly
@@ -14,6 +15,7 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
+      <IncomingReferralNotifications />
       <Sidebar />
       <MobileTopBar />
       <main className="min-w-0 flex-1">

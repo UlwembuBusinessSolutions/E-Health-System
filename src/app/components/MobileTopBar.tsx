@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Gauge, LogOut, Pill, RefreshCw, ShieldCheck, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
+import { Bell, ClipboardList, Gauge, LogOut, Pill, RefreshCw, ShieldCheck, Ticket, UserRound, Users as UsersIcon } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 import { getTenantSlug } from "@/shared/api/auth";
 import { getOrganizationSelf } from "@/shared/api/organization";
@@ -35,6 +35,8 @@ export function MobileTopBar() {
     { to: "/app", label: "Dashboard", icon: Gauge, end: true },
     { to: "/app/patients", label: "Patients", icon: UserRound, end: false },
     { to: "/app/queue", label: "Queue", icon: Ticket, end: false },
+    { to: "/app/notifications", label: "Notifications", icon: Bell, end: false },
+    { to: "/app/referrals", label: "Referrals", icon: ClipboardList, end: false },
     { to: "/app/sync", label: "Sync", icon: RefreshCw, end: false }, // OFFLINE
     { to: "/app/security", label: "Security", icon: ShieldCheck, end: false },
     ...(user?.role && APPOINTMENT_ROLES.has(user.role)
