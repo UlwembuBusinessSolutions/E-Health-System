@@ -1,6 +1,7 @@
 
 export const VITALS_ROLES = new Set(["Doctor", "Professional Nurse"]);
 const REFERRAL_MANAGEMENT_ROLES = new Set([
+  "ORG_ADMIN",
   "Professional Nurse",
   "Doctor",
   "Clinician",
@@ -24,11 +25,16 @@ export const CLINICIAN_DASHBOARD_ROLES = new Set([
   "Occupational Health Practitioner",
 ]);
 
+export const PHARMACY_MANAGER_DASHBOARD_ROLES = new Set(["Pharmacy Manager"]);
+
 export function usesClinicianDashboard(role: string | undefined): boolean {
   return role !== undefined && CLINICIAN_DASHBOARD_ROLES.has(role);
+}
+
+export function usesPharmacyManagerDashboard(role: string | undefined): boolean {
+  return role !== undefined && PHARMACY_MANAGER_DASHBOARD_ROLES.has(role);
 }
 
 export function canManagePatientReferrals(role: string | undefined): boolean {
   return role !== undefined && REFERRAL_MANAGEMENT_ROLES.has(role);
 }
-

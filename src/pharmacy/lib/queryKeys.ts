@@ -19,6 +19,9 @@ export const pharmacyKeys = {
     all: [ROOT, "overview"] as const,
     detail: (facilityId: string) => [ROOT, "overview", facilityId] as const,
   },
+  managerDashboard: {
+    all: [ROOT, "manager-dashboard"] as const,
+  },
   products: {
     all: [ROOT, "products"] as const,
     detail: (productId: string) => [ROOT, "products", "detail", productId] as const,
@@ -97,6 +100,7 @@ export function invalidateAfterStockMovement(queryClient: QueryClient): Promise<
       pharmacyKeys.register.all,
       pharmacyKeys.dispensing.all,
       pharmacyKeys.overview.all,
+      pharmacyKeys.managerDashboard.all,
     ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
   );
 }

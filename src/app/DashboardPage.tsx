@@ -1,6 +1,6 @@
 import { useRef, type ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { Camera, LayoutGrid, ShieldCheck, UserPlus, Users as UsersIcon } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 import { getOrganizationSelf, getOrganizationModules, uploadOrganizationLogo } from "@/shared/api/organization";
@@ -11,7 +11,7 @@ import { StatCard } from "@/shared/components/StatCard";
 import { StatusPill } from "@/shared/components/StatusPill";
 import { PageHeader } from "@/shared/components/PageHeader";
 import { InProgressConsultations } from "@/patient/InProgressConsultations";
-import { usesClinicianDashboard } from "@/auth/roles";
+import { usesClinicianDashboard, usesPharmacyManagerDashboard } from "@/auth/roles";
 import { ClinicianDashboardPage } from "@/clinician/ClinicianDashboardPage";
 
 function sectorLabel(sector: string): string {
@@ -31,6 +31,9 @@ function sectorLabel(sector: string): string {
 // the server won't show that role the queue. Everyone else sees this one.
 export function DashboardPage() {
   const { user } = useAuth();
+  if (usesPharmacyManagerDashboard(user?.role)) {
+    return <Navigate to="/app/pharmacy" replace />;
+  }
   if (usesClinicianDashboard(user?.role)) {
     return <ClinicianDashboardPage fallback={<OrganizationDashboard />} />;
   }

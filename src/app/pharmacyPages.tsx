@@ -17,6 +17,7 @@ export const AddProductPage = lazyPage(() => import("@/pharmacy/products/AddProd
 export const ReceiveStockPage = lazyPage(() => import("@/pharmacy/receiving/ReceiveStockPage"), "ReceiveStockPage");
 export const SuppliersPage = lazyPage(() => import("@/pharmacy/suppliers/SuppliersPage"), "SuppliersPage");
 export const ReorderPage = lazyPage(() => import("@/pharmacy/reorder/ReorderPage"), "ReorderPage");
+export const PurchaseOrdersPage = lazyPage(() => import("@/pharmacy/purchasing/PurchaseOrdersPage"), "PurchaseOrdersPage");
 export const LedgerPage = lazyPage(() => import("@/pharmacy/ledger/LedgerPage"), "LedgerPage");
 export const StockCountPage = lazyPage(() => import("@/pharmacy/counts/StockCountPage"), "StockCountPage");
 export const ScheduleRegisterPage = lazyPage(() => import("@/pharmacy/register/ScheduleRegisterPage"), "ScheduleRegisterPage");

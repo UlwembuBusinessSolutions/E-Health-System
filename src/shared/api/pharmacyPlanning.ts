@@ -110,6 +110,17 @@ export function createPurchaseOrder(payload: CreatePurchaseOrderPayload): Promis
   return apiClient.post<PurchaseOrder>(`${BASE}/purchase-orders`, payload, { headers: tenantAuthHeaders() });
 }
 
+export function listPurchaseOrders(
+  facilityId: string,
+  page = 0,
+  size = 50,
+): Promise<PagedResult<PurchaseOrder>> {
+  return apiClient.get<PagedResult<PurchaseOrder>>(
+    `${BASE}/purchase-orders?${queryString({ facilityId, page, size })}`,
+    { headers: tenantAuthHeaders() },
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Opening stock                                                       */
 /* ------------------------------------------------------------------ */

@@ -60,7 +60,10 @@ export function SupplierOrderPanel({ facilityId, supplier, onOrderCreated }: Sup
       }),
     onSuccess: async (order) => {
       // The supplier's "last ordered" date and "to order" count just changed.
-      await queryClient.invalidateQueries({ queryKey: pharmacyKeys.reorder.all });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: pharmacyKeys.reorder.all }),
+        queryClient.invalidateQueries({ queryKey: pharmacyKeys.managerDashboard.all }),
+      ]);
       onOrderCreated(order);
     },
     onError: (error) => showToast(describeError(error), "error"),
