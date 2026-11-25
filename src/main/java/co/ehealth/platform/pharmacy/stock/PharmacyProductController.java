@@ -81,7 +81,12 @@ public class PharmacyProductController {
                                                    @AuthenticationPrincipal AuthenticatedPrincipal principal) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.MANAGE);
         User actor = currentUser(principal);
-        String authoritativeCode = productCode(request.category(), request.displayName(), request.strength(), request.dosageForm());
+        // New clients send the standalone product name so this rule exactly
+        // matches the code preview. Keep accepting the submitted code from
+        // older clients that do not yet send that field.
+        String authoritativeCode = request.name() == null || request.name().isBlank()
+                ? request.code()
+                : productCode(request.category(), request.name(), request.strength(), request.dosageForm());
         PharmacyProduct product = productService.create(authoritativeCode, request.displayName(),
                 request.genericName(), request.strength(), request.dosageForm(), request.category(),
                 request.baseUnit(), request.packSize(), request.barcode(), request.manufacturer(),
@@ -135,9 +140,8 @@ public class PharmacyProductController {
     // Product identity comes from the saved name, strength, and form. The
     // submitted preview code is client-controlled and may be stale, so the
     // server generates the persisted identity using the same rule as the UI.
-    private static String productCode(StockCategory category, String displayName, String strength, String dosageForm) {
-        String firstWord = displayName == null ? "" : displayName.trim().split("\\s+", 2)[0];
-        String nameCode = firstWord.replaceAll("[^A-Za-z]", "").toUpperCase(java.util.Locale.ROOT);
+    private static String productCode(StockCategory category, String name, String strength, String dosageForm) {
+        String nameCode = name.replaceAll("[^A-Za-z]", "").toUpperCase(java.util.Locale.ROOT);
         nameCode = nameCode.substring(0, Math.min(4, nameCode.length()));
         String strengthCode = strength == null ? "" : java.util.regex.Pattern.compile("\\d+").matcher(strength)
                 .results().findFirst().map(java.util.regex.MatchResult::group).orElse("");
@@ -154,7 +158,7 @@ public class PharmacyProductController {
     }
 
     public record CreateProductRequest(
-            @NotBlank String code, @NotBlank String displayName, String genericName, String strength,
+            @NotBlank String code, @NotBlank String displayName, String name, String genericName, String strength,
             String dosageForm, @NotNull StockCategory category, @NotNull StockBaseUnit baseUnit, Integer packSize,
             String barcode, String manufacturer,
             @Pattern(regexp = "([A-Za-z][0-9]{2}[A-Za-z]{2}([A-Za-z0-9]{1,2})?)?") String atcCode,
