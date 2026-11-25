@@ -88,6 +88,13 @@ public class ConsultationController {
         return ResponseEntity.ok(body);
     }
 
+    @GetMapping("/api/v1/consultations/in-progress")
+    public ResponseEntity<Map<String, Object>> inProgress(
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return ResponseEntity.ok(Map.of("items",
+                consultationService.getInProgressConsultations(staff.userId())));
+    }
+
     // The patient's consultations across all their visits, newest first, each with the visit it belongs to.
     @GetMapping("/api/v1/patients/{patientId}/consultations")
     public ResponseEntity<Map<String, Object>> patientConsultations(@PathVariable UUID patientId) {

@@ -64,13 +64,19 @@ public class PharmacyStockWorklistService {
 
     // Expired lots plus lots expiring within `days`, earliest first.
     public Page<ExpiryLotRow> listExpiringLots(UUID facilityId, int days, int page, int size) {
+        return listExpiringLots(facilityId, days, true, page, size);
+    }
+
+    // The dashboard can request a forward-only window: today and the final
+    // day are included, while expired stock is kept in its own worklist.
+    public Page<ExpiryLotRow> listExpiringLots(UUID facilityId, int days, boolean includeExpired, int page, int size) {
         if (days < 0) {
             throw new InvalidStockRequestException("The number of days must be zero or more.");
         }
         Pageable pageable = StockListParams.pageable(page, size);
         LocalDate today = LocalDate.now(clock);
         List<PharmacyStockWorklistRepository.ExpiryLotView> rows = worklistRepository.listExpiringLots(facilityId,
-                today, today.plusDays(days), pageable.getPageSize(), (int) pageable.getOffset());
+                today, today.plusDays(days), includeExpired, pageable.getPageSize(), (int) pageable.getOffset());
         return pageOf(rows, pageable, PharmacyStockWorklistRepository.ExpiryLotView::getTotalItems,
                 row -> toExpiryLotRow(row, today));
     }

@@ -114,7 +114,13 @@ public class PatientMigrationWriter {
         // never evaluated here), so the audit trail should say so plainly.
         // Distinct action for the reactivation case — same entity, but a
         // very different event than a first-ever arrival.
-        auditLogService.append(cmd.registeredByUserId(), cmd.destinationFacilityId(),
+        // The registeredByUserId belongs to the origin tenant. Audit-log
+        // user_id is a same-tenant FK, so using that UUID in the destination
+        // schema violates audit_log_user_id_fkey and rolls back the migration.
+        // The destination facility and action still provide the cross-tenant
+        // trace; actor attribution remains in the origin tenant's
+        // PATIENT_MIGRATED_OUT audit row.
+        auditLogService.append(null, cmd.destinationFacilityId(),
                 reactivated ? "PATIENT_REACTIVATED_VIA_MIGRATION" : "PATIENT_RECEIVED_VIA_MIGRATION", "Patient",
                 destinationPatient.getId().toString(), null, null);
 

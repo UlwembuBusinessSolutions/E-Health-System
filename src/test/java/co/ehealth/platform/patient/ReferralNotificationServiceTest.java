@@ -219,4 +219,50 @@ class ReferralNotificationServiceTest {
         verify(incomingReferralService).accept(notification, userId);
         assertEquals("destination", TenantContext.getCurrentTenant());
     }
+
+    @Test
+    void exposesSupportingDocumentsOnlyThroughAnAssignedDestinationNotification() {
+        UUID organizationId = UUID.randomUUID();
+        UUID facilityId = UUID.randomUUID();
+        UUID notificationId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Organization organization = mock(Organization.class);
+        ReferralNotification notification = mock(ReferralNotification.class);
+        PatientReferralDocument document = new PatientReferralDocument(UUID.randomUUID(), UUID.randomUUID(),
+                "lab-result.pdf", "application/pdf", 128, "patient-referrals/source/key.pdf", userId,
+                Instant.parse("2025-01-01T10:00:00Z"));
+        when(organization.getId()).thenReturn(organizationId);
+        when(organizationRepository.findBySchemaName("destination")).thenReturn(Optional.of(organization));
+        when(userRepository.findFacilityIdsByUserId(userId)).thenReturn(List.of(facilityId));
+        when(notificationRepository.findByIdAndDestinationOrganizationIdAndDestinationFacilityIdIn(
+                notificationId, organizationId, List.of(facilityId))).thenReturn(Optional.of(notification));
+        when(notification.getSourceSchema()).thenReturn("source");
+        when(incomingReferralService.documents(notification)).thenAnswer(invocation -> {
+            assertEquals("source", TenantContext.getCurrentTenant());
+            return List.of(document);
+        });
+        TenantContext.setCurrentTenant("destination");
+
+        List<PatientReferralDocument> result = service.documents(notificationId, userId);
+
+        assertEquals(List.of(document), result);
+        assertEquals("destination", TenantContext.getCurrentTenant());
+        verify(permissionService).requireAccess(co.ehealth.platform.core.tenant.ModuleCode.RECQ,
+                co.ehealth.platform.identity.PermissionLevel.VIEW);
+    }
+
+    @Test
+    void refusesDocumentAccessForAnUnassignedDestinationUser() {
+        UUID notificationId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Organization organization = mock(Organization.class);
+        when(organization.getId()).thenReturn(UUID.randomUUID());
+        when(organizationRepository.findBySchemaName("destination")).thenReturn(Optional.of(organization));
+        when(userRepository.findFacilityIdsByUserId(userId)).thenReturn(List.of());
+        TenantContext.setCurrentTenant("destination");
+
+        assertThrows(AccessDeniedException.class, () -> service.documents(notificationId, userId));
+
+        verify(incomingReferralService, never()).documents(any());
+    }
 }

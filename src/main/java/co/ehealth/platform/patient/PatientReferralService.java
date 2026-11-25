@@ -14,15 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -33,11 +29,11 @@ import java.util.UUID;
 @Service
 public class PatientReferralService {
 
-    private static final Set<String> CLINICAL_ROLES =
-            Set.of("Professional Nurse", "Doctor", "Clinician", "Occupational Health Practitioner");
-    private static final String ROLE_DENIED = "Only clinical staff may create or update patient referrals.";
+    private static final Set<String> REFERRAL_MANAGEMENT_ROLES =
+            Set.of("ORG_ADMIN", "Professional Nurse", "Doctor", "Clinician", "Occupational Health Practitioner");
+    private static final String ROLE_DENIED =
+            "Only organization administrators or clinical staff may manage patient referrals.";
     private static final long MAX_FILE_SIZE = 5L * 1024 * 1024;
-    private static final Duration DOWNLOAD_URL_TTL = Duration.ofMinutes(5);
     private static final Map<String, String> ALLOWED_CONTENT_TYPES = Map.of(
             "application/pdf", "pdf",
             "image/jpeg", "jpg",
@@ -51,12 +47,12 @@ public class PatientReferralService {
     private final PatientReferralRepository referralRepository;
     private final PatientReferralEventRepository eventRepository;
     private final PatientReferralDocumentRepository documentRepository;
+    private final PatientReferralDocumentAccessService documentAccessService;
     private final PermissionService permissionService;
     private final UserRepository userRepository;
     private final ReferralDestinationService destinationService;
     private final ReferralNotificationService notificationService;
     private final S3Client s3Client;
-    private final S3Presigner s3Presigner;
     private final String bucketName;
     private final Clock clock;
 
@@ -65,25 +61,25 @@ public class PatientReferralService {
                                   PatientReferralDocumentRepository documentRepository,
                                   PermissionService permissionService, ReferralDestinationService destinationService,
                                   UserRepository userRepository, ReferralNotificationService notificationService,
-                                  S3Client s3Client, S3Presigner s3Presigner,
+                                  PatientReferralDocumentAccessService documentAccessService, S3Client s3Client,
                                   @Value("${app.storage.bucket-name}") String bucketName, Clock clock) {
         this.patientService = patientService;
         this.referralRepository = referralRepository;
         this.eventRepository = eventRepository;
         this.documentRepository = documentRepository;
+        this.documentAccessService = documentAccessService;
         this.permissionService = permissionService;
         this.userRepository = userRepository;
         this.destinationService = destinationService;
         this.notificationService = notificationService;
         this.s3Client = s3Client;
-        this.s3Presigner = s3Presigner;
         this.bucketName = bucketName;
         this.clock = clock;
     }
 
     @Transactional
     public PatientReferral createDraft(UUID patientId, UUID actorId, ReferralCommand command) {
-        requireClinicalManage();
+        requireReferralManage();
         requireEditablePatient(patientId);
         Instant now = clock.instant();
         PatientReferral referral = new PatientReferral(patientId, command.referralType(),
@@ -101,7 +97,7 @@ public class PatientReferralService {
 
     @Transactional
     public PatientReferral updateDraft(UUID patientId, UUID referralId, UUID actorId, ReferralCommand command) {
-        requireClinicalManage();
+        requireReferralManage();
         requireEditablePatient(patientId);
         PatientReferral referral = find(patientId, referralId);
         requireDraft(referral);
@@ -117,7 +113,7 @@ public class PatientReferralService {
     @Transactional
     public PatientReferral changeStatus(UUID patientId, UUID referralId, UUID actorId,
                                         PatientReferralStatus target, String note) {
-        requireClinicalManage();
+        requireReferralManage();
         requireEditablePatient(patientId);
         PatientReferral referral = find(patientId, referralId);
         PatientReferralStatus current = referral.getStatus();
@@ -163,13 +159,13 @@ public class PatientReferralService {
 
     public List<PatientReferralDocument> documents(UUID patientId, UUID referralId) {
         requireView();
-        find(patientId, referralId);
-        return documentRepository.findByReferralIdOrderByUploadedAtDesc(referralId);
+        PatientReferral referral = find(patientId, referralId);
+        return documentAccessService.list(referral.getId());
     }
 
     @Transactional
     public PatientReferralDocument uploadDocument(UUID patientId, UUID referralId, UUID actorId, MultipartFile file) {
-        requireClinicalManage();
+        requireReferralManage();
         requireEditablePatient(patientId);
         PatientReferral referral = find(patientId, referralId);
         requireDraft(referral);
@@ -180,6 +176,9 @@ public class PatientReferralService {
             throw new InvalidFileTypeException("Referral documents must be 5 MB or smaller.");
         }
         String contentType = file.getContentType();
+        if (contentType == null || contentType.isBlank()) {
+            throw new InvalidFileTypeException("The referral document type could not be determined.");
+        }
         String extension = ALLOWED_CONTENT_TYPES.get(contentType);
         if (extension == null) {
             throw new InvalidFileTypeException("Only PDF, Word, text, JPEG, PNG, or WebP files are allowed.");
@@ -205,22 +204,16 @@ public class PatientReferralService {
     public String getDocumentDownloadUrl(UUID patientId, UUID referralId, UUID documentId) {
         requireView();
         find(patientId, referralId);
-        PatientReferralDocument document = documentRepository
-                .findByIdAndReferralIdAndPatientId(documentId, referralId, patientId)
-                .orElseThrow(PatientReferralNotFoundException::new);
-        GetObjectRequest get = GetObjectRequest.builder().bucket(bucketName).key(document.getS3Key())
-                .responseContentDisposition("attachment").build();
-        return s3Presigner.presignGetObject(GetObjectPresignRequest.builder()
-                .signatureDuration(DOWNLOAD_URL_TTL).getObjectRequest(get).build()).url().toString();
+        return documentAccessService.getDownloadUrl(patientId, referralId, documentId);
     }
 
     private void requireView() {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
     }
 
-    private void requireClinicalManage() {
+    private void requireReferralManage() {
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);
-        permissionService.requireAnyRole(CLINICAL_ROLES, ROLE_DENIED);
+        permissionService.requireAnyRole(REFERRAL_MANAGEMENT_ROLES, ROLE_DENIED);
     }
 
     private Patient requireEditablePatient(UUID patientId) {

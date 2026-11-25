@@ -100,7 +100,8 @@ class PharmacyStockWorklistTest {
     void expiryRowsAreMarkedExpiredWhenTheirDateHasPassed() {
         var expired = expiryLot("2026-10-01");
         var expiring = expiryLot("2026-10-20");
-        when(repository.listExpiringLots(eq(facilityId), eq(TODAY), eq(TODAY.plusDays(30)), anyInt(), anyInt()))
+        when(repository.listExpiringLots(eq(facilityId), eq(TODAY), eq(TODAY.plusDays(30)), eq(true), anyInt(),
+                anyInt()))
                 .thenReturn(List.of(expired, expiring));
 
         List<PharmacyStockWorklistService.ExpiryLotRow> rows = service.listExpiringLots(facilityId, 30, 0, 50)
@@ -110,6 +111,21 @@ class PharmacyStockWorklistTest {
         assertEquals(-3, rows.get(0).daysToExpiry());
         assertFalse(rows.get(1).expired());
         assertEquals(16, rows.get(1).daysToExpiry());
+    }
+
+    @Test
+    void forwardExpiryWindowIncludesTodayAndDayThirtyButExcludesExpiredLots() {
+        var todayLot = expiryLot(TODAY.toString());
+        var dayThirtyLot = expiryLot(TODAY.plusDays(30).toString());
+        when(repository.listExpiringLots(eq(facilityId), eq(TODAY), eq(TODAY.plusDays(30)), eq(false), anyInt(),
+                anyInt())).thenReturn(List.of(todayLot, dayThirtyLot));
+
+        List<PharmacyStockWorklistService.ExpiryLotRow> rows =
+                service.listExpiringLots(facilityId, 30, false, 0, 50).getContent();
+
+        assertEquals(2, rows.size());
+        assertEquals(0, rows.getFirst().daysToExpiry());
+        assertEquals(30, rows.getLast().daysToExpiry());
     }
 
     @Test
