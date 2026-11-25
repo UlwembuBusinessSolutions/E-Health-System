@@ -81,7 +81,8 @@ public class PharmacyProductController {
                                                    @AuthenticationPrincipal AuthenticatedPrincipal principal) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.MANAGE);
         User actor = currentUser(principal);
-        PharmacyProduct product = productService.create(request.code(), request.displayName(),
+        String authoritativeCode = productCode(request.category(), request.displayName(), request.strength(), request.dosageForm());
+        PharmacyProduct product = productService.create(authoritativeCode, request.displayName(),
                 request.genericName(), request.strength(), request.dosageForm(), request.category(),
                 request.baseUnit(), request.packSize(), request.barcode(), request.manufacturer(),
                 request.batchTracked(), request.expiryTracked(), request.storageInstructions(),
@@ -129,6 +130,27 @@ public class PharmacyProductController {
 
     private static String actorName(User user) {
         return user.getFirstName() + " " + user.getLastName();
+    }
+
+    // Product identity comes from the saved name, strength, and form. The
+    // submitted preview code is client-controlled and may be stale, so the
+    // server generates the persisted identity using the same rule as the UI.
+    private static String productCode(StockCategory category, String displayName, String strength, String dosageForm) {
+        String firstWord = displayName == null ? "" : displayName.trim().split("\\s+", 2)[0];
+        String nameCode = firstWord.replaceAll("[^A-Za-z]", "").toUpperCase(java.util.Locale.ROOT);
+        nameCode = nameCode.substring(0, Math.min(4, nameCode.length()));
+        String strengthCode = strength == null ? "" : java.util.regex.Pattern.compile("\\d+").matcher(strength)
+                .results().findFirst().map(java.util.regex.MatchResult::group).orElse("");
+        String formCode = dosageForm == null ? "" : dosageForm.replaceAll("[^A-Za-z]", "")
+                .toUpperCase(java.util.Locale.ROOT);
+        formCode = formCode.substring(0, Math.min(3, formCode.length()));
+        String prefix = switch (category) {
+            case MEDICINE -> "";
+            case SUPPLY -> "SUP-";
+            case DEVICE -> "DEV-";
+        };
+        return prefix + java.util.stream.Stream.of(nameCode, strengthCode, formCode)
+                .filter(part -> !part.isBlank()).collect(java.util.stream.Collectors.joining("-"));
     }
 
     public record CreateProductRequest(
