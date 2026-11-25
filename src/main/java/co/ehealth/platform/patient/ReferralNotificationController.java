@@ -36,6 +36,23 @@ public class ReferralNotificationController {
         return ResponseEntity.ok(notificationService.getDetails(notificationId, staffUserId(staff)));
     }
 
+    @GetMapping("/api/v1/referral-notifications/{notificationId}/documents")
+    public ResponseEntity<Map<String, Object>> documents(
+            @PathVariable UUID notificationId, @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        List<PatientReferralController.ReferralDocumentResponse> items =
+                notificationService.documents(notificationId, staffUserId(staff)).stream()
+                        .map(PatientReferralController.ReferralDocumentResponse::from).toList();
+        return ResponseEntity.ok(Map.of("items", items));
+    }
+
+    @GetMapping("/api/v1/referral-notifications/{notificationId}/documents/{documentId}/download-url")
+    public ResponseEntity<Map<String, String>> documentDownloadUrl(
+            @PathVariable UUID notificationId, @PathVariable UUID documentId,
+            @AuthenticationPrincipal AuthenticatedPrincipal staff) {
+        return ResponseEntity.ok(Map.of("url",
+                notificationService.documentDownloadUrl(notificationId, documentId, staffUserId(staff))));
+    }
+
     @PostMapping("/api/v1/referral-notifications/{notificationId}/accept")
     public ResponseEntity<IncomingReferralService.PatientReceived> accept(
             @PathVariable UUID notificationId, @AuthenticationPrincipal AuthenticatedPrincipal staff) {

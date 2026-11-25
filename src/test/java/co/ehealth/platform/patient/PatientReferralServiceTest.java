@@ -4,7 +4,6 @@ import co.ehealth.platform.identity.PermissionService;
 import co.ehealth.platform.identity.UserRepository;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -27,10 +26,11 @@ class PatientReferralServiceTest {
     private final ReferralDestinationService destinationService = mock(ReferralDestinationService.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final ReferralNotificationService notificationService = mock(ReferralNotificationService.class);
+    private final PatientReferralDocumentAccessService documentAccessService =
+            mock(PatientReferralDocumentAccessService.class);
     private final PatientReferralService service = new PatientReferralService(patientService, referralRepository,
             eventRepository, documentRepository, permissionService, destinationService, userRepository,
-            notificationService, mock(S3Client.class),
-            mock(S3Presigner.class), "test-bucket", Clock.systemUTC());
+            notificationService, documentAccessService, mock(S3Client.class), "test-bucket", Clock.systemUTC());
 
     @Test
     void submittedReferralCannotBeEdited() {

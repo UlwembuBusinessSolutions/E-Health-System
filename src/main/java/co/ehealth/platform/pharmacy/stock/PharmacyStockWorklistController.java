@@ -3,6 +3,7 @@ package co.ehealth.platform.pharmacy.stock;
 import co.ehealth.platform.core.tenant.ModuleCode;
 import co.ehealth.platform.identity.PermissionLevel;
 import co.ehealth.platform.identity.PermissionService;
+import co.ehealth.platform.pharmacy.dashboard.PharmacyDashboardScope;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -17,11 +18,14 @@ import java.util.UUID;
 public class PharmacyStockWorklistController {
 
     private final PharmacyStockWorklistService worklistService;
+    private final PharmacyDashboardScope dashboardScope;
     private final PermissionService permissionService;
 
     public PharmacyStockWorklistController(PharmacyStockWorklistService worklistService,
+                                           PharmacyDashboardScope dashboardScope,
                                            PermissionService permissionService) {
         this.worklistService = worklistService;
+        this.dashboardScope = dashboardScope;
         this.permissionService = permissionService;
     }
 
@@ -32,6 +36,7 @@ public class PharmacyStockWorklistController {
                                              @RequestParam(defaultValue = "0") int page,
                                              @RequestParam(defaultValue = "50") int size) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+                            dashboardScope.requireFacility(facilityId);
         return PagedResponse.of(worklistService.listStock(facilityId, q, StockStatusFilter.parse(status), page, size),
                 StockRow::from);
     }
@@ -39,6 +44,7 @@ public class PharmacyStockWorklistController {
     @GetMapping("/dashboard")
     public PharmacyStockWorklistService.DashboardCounts dashboard(@RequestParam UUID facilityId) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
+        dashboardScope.requireFacility(facilityId);
         return worklistService.dashboard(facilityId);
     }
 
@@ -46,9 +52,12 @@ public class PharmacyStockWorklistController {
     public PagedResponse<PharmacyStockWorklistService.ExpiryLotRow> listExpiry(
             @RequestParam UUID facilityId,
             @RequestParam(defaultValue = "" + PharmacyStockWorklistService.DEFAULT_EXPIRY_WINDOW_DAYS) int days,
+            @RequestParam(defaultValue = "true") boolean includeExpired,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
         permissionService.requireAccess(ModuleCode.PHRM, PermissionLevel.VIEW);
-        return PagedResponse.of(worklistService.listExpiringLots(facilityId, days, page, size), row -> row);
+        dashboardScope.requireFacility(facilityId);
+        return PagedResponse.of(worklistService.listExpiringLots(facilityId, days, includeExpired, page, size),
+                row -> row);
     }
 
     // status keeps the display label the Stock page already shows.

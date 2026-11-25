@@ -121,6 +121,32 @@ public class ReferralNotificationService {
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public List<PatientReferralDocument> documents(UUID notificationId, UUID userId) {
+        ReferralNotification notification = requireAssignedNotification(notificationId, userId);
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        String originSchema = TenantContext.getCurrentTenant();
+        try {
+            TenantContext.setCurrentTenant(notification.getSourceSchema());
+            return incomingReferralService.documents(notification);
+        } finally {
+            TenantContext.setCurrentTenant(originSchema);
+        }
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public String documentDownloadUrl(UUID notificationId, UUID documentId, UUID userId) {
+        ReferralNotification notification = requireAssignedNotification(notificationId, userId);
+        permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.VIEW);
+        String originSchema = TenantContext.getCurrentTenant();
+        try {
+            TenantContext.setCurrentTenant(notification.getSourceSchema());
+            return incomingReferralService.documentDownloadUrl(notification, documentId);
+        } finally {
+            TenantContext.setCurrentTenant(originSchema);
+        }
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public IncomingReferralService.PatientReceived accept(UUID notificationId, UUID userId) {
         ReferralNotification notification = requireAssignedNotification(notificationId, userId);
         permissionService.requireAccess(ModuleCode.RECQ, PermissionLevel.MANAGE);

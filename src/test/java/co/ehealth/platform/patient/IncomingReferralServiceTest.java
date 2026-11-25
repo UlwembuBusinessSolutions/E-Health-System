@@ -20,8 +20,10 @@ class IncomingReferralServiceTest {
     private final PatientReferralRepository referralRepository = mock(PatientReferralRepository.class);
     private final PatientRepository patientRepository = mock(PatientRepository.class);
     private final PatientReferralEventRepository eventRepository = mock(PatientReferralEventRepository.class);
+    private final PatientReferralDocumentAccessService documentAccessService =
+            mock(PatientReferralDocumentAccessService.class);
     private final IncomingReferralService service = new IncomingReferralService(referralRepository, patientRepository,
-            eventRepository, Clock.fixed(Instant.parse("2025-01-01T10:00:00Z"), ZoneOffset.UTC));
+            eventRepository, documentAccessService, Clock.fixed(Instant.parse("2025-01-01T10:00:00Z"), ZoneOffset.UTC));
 
     @Test
     void loadsPatientDetailsForAnOlderCancelledReferral() {

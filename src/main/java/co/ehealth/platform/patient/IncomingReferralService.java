@@ -13,14 +13,29 @@ public class IncomingReferralService {
     private final PatientReferralRepository referralRepository;
     private final PatientRepository patientRepository;
     private final PatientReferralEventRepository eventRepository;
+    private final PatientReferralDocumentAccessService documentAccessService;
     private final Clock clock;
 
     public IncomingReferralService(PatientReferralRepository referralRepository, PatientRepository patientRepository,
-                                   PatientReferralEventRepository eventRepository, Clock clock) {
+                                   PatientReferralEventRepository eventRepository,
+                                   PatientReferralDocumentAccessService documentAccessService, Clock clock) {
         this.referralRepository = referralRepository;
         this.patientRepository = patientRepository;
         this.eventRepository = eventRepository;
+        this.documentAccessService = documentAccessService;
         this.clock = clock;
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<PatientReferralDocument> documents(ReferralNotification notification) {
+        PatientReferral referral = findReferral(notification);
+        return documentAccessService.list(referral.getId());
+    }
+
+    @Transactional(readOnly = true)
+    public String documentDownloadUrl(ReferralNotification notification, UUID documentId) {
+        PatientReferral referral = findReferral(notification);
+        return documentAccessService.getDownloadUrl(referral.getPatientId(), referral.getId(), documentId);
     }
 
     @Transactional(readOnly = true)

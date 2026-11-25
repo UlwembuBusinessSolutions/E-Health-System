@@ -143,10 +143,13 @@ public interface PharmacyStockWorklistRepository extends Repository<PharmacyStoc
             + "COUNT(*) OVER () AS \"totalItems\" "
             + "FROM facility_stock fs JOIN pharmacy_products p ON p.id = fs.product_id "
             + "WHERE fs.quantity > 0 AND fs.expiry_date IS NOT NULL AND fs.expiry_date <= :horizon "
+            + "AND (:includeExpired = TRUE OR fs.expiry_date >= :today) "
             + "ORDER BY fs.expiry_date, LOWER(p.display_name), fs.batch_id LIMIT :limit OFFSET :offset",
             nativeQuery = true)
     List<ExpiryLotView> listExpiringLots(@Param("facilityId") UUID facilityId, @Param("today") LocalDate today,
-                                          @Param("horizon") LocalDate horizon, @Param("limit") int limit,
+                                          @Param("horizon") LocalDate horizon,
+                                          @Param("includeExpired") boolean includeExpired,
+                                          @Param("limit") int limit,
                                           @Param("offset") int offset);
 
     interface ExpiryLotView {

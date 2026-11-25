@@ -535,6 +535,33 @@ public class ConsultationService {
 
     private static final int MAX_PATIENT_CONSULTATIONS = 100;
 
+    @Transactional(readOnly = true)
+    public List<InProgressConsultation> getInProgressConsultations(UUID staffUserId) {
+        requireDraftAccess();
+        List<Consultation> drafts = consultationRepository.findByStatusAndAuthorUserIdOrderByUpdatedAtDesc(
+                ConsultationStatus.DRAFT, staffUserId, PageRequest.of(0, MAX_PATIENT_CONSULTATIONS));
+        Map<UUID, Visit> visits = visitRepository
+                .findAllById(drafts.stream().map(Consultation::getVisitId).collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(Visit::getId, Function.identity()));
+        Map<UUID, Patient> patients = new HashMap<>();
+        Map<UUID, String> facilityNames = new HashMap<>();
+        return drafts.stream().map(consultation -> {
+            Visit visit = visits.get(consultation.getVisitId());
+            UUID patientId = visit.requirePatientId();
+            Patient patient = patients.computeIfAbsent(patientId, patientService::get);
+            String facilityName = facilityNames.computeIfAbsent(visit.getFacilityId(),
+                    id -> facilityService.get(id).getName());
+            return new InProgressConsultation(consultation.getId(), visit.getId(), patientId,
+                    patient.getFirstName() + " " + patient.getLastName(), patient.getMpiNumber(), facilityName,
+                    visit.getVisitDateTime(), consultation.getCreatedAt(), consultation.getUpdatedAt());
+        }).toList();
+    }
+
+    public record InProgressConsultation(UUID consultationId, UUID visitId, UUID patientId, String patientName,
+                                         String patientMpi, String facilityName, Instant visitDateTime,
+                                         Instant startedAt, Instant updatedAt) {
+    }
+
     // Full timeline, oldest first — DRAFT/SIGNED and SUPERSEDED/
     // ENTERED_IN_ERROR entries alike, so a reviewer can see both what's
     // current and what was corrected along the way.
