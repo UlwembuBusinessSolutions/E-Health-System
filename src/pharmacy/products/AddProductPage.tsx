@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, ListChecks, PackagePlus, Plus } from "lucide-react";
 import type { PharmacyProduct } from "@/shared/api/pharmacyStock";
 import { Button } from "@/shared/components/Button";
@@ -13,6 +13,7 @@ import { ProductForm } from "./ProductForm";
 // Route: /app/pharmacy/products/new  (?copyFrom=<productId>&facilityId=<id>)
 export function AddProductPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { facilities, facilityId, selectFacility } = useFacilitySelection();
   const [created, setCreated] = useState<PharmacyProduct | null>(null);
   // Bumped by "Add another" so the form remounts empty.
@@ -57,7 +58,7 @@ export function AddProductPage() {
               variant="page"
               facilityId={facilityId}
               copyFromProductId={formKey === 0 ? copyFrom : undefined}
-              onCreated={setCreated}
+              onCreated={() => navigate(`/app/pharmacy/stock${facilityQuery}`, { replace: true })}
             />
           )}
         </>
