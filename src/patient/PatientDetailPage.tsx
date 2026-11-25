@@ -759,14 +759,17 @@ export function PatientDetailPage() {
   const isOrgAdmin = user?.role === "ORG_ADMIN";
   const canCaptureVitals = canTakeVitals(user?.role);
   // Reception issues the visit/token. ?visitId links its clinical workflows;
-  // ?tab=vitals/consultation opens directly on the selected visit workflow;
+  // ?tab=vitals/consultation/referrals opens directly on the selected patient workflow;
   // ?tab=medication onto the prescriptions, e.g. from a pharmacy message on the Dashboard.
   const [searchParams] = useSearchParams();
   const isWalkIn = searchParams.get("walkIn") === "true" || !id;
   const walkInTokenNumber = searchParams.get("tokenNumber");
   const [activeTab, setActiveTab] = useState<"overview" | "vitals" | "consultation" | "medication" | "visits" | "referrals">(() => {
     const tab = searchParams.get("tab");
-    return tab === "vitals" || tab === "consultation" || tab === "medication" ? tab : "overview";
+    return tab === "overview" || tab === "visits" || tab === "vitals"
+      || tab === "consultation" || tab === "medication" || tab === "referrals"
+      ? tab
+      : "overview";
   });
   const [isArchiving, setIsArchiving] = useState(false);
   const [archiveReason, setArchiveReason] = useState("");
@@ -1694,7 +1697,9 @@ export function PatientDetailPage() {
                       ? "Vitals"
                       : tab === "consultation"
                         ? "Consultation"
-                        : "Medication"}
+                        : tab === "medication"
+                          ? "Medication"
+                          : "Referrals and transfers"}
               </button>
             ))}
           </div>

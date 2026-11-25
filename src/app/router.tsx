@@ -38,6 +38,7 @@ import {
   OpeningStockPage,
   PharmacyLayout,
   PharmacyOverviewPage,
+  PurchaseOrdersPage,
   PrescriptionPrintPage,
   ReceiveStockPage,
   ReorderPage,
@@ -194,6 +195,7 @@ export function AppRouter() {
           <Route path="receive" element={<ReceiveStockPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="reorder" element={<ReorderPage />} />
+          <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
           <Route path="ledger" element={<LedgerPage />} />
           <Route path="counts" element={<StockCountPage />} />
           <Route path="register" element={<ScheduleRegisterPage />} />

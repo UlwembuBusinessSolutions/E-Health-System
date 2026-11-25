@@ -58,6 +58,19 @@ export async function listIncomingReferralNotifications(): Promise<IncomingRefer
   })).items;
 }
 
+export async function listIncomingReferralDocuments(notificationId: string): Promise<ReferralDocument[]> {
+  return (await apiClient.get<{ items: ReferralDocument[] }>(
+    `/api/v1/referral-notifications/${notificationId}/documents`, { headers: tenantAuthHeaders() },
+  )).items;
+}
+
+export async function getIncomingReferralDocumentUrl(notificationId: string, documentId: string): Promise<string> {
+  return (await apiClient.get<{ url: string }>(
+    `/api/v1/referral-notifications/${notificationId}/documents/${documentId}/download-url`,
+    { headers: tenantAuthHeaders() },
+  )).url;
+}
+
 export function getIncomingReferralDetails(notificationId: string): Promise<IncomingReferralDetail> {
   return apiClient.get(`/api/v1/referral-notifications/${notificationId}`, {
     headers: tenantAuthHeaders(),

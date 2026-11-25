@@ -16,7 +16,9 @@ export function useFacilitySelection() {
   const facilitiesQuery = useQuery({ queryKey: ["facilities"], queryFn: getFacilities, staleTime: 5 * 60_000 });
 
   const facilities = facilitiesQuery.data ?? [];
-  const facilityId = searchParams.get(FACILITY_PARAM) ?? facilities[0]?.id ?? "";
+  const requestedFacilityId = searchParams.get(FACILITY_PARAM);
+  const selectedFacility = facilities.find((facility) => facility.id === requestedFacilityId);
+  const facilityId = selectedFacility?.id ?? facilities[0]?.id ?? "";
 
   const selectFacility = useCallback(
     (id: string) => {

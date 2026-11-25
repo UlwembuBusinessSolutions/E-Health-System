@@ -1,12 +1,15 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { ArrowLeft, Bell, HeartPulse, RefreshCw } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, Bell, FileText, HeartPulse, RefreshCw } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 import { getTenantSlug } from "@/shared/api/auth";
 import { ApiError } from "@/shared/api/client";
 import {
   acceptIncomingReferralNotification,
+  getIncomingReferralDocumentUrl,
   getIncomingReferralDetails,
+  listIncomingReferralDocuments,
   listIncomingReferralNotifications,
   type IncomingReferralDetail,
   type IncomingReferralNotification,
@@ -26,6 +29,7 @@ export function NotificationsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [documentError, setDocumentError] = useState<string | null>(null);
   const selectedId = searchParams.get("notificationId");
   const queryKey = ["incoming-referral-notifications", getTenantSlug(), user?.id];
   const notifications = useQuery({
@@ -38,6 +42,11 @@ export function NotificationsPage() {
   const details = useQuery({
     queryKey: ["incoming-referral-details", getTenantSlug(), user?.id, selectedId],
     queryFn: () => getIncomingReferralDetails(selectedId!),
+    enabled: Boolean(user && selectedId),
+  });
+  const documents = useQuery({
+    queryKey: ["incoming-referral-documents", getTenantSlug(), user?.id, selectedId],
+    queryFn: () => listIncomingReferralDocuments(selectedId!),
     enabled: Boolean(user && selectedId),
   });
   const accept = useMutation({
@@ -58,6 +67,23 @@ export function NotificationsPage() {
       ]);
     },
   });
+
+  async function downloadDocument(documentId: string) {
+    setDocumentError(null);
+    const tab = window.open("", "_blank");
+    if (!tab) {
+      setDocumentError("Allow pop-ups to open the supporting document.");
+      return;
+    }
+    try {
+      tab.location.assign(await getIncomingReferralDocumentUrl(selectedId!, documentId));
+    } catch (error) {
+      tab.close();
+      setDocumentError(error instanceof ApiError
+        ? `The supporting document could not be opened: ${error.message}`
+        : "The supporting document could not be opened.");
+    }
+  }
 
   return (
     <div>
@@ -195,6 +221,35 @@ export function NotificationsPage() {
                       <Detail label="Additional notes" value={details.data.additionalNotes ?? "None"} />
                     </section>
                   </div>
+                  <section className="mt-6 border-t border-border-subtle pt-5">
+                    <h3 className="text-sm font-semibold text-text-primary">Supporting documents</h3>
+                    {documents.isPending ? (
+                      <p role="status" className="mt-2 text-sm text-text-secondary">Loading supporting documents…</p>
+                    ) : documents.isError ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-3">
+                        <p role="alert" className="text-sm text-danger-600">Supporting documents could not be loaded.</p>
+                        <Button type="button" variant="secondary" loading={documents.isFetching}
+                          onClick={() => void documents.refetch()}>Try again</Button>
+                      </div>
+                    ) : documents.data.length === 0 ? (
+                      <p className="mt-2 text-sm text-text-secondary">No supporting documents attached.</p>
+                    ) : (
+                      <ul className="mt-2 divide-y divide-border-subtle">
+                        {documents.data.map((document) => (
+                          <li key={document.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                            <span className="flex min-w-0 items-center gap-2">
+                              <FileText className="size-4 shrink-0 text-text-secondary" aria-hidden />
+                              <span className="truncate">{document.originalFilename}</span>
+                            </span>
+                            <Button type="button" variant="ghost" size="md"
+                              icon={<ArrowDownToLine className="size-4" aria-hidden />}
+                              onClick={() => void downloadDocument(document.id)}>Download</Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {documentError && <p role="alert" className="mt-2 text-sm text-danger-600">{documentError}</p>}
+                  </section>
                   <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-border-subtle pt-5">
                     {accept.isError && (
                       <p role="alert" className="w-full rounded-lg bg-danger-50 p-3 text-[14px] text-danger-600">

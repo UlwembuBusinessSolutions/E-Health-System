@@ -174,6 +174,31 @@ export async function getStockDashboard(facilityId: string): Promise<StockDashbo
   });
 }
 
+export interface ExpiryLot {
+  productId: string;
+  productName: string;
+  productCode: string;
+  batchId: string;
+  lotNumber: string;
+  expiryDate: string;
+  quantity: number;
+  daysToExpiry: number;
+  expired: boolean;
+}
+
+export async function listExpiryLots(
+  facilityId: string,
+  days: number,
+  includeExpired = true,
+  page = 0,
+  size = 50,
+): Promise<PagedResult<ExpiryLot>> {
+  return apiClient.get<PagedResult<ExpiryLot>>(
+    `${BASE}/expiry?${queryString({ facilityId, days, includeExpired, page, size })}`,
+    { headers: tenantAuthHeaders() },
+  );
+}
+
 export interface BatchRow {
   batchId: string;
   lotNumber: string;
