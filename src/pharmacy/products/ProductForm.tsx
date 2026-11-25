@@ -75,13 +75,11 @@ function ProductFormBody({
 }: ProductFormBodyProps) {
   const queryClient = useQueryClient();
   const [values, setValues] = useState(startValues);
-  // null means "follow the generated SKU"; typing one switches to the user's own.
-  const [skuOverride, setSkuOverride] = useState<string | null>(null);
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [fromTemplate, setFromTemplate] = useState(startedFromTemplate);
   const [showErrors, setShowErrors] = useState(false);
 
-  const sku = skuOverride ?? generateSku(values);
+  const sku = generateSku(values);
   const errors = showErrors ? validateProduct(values, sku) : {};
   // A template's name is only a starting point, so similar-name warnings wait until the strength is filled in.
   const duplicates = useProductDuplicates({
@@ -102,7 +100,6 @@ function ProductFormBody({
 
   function copyProduct(product: PharmacyProduct) {
     setValues(valuesFromProduct(product));
-    setSkuOverride(null);
     setActivePresetId(null);
     setFromTemplate(true);
   }
@@ -143,7 +140,6 @@ function ProductFormBody({
         update={update}
         errors={errors}
         sku={sku}
-        onSkuChange={setSkuOverride}
         skuOwner={duplicates.skuOwner}
       />
       <MoreDetailsSection values={values} update={update} />

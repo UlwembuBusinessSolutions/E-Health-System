@@ -8,12 +8,10 @@ import type { SectionProps } from "./sectionProps";
 interface StockSettingsSectionProps extends SectionProps {
   errors: ProductFormErrors;
   sku: string;
-  /** Called when the user types their own SKU, which stops auto-generation. */
-  onSkuChange: (sku: string) => void;
   skuOwner: PharmacyProduct | null;
 }
 
-export function StockSettingsSection({ values, update, errors, sku, onSkuChange, skuOwner }: StockSettingsSectionProps) {
+export function StockSettingsSection({ values, update, errors, sku, skuOwner }: StockSettingsSectionProps) {
   return (
     <section className="flex flex-col gap-4 rounded-xl border border-border-subtle bg-surface-raised p-4 sm:p-5">
       <h3 className="text-[15px] font-semibold text-text-primary">2 · Stock settings</h3>
@@ -58,11 +56,11 @@ export function StockSettingsSection({ values, update, errors, sku, onSkuChange,
         <Input
           label="SKU code"
           className="font-mono"
-          placeholder="Generated from name"
+          placeholder="Generated product code"
           value={sku}
           error={errors.sku}
-          hint="Made from the name. You can change it."
-          onChange={(event) => onSkuChange(event.target.value)}
+          hint="Generated from the product name, strength, and dosage form."
+          readOnly
         />
         <Input
           label="Units per pack (optional)"

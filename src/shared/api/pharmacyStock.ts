@@ -62,6 +62,8 @@ export async function getProduct(id: string): Promise<PharmacyProduct> {
 export interface CreateProductPayload {
   code: string;
   displayName: string;
+  /** Standalone name used to generate the authoritative product code. */
+  name: string;
   genericName?: string;
   strength?: string;
   dosageForm?: string;

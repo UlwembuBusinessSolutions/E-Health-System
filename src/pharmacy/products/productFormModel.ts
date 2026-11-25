@@ -205,6 +205,7 @@ export function toCreatePayload(values: ProductFormValues, sku: string, facility
   return {
     code: sku.trim(),
     displayName: composeDisplayName(values),
+    name: values.name.trim(),
     genericName: orUndefined(values.genericName),
     strength: orUndefined(values.strength),
     dosageForm: orUndefined(values.dosageForm),
